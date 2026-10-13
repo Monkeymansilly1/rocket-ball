@@ -1,7 +1,0 @@
-html, body { margin: 0; height: 100%; background: #04070c; }
-body { display: grid; place-items: center; align-content: center; gap: 10px; color: #8fb3c4;
-  font: 14px "Trebuchet MS", "Segoe UI", sans-serif; }
-canvas { width: min(100vw, 226vh); height: auto; aspect-ratio: 1360 / 600; display: block;
-  box-shadow: 0 0 60px rgba(47, 242, 192, .12); }
-.keys { margin: 0; }
-.keys b { color: #e8f6ff; }
