@@ -6,10 +6,17 @@ if (typeof THREE === 'undefined') {
   return;
 }
 // ---------- tuning (units are roughly metres) ----------
-const HW = 80, HL = 104, GW = 15, GH = 10.5, GD = 14, CEIL = 44, CH = 14, BR = 2.4, CM = 4;
+const HW = 80, HL = 104, GW = 15, GH = 10.5, GD = 14, CEIL = 44, CH = 14, BR = 2.4;
 const G_CAR = 28, G_BALL = 17, MATCH = 180, BLUE = 0x2fb8ff, ORANGE = 0xff8a1f;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const wrap = a => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
+
+// Car model presets (visuals + physical tweaks)
+const CAR_MODELS = [
+  { name: 'octane', len: 3.4, width: 2.0, height: 0.6, wheelR: 0.45, mass: 1.0, hit: 1.7, cap: 1.0 },
+  { name: 'dominus', len: 3.8, width: 2.05, height: 0.5, wheelR: 0.42, mass: 1.05, hit: 1.9, cap: 0.95 },
+  { name: 'breakout', len: 3.6, width: 1.9, height: 0.45, wheelR: 0.42, mass: 0.95, hit: 1.6, cap: 1.05 }
+];
 
 // ---------- renderer / scene ----------
 const renderer = new THREE.WebGLRenderer({ canvas: $('c'), antialias: true });
@@ -134,22 +141,42 @@ function buildStadium() {
 }
 buildStadium();
 
-function carMesh(col) {
+// build car mesh for different model types
+function carMesh(col, typeName) {
+  const type = CAR_MODELS.find(t => t.name === typeName) || CAR_MODELS[0];
   const root = new THREE.Group(); root.rotation.order = 'YXZ';
   const body = new THREE.Group(); root.add(body);
-  const paint = new THREE.MeshStandardMaterial({ color: col, roughness: 0.45, metalness: 0.1, emissive: col, emissiveIntensity: 0.3 });
+  const paint = new THREE.MeshStandardMaterial({ color: col, roughness: 0.35, metalness: 0.2, emissive: col, emissiveIntensity: 0.15 });
   const dark = new THREE.MeshStandardMaterial({ color: 0x0b1420, roughness: 0.3, metalness: 0.5 });
-  const add = (geo, mat, x, y, z, rz) => {
-    const o = new THREE.Mesh(geo, mat); o.position.set(x, y, z); if (rz) o.rotation.z = rz; o.castShadow = true; body.add(o);
-  };
-  add(new THREE.BoxGeometry(2, 0.6, 3.4), paint, 0, 0, 0);
-  add(new THREE.BoxGeometry(1.6, 0.5, 1.7), dark, 0, 0.5, -0.2);
-  add(new THREE.BoxGeometry(2.05, 0.15, 0.5), dark, 0, 0.38, -1.55);
-  for (const x of [-1.05, 1.05]) for (const z of [-1.1, 1.1]) add(new THREE.CylinderGeometry(0.45, 0.45, 0.35, 16), dark, x, -0.1, z, Math.PI / 2);
-  const flame = new THREE.Mesh(new THREE.ConeGeometry(0.5, 2.4, 12), new THREE.MeshBasicMaterial({ color: 0xffa030 }));
-  flame.rotation.x = -Math.PI / 2; flame.position.set(0, 0, -2.6); flame.visible = false; body.add(flame);
-  scene.add(root); return { root, body, flame };
+  const add = (geo, mat, x, y, z, rz, rx) => { const o = new THREE.Mesh(geo, mat); o.position.set(x, y, z); if (rz) o.rotation.z = rz; if (rx) o.rotation.x = rx; o.castShadow = true; body.add(o); };
+
+  // base platform scaled per model
+  add(new THREE.BoxGeometry(type.width, type.height, type.len), paint, 0, 0, 0);
+  // cockpit / roof
+  add(new THREE.BoxGeometry(type.width * 0.7, type.height * 0.9, type.len * 0.6), dark, 0, type.height * 0.5, -0.2);
+  // bumper and rear
+  add(new THREE.BoxGeometry(type.width * 0.95, type.height * 0.5, type.len * 0.22), dark, 0, 0.18, type.len * -0.58);
+  add(new THREE.BoxGeometry(type.width * 0.95, type.height * 0.5, type.len * 0.22), dark, 0, 0.18, type.len * 0.58);
+
+  // spoiler for some models
+  if (type.name === 'dominus') add(new THREE.BoxGeometry(type.width * 0.9, type.height * 0.12, type.len * 0.25), paint, 0, type.height * 0.7, type.len * -0.65, 0, 0);
+  if (type.name === 'breakout') add(new THREE.BoxGeometry(type.width * 0.6, type.height * 0.12, type.len * 0.35), paint, 0, type.height * 0.6, type.len * -0.55);
+
+  // wheels
+  const wheels = [];
+  for (const x of [-1.05, 1.05]) for (const z of [-type.len * 0.38, type.len * 0.38]) {
+    const w = new THREE.Mesh(new THREE.CylinderGeometry(type.wheelR, type.wheelR, 0.35, 16), dark);
+    w.rotation.x = Math.PI / 2; w.position.set(x * (type.width / 1.1), -0.05, z);
+    body.add(w); wheels.push(w);
+  }
+
+  const flame = new THREE.Mesh(new THREE.ConeGeometry(0.45, 2.2, 12), new THREE.MeshBasicMaterial({ color: 0xffa030 }));
+  flame.rotation.x = -Math.PI / 2; flame.position.set(0, 0, -type.len * 0.75); flame.visible = false; body.add(flame);
+
+  scene.add(root);
+  return { root, body, flame, type };
 }
+
 const ballTex = (() => {
   const c = document.createElement('canvas'); c.width = 256; c.height = 128; const g = c.getContext('2d');
   g.fillStyle = '#dfe9ef'; g.fillRect(0, 0, 256, 128); g.fillStyle = '#2b3a47';
@@ -169,8 +196,15 @@ const SKILL = [
   { thr: 0.85, boost: true, steer: 3, cap: 0.82, wait: 0.8, sloppy: 4, flip: 0.4, aerial: false, drift: false },
   { thr: 1, boost: true, steer: 4, cap: 1, wait: 0.25, sloppy: 1.2, flip: 0.9, aerial: true, drift: true }];
 function mkCar(team, k, ai) {
+  const model = CAR_MODELS[(k) % CAR_MODELS.length].name;
   const col = new THREE.Color(team ? ORANGE : BLUE).offsetHSL(0, 0, -0.09 * k);
-  return { team, k, x: 0, y: 0.55, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, pitch: 0, ai, aiCd: 0, boost: 34, jumps: 0, jt: 0, flip: 0, fx: 0, fz: 0, fl: 0, ground: true, mesh: carMesh(col) };
+  const car = { team, k, x: 0, y: 0.55, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, pitch: 0, ai, aiCd: 0, boost: 34, jumps: 0, jt: 0, flip: 0, fx: 0, fz: 0, fl: 0, ground: true };
+  car.mesh = carMesh(col, model);
+  car.model = model;
+  // model-based properties
+  const mdef = CAR_MODELS.find(m => m.name === model);
+  car.hit = mdef.hit; car.mass = mdef.mass * 4; car.cap = mdef.cap; // scale mass multiplier into existing physics constants
+  return car;
 }
 function buildTeams() {
   for (const c of cars) scene.remove(c.mesh.root);
@@ -202,10 +236,10 @@ function pick(k, v) {
 }
 
 // particles (one Points object, additive blending)
-const NP = 800, pp = { x: new Float32Array(NP * 3), c: new Float32Array(NP * 3), v: new Float32Array(NP * 3), col: new Float32Array(NP * 3), life: new Float32Array(NP), max: new Float32Array(NP), i: 0 };
+const NP = 1200, pp = { x: new Float32Array(NP * 3), c: new Float32Array(NP * 3), v: new Float32Array(NP * 3), col: new Float32Array(NP * 3), life: new Float32Array(NP), max: new Float32Array(NP), i: 0 };
 const pgeo = new THREE.BufferGeometry();
 pgeo.setAttribute('position', new THREE.BufferAttribute(pp.x, 3)); pgeo.setAttribute('color', new THREE.BufferAttribute(pp.c, 3));
-const pts = new THREE.Points(pgeo, new THREE.PointsMaterial({ size: 1.4, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+const pts = new THREE.Points(pgeo, new THREE.PointsMaterial({ size: 1.8, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
 pts.frustumCulled = false; scene.add(pts);
 function emit(x, y, z, vx, vy, vz, life, r, g, b) {
   const i = pp.i; pp.i = (i + 1) % NP;
@@ -222,10 +256,10 @@ function stepParts(dt) {
 }
 function emitBoost(c) {
   const cp = Math.cos(c.pitch), fx = Math.sin(c.yaw) * cp, fy = Math.sin(c.pitch), fz = Math.cos(c.yaw) * cp;
-  for (let n = 0; n < 2; n++) emit(c.x - fx * 2.3, c.y - fy * 2.3, c.z - fz * 2.3, -fx * 9 + (Math.random() - 0.5) * 3, -fy * 9 + (Math.random() - 0.5) * 3, -fz * 9 + (Math.random() - 0.5) * 3, 0.4, 1, 0.5 + Math.random() * 0.4, 0.15);
+  for (let n = 0; n < 4; n++) emit(c.x - fx * 2.3 + (Math.random()-0.5)*0.4, c.y - fy * 2.3, c.z - fz * 2.3 + (Math.random()-0.5)*0.4, -fx * 9 + (Math.random() - 0.5) * 4, -fy * 9 + (Math.random() - 0.5) * 3, -fz * 9 + (Math.random() - 0.5) * 4, 0.4, 1, 0.6, 0.2);
 }
 function sparks(vn) {
-  for (let i = 0; i < 8; i++) emit(ball.x, ball.y, ball.z, (Math.random() - 0.5) * 14, Math.random() * 10, (Math.random() - 0.5) * 14, 0.35, 1, 1, 0.9);
+  for (let i = 0; i < 12; i++) emit(ball.x, ball.y, ball.z, (Math.random() - 0.5) * 18, Math.random() * 12, (Math.random() - 0.5) * 18, 0.45, 1, 1, 0.9);
   sfx.tone(90 + Math.min(-vn, 30) * 6, 0.12, 'square', Math.min(0.25, -vn / 60));
 }
 
@@ -306,7 +340,7 @@ function predict() {
 function aiCtl(c, dt) {
   c.aiCd -= dt; c.errT = (c.errT || 0) - dt;
   const sk = SKILL[diff], ct = { throttle: sk.thr, steer: 0, jump: false, jumpHeld: false, boost: false, hand: false };
-  c.cap = sk.cap;
+  c.cap = sk.cap * (c.cap || 1);
   if (c.wait > 0) { c.wait -= dt; ct.throttle = 0; return ct; }
   if (c.y < 0.58 && c.jumps === 0) { c.aerial = false; c.flipNext = false; }
   const sp = Math.hypot(c.vx, c.vz), d2 = (o, p) => Math.hypot(p.x - o.x, p.z - o.z);
@@ -319,7 +353,7 @@ function aiCtl(c, dt) {
   const team = cars.filter(o => o.team === c.team).sort((a, b) => d2(a, bp) - d2(b, bp)), rank = team.indexOf(c);
   // first spot the car can reach in time while the ball is low enough to hit
   let tgt = pred[12] || ball, T = 1.2;
-  for (let i = 0; i < pred.length; i++) { const p = pred[i]; if (p.y < 6 && d2(c, p) / (14 + 28 * sk.cap) <= (i + 1) * 0.1) { tgt = p; T = (i + 1) * 0.1; break; } }
+  for (let i = 0; i < pred.length; i++) { const p = pred[i]; if (p.y < 6 && d2(c, p) / (14 + 28 * (c.cap || 1)) <= (i + 1) * 0.1) { tgt = p; T = (i + 1) * 0.1; break; } }
   let threat = -1; // will the ball roll into our goal?
   for (let i = 0; i < pred.length; i++) { const p = pred[i]; if (Math.sign(p.z) === Math.sign(own) && Math.abs(p.z) > HL - 4 && Math.abs(p.x) < GW + 3 && p.y < GH + 3) { threat = i; break; } }
   const goalie = team.length > 1 && rank === team.length - 1, chase = rank === 0 || (rank === 1 && bd < 14) || (goalie && bd < 16);
@@ -430,7 +464,9 @@ function hitBall(c) {
   const sy = Math.sin(c.yaw), cy = Math.cos(c.yaw);
   const dx = ball.x - c.x, dy = ball.y - c.y, dz = ball.z - c.z;
   const lf = dx * sy + dz * cy, ll = dx * cy - dz * sy; // along nose, along left side
-  let nf = lf - clamp(lf, -1.7, 1.7), nl = ll - clamp(ll, -1, 1), ny = dy - clamp(dy, -0.55, 0.55);
+  // use model hit radius to vary collision extents
+  const hf = c.hit || 1.7;
+  let nf = lf - clamp(lf, -hf, hf), nl = ll - clamp(ll, -hf * 0.6, hf * 0.6), ny = dy - clamp(dy, -0.55, 0.55);
   let d = Math.hypot(nf, nl, ny);
   if (d >= BR) return;
   if (d < 1e-4) { nf = nl = 0; ny = 1; d = 0; } else { nf /= d; nl /= d; ny /= d; }
@@ -439,14 +475,47 @@ function hitBall(c) {
   const vn = (ball.vx - c.vx) * nx + (ball.vy - c.vy) * ny + (ball.vz - c.vz) * nz;
   if (vn < 0) {
     if (vn < -4) sparks(vn);
-    const j = -1.6 * vn / (1 + 1 / CM);
+    const j = -1.6 * vn / (1 + 1 / (c.mass || 4));
     ball.vx += nx * j; ball.vy += ny * j; ball.vz += nz * j;
-    c.vx -= nx * j / CM; c.vy -= ny * j / CM; c.vz -= nz * j / CM;
+    c.vx -= nx * j / (c.mass || 4); c.vy -= ny * j / (c.mass || 4); c.vz -= nz * j / (c.mass || 4);
     if (c.fl) { ball.vx += nx * 4; ball.vy += ny * 4; ball.vz += nz * 4; }
     if (c.ground) ball.vy += 2;
   }
   const s = Math.hypot(ball.vx, ball.vy, ball.vz); if (s > 80) { const k = 80 / s; ball.vx *= k; ball.vy *= k; ball.vz *= k; }
 }
+
+// goal explosion helpers
+let camShakeTime = 0;
+function goalExplosion(team) {
+  const cx = ball.x, cy = Math.max(ball.y, 2.5), cz = ball.z;
+  // color palette
+  const cs = team ? [1, 0.54, 0.12] : [0.18, 0.72, 1];
+  // large particle burst
+  for (let i = 0; i < 400; i++) {
+    const a = Math.random() * Math.PI * 2, e = Math.random() * 1.6, s = 12 + Math.random() * 32;
+    const r = i % 6 ? cs : [1, 0.9, 0.6];
+    emit(cx, cy, cz, Math.cos(a) * Math.cos(e) * s, Math.sin(e) * s + 6, Math.sin(a) * Math.cos(e) * s, 1.6 + Math.random() * 0.8, r[0], r[1], r[2]);
+  }
+  // confetti shards (heavier)
+  for (let i = 0; i < 120; i++) emit(cx, cy, cz, (Math.random() - 0.5) * 40, Math.random() * 30, (Math.random() - 0.5) * 40, 1.2, Math.random() > 0.5 ? cs[0] : 1, Math.random() > 0.5 ? cs[1] : 1, Math.random() > 0.5 ? cs[2] : 1);
+
+  // flash light
+  const pl = new THREE.PointLight(team ? ORANGE : BLUE, 6, 300); pl.position.set(cx, cy, cz); scene.add(pl);
+  let lightLife = 0.9;
+  const lightInterval = setInterval(() => { pl.intensity *= 0.7; lightLife -= 0.06; if (lightLife <= 0) { scene.remove(pl); clearInterval(lightInterval); } }, 60);
+
+  // expanding ring
+  const ringGeo = new THREE.RingGeometry(8, 10, 64);
+  const ring = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: team ? ORANGE : BLUE, transparent: true, opacity: 0.9, side: THREE.DoubleSide }));
+  ring.rotation.x = -Math.PI / 2; ring.position.set(cx, 1.5, cz); scene.add(ring);
+  let rscale = 1.0;
+  const ringInterval = setInterval(() => { rscale += 0.25; ring.scale.set(rscale, rscale, rscale); ring.material.opacity *= 0.86; if (ring.material.opacity < 0.03) { scene.remove(ring); clearInterval(ringInterval); } }, 40);
+
+  // camera shake + sound
+  camShakeTime = 0.8;
+  [880, 1047, 1318].forEach((f, i) => setTimeout(() => sfx.tone(f, 0.28, 'sawtooth', 0.18), i * 100));
+}
+
 function stepBall(dt) {
   ball.vy -= G_BALL * dt;
   const dr = 1 - 0.03 * dt; ball.vx *= dr; ball.vz *= dr;
@@ -477,6 +546,11 @@ function stepBall(dt) {
 function goal(team) {
   score[team]++; state = 'goal'; cd = 3;
   const m = $('msg'); m.textContent = (team ? 'ORANGE' : 'BLUE') + ' SCORES!'; m.style.color = team ? '#ff8a1f' : '#2fb8ff';
+
+  // fireworks + explosion
+  goalExplosion(team);
+
+  // legacy confetti particles (complementary)
   const cs = team ? [1, 0.54, 0.12] : [0.18, 0.72, 1];
   for (let i = 0; i < 180; i++) {
     const a = Math.random() * 6.28, e = Math.random() * 1.2, s = 8 + Math.random() * 22, k = i % 3 ? cs : [1, 0.85, 0.3];
@@ -517,6 +591,16 @@ function updateCam(dt) {
   let lx = c.x - dx * 9, ly = 1.5, lz = c.z - dz * 9;
   if (ballCam) { lx = ball.x; ly = ball.y; lz = ball.z; }
   cam.lx += (lx - cam.lx) * k; cam.ly += (ly - cam.ly) * k; cam.lz += (lz - cam.lz) * k;
+
+  // camera shake
+  if (camShakeTime > 0) {
+    camShakeTime -= dt;
+    const shakeAmp = Math.min(1, camShakeTime * 2);
+    cam.x += (Math.random() - 0.5) * 2 * shakeAmp;
+    cam.y += (Math.random() - 0.5) * 1.2 * shakeAmp;
+    cam.z += (Math.random() - 0.5) * 2 * shakeAmp;
+  }
+
   camera.position.set(cam.x, cam.y, cam.z); camera.lookAt(cam.lx, cam.ly, cam.lz);
   sun.position.set(c.x + 30, 80, c.z + 25); sun.target.position.set(c.x, 0, c.z); sun.target.updateMatrixWorld();
   camera.fov += (70 + Math.hypot(c.vx, c.vy, c.vz) * 0.4 + (c.fl ? 6 : 0) - camera.fov) * k; camera.updateProjectionMatrix();
