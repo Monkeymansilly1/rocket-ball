@@ -141,40 +141,69 @@ function buildStadium() {
 }
 buildStadium();
 
-// build car mesh for different model types
+// build car mesh for different model types (improved visuals)
 function carMesh(col, typeName) {
   const type = CAR_MODELS.find(t => t.name === typeName) || CAR_MODELS[0];
   const root = new THREE.Group(); root.rotation.order = 'YXZ';
   const body = new THREE.Group(); root.add(body);
-  const paint = new THREE.MeshStandardMaterial({ color: col, roughness: 0.35, metalness: 0.2, emissive: col, emissiveIntensity: 0.15 });
+  const paint = new THREE.MeshStandardMaterial({ color: col, roughness: 0.25, metalness: 0.2, emissive: col, emissiveIntensity: 0.08 });
   const dark = new THREE.MeshStandardMaterial({ color: 0x0b1420, roughness: 0.3, metalness: 0.5 });
+  const glassM = new THREE.MeshStandardMaterial({ color: 0x7fbfff, transparent: true, opacity: 0.25, metalness: 0.1, roughness: 0.2 });
   const add = (geo, mat, x, y, z, rz, rx) => { const o = new THREE.Mesh(geo, mat); o.position.set(x, y, z); if (rz) o.rotation.z = rz; if (rx) o.rotation.x = rx; o.castShadow = true; body.add(o); };
 
-  // base platform scaled per model
+  // main chassis - slightly rounded by stacking boxes
   add(new THREE.BoxGeometry(type.width, type.height, type.len), paint, 0, 0, 0);
-  // cockpit / roof
-  add(new THREE.BoxGeometry(type.width * 0.7, type.height * 0.9, type.len * 0.6), dark, 0, type.height * 0.5, -0.2);
-  // bumper and rear
-  add(new THREE.BoxGeometry(type.width * 0.95, type.height * 0.5, type.len * 0.22), dark, 0, 0.18, type.len * -0.58);
-  add(new THREE.BoxGeometry(type.width * 0.95, type.height * 0.5, type.len * 0.22), dark, 0, 0.18, type.len * 0.58);
+  add(new THREE.BoxGeometry(type.width * 0.9, type.height * 0.7, type.len * 0.85), paint, 0, type.height * 0.25, -0.05);
+  // roof / cabin
+  add(new THREE.BoxGeometry(type.width * 0.6, type.height * 0.5, type.len * 0.5), dark, 0, type.height * 0.6, -0.05);
+  // windshield
+  const wind = new THREE.Mesh(new THREE.PlaneGeometry(type.width * 0.58, type.len * 0.35), glassM);
+  wind.rotation.x = -0.35; wind.position.set(0, type.height * 0.55, -type.len * 0.08); body.add(wind);
+
+  // front bumper and rear diffuser
+  add(new THREE.BoxGeometry(type.width * 0.95, type.height * 0.45, type.len * 0.18), dark, 0, -0.02, -type.len * 0.56);
+  add(new THREE.BoxGeometry(type.width * 0.95, type.height * 0.45, type.len * 0.18), dark, 0, -0.02, type.len * 0.56);
 
   // spoiler for some models
-  if (type.name === 'dominus') add(new THREE.BoxGeometry(type.width * 0.9, type.height * 0.12, type.len * 0.25), paint, 0, type.height * 0.7, type.len * -0.65, 0, 0);
+  if (type.name === 'dominus') add(new THREE.BoxGeometry(type.width * 0.9, type.height * 0.12, type.len * 0.25), paint, 0, type.height * 0.8, type.len * -0.65, 0, 0);
   if (type.name === 'breakout') add(new THREE.BoxGeometry(type.width * 0.6, type.height * 0.12, type.len * 0.35), paint, 0, type.height * 0.6, type.len * -0.55);
 
-  // wheels
+  // headlights
+  const headL = new THREE.Mesh(new THREE.PlaneGeometry(type.width * 0.18, 0.12), new THREE.MeshBasicMaterial({ color: 0xffffcc, emissive: 0xffffcc }));
+  headL.position.set(-type.width * 0.25, 0.06, -type.len * 0.75); headL.rotation.x = -0.02; body.add(headL);
+  const headR = headL.clone(); headR.position.x = type.width * 0.25; body.add(headR);
+
+  // taillights
+  const tailL = new THREE.Mesh(new THREE.PlaneGeometry(type.width * 0.16, 0.09), new THREE.MeshBasicMaterial({ color: 0xff4b30, emissive: 0xff4b30 }));
+  tailL.position.set(-type.width * 0.22, 0.06, type.len * 0.75); tailL.rotation.x = 0.02; body.add(tailL);
+  const tailR = tailL.clone(); tailR.position.x = type.width * 0.22; body.add(tailR);
+
+  // wheels with rims
   const wheels = [];
-  for (const x of [-1.05, 1.05]) for (const z of [-type.len * 0.38, type.len * 0.38]) {
-    const w = new THREE.Mesh(new THREE.CylinderGeometry(type.wheelR, type.wheelR, 0.35, 16), dark);
-    w.rotation.x = Math.PI / 2; w.position.set(x * (type.width / 1.1), -0.05, z);
-    body.add(w); wheels.push(w);
+  const tireMat = new THREE.MeshStandardMaterial({ color: 0x0b0b0b, roughness: 0.6, metalness: 0.1 });
+  const rimMat = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.2, metalness: 0.8 });
+  for (const sx of [-1, 1]) for (const sz of [-type.len * 0.38, type.len * 0.38]) {
+    const wheelGroup = new THREE.Group();
+    const tire = new THREE.Mesh(new THREE.CylinderGeometry(type.wheelR, type.wheelR, 0.38, 20), tireMat);
+    tire.rotation.x = Math.PI / 2; tire.position.set(sx * (type.width / 1.08), -0.08, sz);
+    // rim
+    const rim = new THREE.Mesh(new THREE.CylinderGeometry(type.wheelR * 0.55, type.wheelR * 0.55, 0.2, 20), rimMat);
+    rim.rotation.x = Math.PI / 2; rim.position.copy(tire.position);
+    wheelGroup.add(tire); wheelGroup.add(rim);
+    body.add(wheelGroup);
+    wheelGroup.userData = { side: sx };
+    wheels.push(wheelGroup);
   }
+
+  // small antenna/topper
+  const antenna = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.7), dark);
+  antenna.position.set(0, type.height * 1.1, 0.35); body.add(antenna);
 
   const flame = new THREE.Mesh(new THREE.ConeGeometry(0.45, 2.2, 12), new THREE.MeshBasicMaterial({ color: 0xffa030 }));
   flame.rotation.x = -Math.PI / 2; flame.position.set(0, 0, -type.len * 0.75); flame.visible = false; body.add(flame);
 
   scene.add(root);
-  return { root, body, flame, type };
+  return { root, body, flame, type, wheels };
 }
 
 const ballTex = (() => {
@@ -191,12 +220,18 @@ ballMesh.castShadow = true; scene.add(ballMesh);
 let state = 'menu', t = 0, score = [0, 0], clock = MATCH, ot = false, cd = 0, ballCam = false, mode = 2, diff = 1, muted = false;
 const ball = { x: 0, y: BR + 6, z: 0, vx: 0, vy: 0, vz: 0 };
 let cars = [];
+// UI and gameplay toggles
+let playerName = 'PLAYER';
+let playerCarModel = 'octane';
+let paused = false;
+let lastTouch = null;
+
 const SKILL = [
   { thr: 0.65, boost: false, steer: 2.2, cap: 0.6, wait: 1.5, sloppy: 10, flip: 0, aerial: false, drift: false },
   { thr: 0.85, boost: true, steer: 3, cap: 0.82, wait: 0.8, sloppy: 4, flip: 0.4, aerial: false, drift: false },
   { thr: 1, boost: true, steer: 4, cap: 1, wait: 0.25, sloppy: 1.2, flip: 0.9, aerial: true, drift: true }];
-function mkCar(team, k, ai) {
-  const model = CAR_MODELS[(k) % CAR_MODELS.length].name;
+function mkCar(team, k, ai, modelName) {
+  const model = modelName || CAR_MODELS[(k) % CAR_MODELS.length].name;
   const col = new THREE.Color(team ? ORANGE : BLUE).offsetHSL(0, 0, -0.09 * k);
   const car = { team, k, x: 0, y: 0.55, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, pitch: 0, ai, aiCd: 0, boost: 34, jumps: 0, jt: 0, flip: 0, fx: 0, fz: 0, fl: 0, ground: true };
   car.mesh = carMesh(col, model);
@@ -209,7 +244,7 @@ function mkCar(team, k, ai) {
 function buildTeams() {
   for (const c of cars) scene.remove(c.mesh.root);
   cars = [];
-  for (let k = 0; k < mode; k++) cars.push(mkCar(0, k, k > 0));
+  for (let k = 0; k < mode; k++) cars.push(mkCar(0, k, k > 0, k === 0 ? playerCarModel : undefined));
   for (let k = 0; k < mode; k++) cars.push(mkCar(1, k, true));
 }
 const pads = [];
@@ -221,14 +256,19 @@ for (const [x, z, big] of [[-72, -96, 1], [72, -96, 1], [-72, 96, 1], [72, 96, 1
 const FORM = [[0, 0.55], [-26, 0.8], [26, 0.8]];
 function kickoff() {
   Object.assign(ball, { x: 0, y: BR + 6, z: 0, vx: 0, vy: 0, vz: 0 });
+  lastTouch = null;
   for (const c of cars) {
     const f = FORM[c.k], s = c.team ? 1 : -1;
     Object.assign(c, { x: f[0] * (c.team ? -1 : 1), y: 0.55, z: s * f[1] * HL, vx: 0, vy: 0, vz: 0, yaw: c.team ? Math.PI : 0, pitch: 0, boost: 34, jumps: 0, jt: 0, flip: 0, fl: 0, ground: true, aiCd: 0, wait: SKILL[diff].wait });
   }
 }
 function start() {
-  sfx.init(); buildTeams(); score = [0, 0]; clock = MATCH; ot = false; pads.forEach(p => p.t = 0);
+  sfx.init(); // read UI choices
+  const nameEl = $('name'); if (nameEl) playerName = (nameEl.value || 'PLAYER').toString().trim().slice(0,12) || 'PLAYER';
+  const sel = document.querySelector('.car-opts button.on'); if (sel && sel.dataset.car) playerCarModel = sel.dataset.car;
+  buildTeams(); score = [0, 0]; clock = MATCH; ot = false; pads.forEach(p => p.t = 0);
   kickoff(); state = 'kick'; cd = 3; $('menu').style.display = 'none'; $('msg').textContent = '';
+  const pHUD = $('player'); if (pHUD) pHUD.textContent = playerName;
 }
 function pick(k, v) {
   if (k === 'mode') mode = v; else diff = v;
@@ -307,13 +347,23 @@ addEventListener('keydown', e => {
     if (n) pick('mode', n); if (d !== undefined) pick('diff', d);
   }
   if (e.code === 'KeyM') muted = !muted;
+  if (e.code === 'KeyP') {
+    paused = !paused;
+    if (paused) { $('msg').textContent = 'PAUSED'; $('msg').style.color = '#fff'; }
+    else { $('msg').textContent = ''; }
+  }
   keys[e.code] = true;
 });
 addEventListener('keyup', e => { keys[e.code] = false; });
 $('menu').addEventListener('pointerdown', e => {
   const b = e.target.closest && e.target.closest('button');
-  if (b) { if (b.dataset.mode) pick('mode', +b.dataset.mode); else pick('diff', +b.dataset.diff); }
-  else if (state === 'menu' || state === 'over') start();
+  if (b) {
+    if (b.dataset.mode) pick('mode', +b.dataset.mode);
+    else if (b.dataset.diff) pick('diff', +b.dataset.diff);
+    else if (b.dataset.car) {
+      document.querySelectorAll('.car-opts button').forEach(x => x.classList.toggle('on', x === b));
+    }
+  } else if (state === 'menu' || state === 'over') start();
 });
 function playerCtl() {
   const j = jumpQ; jumpQ = false;
@@ -480,6 +530,8 @@ function hitBall(c) {
     c.vx -= nx * j / (c.mass || 4); c.vy -= ny * j / (c.mass || 4); c.vz -= nz * j / (c.mass || 4);
     if (c.fl) { ball.vx += nx * 4; ball.vy += ny * 4; ball.vz += nz * 4; }
     if (c.ground) ball.vy += 2;
+    // record last touch for goal crediting
+    lastTouch = c;
   }
   const s = Math.hypot(ball.vx, ball.vy, ball.vz); if (s > 80) { const k = 80 / s; ball.vx *= k; ball.vy *= k; ball.vz *= k; }
 }
@@ -545,7 +597,14 @@ function stepBall(dt) {
 }
 function goal(team) {
   score[team]++; state = 'goal'; cd = 3;
-  const m = $('msg'); m.textContent = (team ? 'ORANGE' : 'BLUE') + ' SCORES!'; m.style.color = team ? '#ff8a1f' : '#2fb8ff';
+
+  // determine scorer name from lastTouch
+  let scorerName = null;
+  if (lastTouch) {
+    if (lastTouch === cars[0]) scorerName = playerName;
+    else scorerName = lastTouch.team ? 'ORANGE BOT' : 'BLUE BOT';
+  }
+  const m = $('msg'); m.textContent = scorerName ? (scorerName + ' SCORES!') : ((team ? 'ORANGE' : 'BLUE') + ' SCORES!'); m.style.color = team ? '#ff8a1f' : '#2fb8ff';
 
   // fireworks + explosion
   goalExplosion(team);
@@ -615,6 +674,15 @@ function render(dt) {
       const a = (1 - c.flip / 0.55) * Math.PI * 2;
       if (Math.abs(c.fx) >= Math.abs(c.fz)) m.body.rotation.x = a * Math.sign(c.fx); else m.body.rotation.z = a * Math.sign(c.fz);
     }
+    // wheel rotation visual
+    if (m.wheels && m.wheels.length) {
+      const sp = Math.hypot(c.vx, c.vz);
+      const wheelSpeed = sp * 0.6; // tweak multiplier for visual speed
+      for (const w of m.wheels) {
+        // rotate around local axis
+        w.rotation.z += wheelSpeed * dt * (w.userData.side || 1);
+      }
+    }
   }
   ballMesh.position.set(ball.x, ball.y, ball.z);
   const sp = Math.hypot(ball.vx, ball.vz);
@@ -626,6 +694,7 @@ function render(dt) {
   const s = Math.ceil(clock); $('clock').textContent = ot ? 'OT' : Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
   const b = cars[0].boost; $('bf').style.width = (2.1 * b) + 'px'; $('bt').textContent = Math.round(b);
   $('bf').style.background = b > 66 ? '#ffd35a' : '#37f2c0';
+  const pHUD = $('player'); if (pHUD) pHUD.textContent = playerName;
   renderer.render(scene, camera);
 }
 
@@ -635,6 +704,8 @@ window.rocketArena = { ball, get cars() { return cars; }, get score() { return s
 let last = performance.now();
 (function loop(now) {
   const dt = Math.min(1 / 30, (now - last) / 1000); last = now;
-  update(dt); render(dt); requestAnimationFrame(loop);
+  if (!paused) update(dt);
+  render(dt);
+  requestAnimationFrame(loop);
 })(last);
 })();
