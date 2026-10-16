@@ -129,3 +129,22 @@ body.split-screen #mini { display: none; }
 #mini { display:none !important; }
 @media(max-width:1050px){ #menuCarShowcase{right:-250px;transform:translateY(-50%) scale(.8);transform-origin:center right;} }
 @media(max-width:720px){ #menuCarShowcase{display:none;} #menu{width:100%;} }
+
+
+/* Main menu: show the stadium only behind the garage UI, with a car inside the panel */
+body:has(#menu[style*="display: grid"]) #score,
+body:has(#menu[style*="display: grid"]) #player,
+body:has(#menu[style*="display: grid"]) #boost,
+body:has(#menu[style*="display: grid"]) #boost2,
+body:has(#menu[style*="display: grid"]) #cam,
+body:has(#menu[style*="display: grid"]) #mini,
+body:has(#menu[style*="display: grid"]) #p1Tag,
+body:has(#menu[style*="display: grid"]) #p2Tag { display:none !important; }
+#menu { width:min(900px,82vw); background:linear-gradient(90deg,rgba(4,9,20,.95),rgba(5,13,28,.84) 72%,rgba(5,13,28,.50)); }
+#menuCarShowcase { right:12px; top:auto; bottom:24px; transform:none; width:235px; height:185px; opacity:.98; }
+.showcase-car { left:8px; top:24px; width:215px; transform:rotate(-8deg) scale(.82); transform-origin:center; }
+.showcase-platform { bottom:20px; }
+.showcase-label { font-size:10px; letter-spacing:3px; }
+#menu .opts, #menu p, #menu h1, #menu .play-btn { position:relative; z-index:2; }
+@media(max-width:1050px){ #menuCarShowcase { right:4px; bottom:12px; transform:scale(.78); transform-origin:bottom right; opacity:.75; } }
+@media(max-width:720px){ #menu { width:100%; } #menuCarShowcase { display:block; right:0; bottom:4px; transform:scale(.62); transform-origin:bottom right; opacity:.48; } }
