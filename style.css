@@ -53,3 +53,26 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #04070c; }
 #menu .opts .toggle-label { display: inline-flex; align-items: center; gap: 7px; padding: 6px 10px; border: 1px solid #466074; border-radius: 7px; background: rgba(255,255,255,.05); }
 #menu .opts .toggle-label input { accent-color: #37f2c0; width: 17px; height: 17px; }
 @media (max-width: 720px) { #menu { justify-content: start; } #menu h1 { font-size: clamp(30px, 8vw, 54px); } #menu .opts span { width: auto; min-width: 56px; } #menu .opts button { padding: 6px 10px; font-size: 16px; } #menu p { max-width: 95vw; } }
+
+
+/* Local multiplayer split-screen HUD */
+#boost2 { display: none; position: absolute; right: 24px; bottom: 24px; width: 220px; height: 22px; background: rgba(5,10,18,.75); }
+#boost2 i { position: absolute; left: 5px; top: 6px; height: 10px; width: 0; background: #ff8a1f; }
+#boost2 span { position: absolute; right: 0; top: -26px; font-size: 18px; color: #ffb36f; }
+#splitDivider, #p1Tag, #p2Tag { display: none; position: absolute; z-index: 1; }
+#splitDivider { top: 0; bottom: 0; left: 50%; width: 3px; transform: translateX(-50%); background: rgba(232,246,255,.78); box-shadow: 0 0 14px rgba(47,184,255,.6); }
+#p1Tag, #p2Tag { top: 74px; padding: 5px 10px; border-radius: 5px; background: rgba(5,10,18,.72); font: 800 14px Arial, sans-serif; letter-spacing: 1px; }
+#p1Tag { left: 18px; color: #2fb8ff; }
+#p2Tag { right: 18px; color: #ff8a1f; }
+body.split-screen #boost { right: auto; left: 24px; }
+body.split-screen #boost2, body.split-screen #splitDivider, body.split-screen #p1Tag, body.split-screen #p2Tag { display: block; }
+body.split-screen #player { display: none; }
+body.split-screen #cam { bottom: 58px; }
+body.split-screen #mini { display: none; }
+@media (max-width: 700px) {
+  body.split-screen #boost, body.split-screen #boost2 { width: 36vw; bottom: 12px; }
+  body.split-screen #boost { left: 10px; }
+  body.split-screen #boost2 { right: 10px; }
+  body.split-screen #cam { left: 10px; bottom: 42px; font-size: 12px; }
+  #p1Tag { left: 8px; } #p2Tag { right: 8px; }
+}
