@@ -9,6 +9,7 @@ if (typeof THREE === 'undefined') {
 const HW = 80, HL = 104, GW = 15, GH = 10.5, GD = 14, CEIL = 44, CH = 14, BR = 2.4;
 const G_CAR = 28, G_BALL = 17, MATCH = 180, BLUE = 0x2fb8ff, ORANGE = 0xff8a1f;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+let pitchMesh = null, skyMesh = null;
 const wrap = a => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
 
 // Car model presets (visuals + physical tweaks)
@@ -59,8 +60,8 @@ function buildArena() {
   g.beginPath(); g.moveTo(0, TH / 2); g.lineTo(TW, TH / 2); g.stroke();
   g.beginPath(); g.arc(TW / 2, TH / 2, 14 * S, 0, 7); g.stroke();
   const tex = new THREE.CanvasTexture(cvs); tex.anisotropy = 8;
-  const pitch = new THREE.Mesh(new THREE.PlaneGeometry(2 * HW, 2 * HL), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.9 }));
-  pitch.rotation.x = -Math.PI / 2; pitch.receiveShadow = true; scene.add(pitch);
+  pitchMesh = new THREE.Mesh(new THREE.PlaneGeometry(2 * HW, 2 * HL), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.9 }));
+  pitchMesh.rotation.x = -Math.PI / 2; pitchMesh.receiveShadow = true; scene.add(pitchMesh);
   const out = new THREE.Mesh(new THREE.PlaneGeometry(2400, 2400), new THREE.MeshBasicMaterial({ color: 0x1a1620 }));
   out.rotation.x = -Math.PI / 2; out.position.y = -0.1; scene.add(out);
 
@@ -99,8 +100,8 @@ function buildStadium() {
   const gr = sg.createLinearGradient(0, 0, 0, 128);
   [[0, '#070b24'], [0.45, '#2a2160'], [0.7, '#a14a68'], [0.88, '#ff7c3c'], [1, '#ffc27a']].forEach(([o, c]) => gr.addColorStop(o, c));
   sg.fillStyle = gr; sg.fillRect(0, 0, 8, 128); sg.fillStyle = '#2a1a30'; sg.fillRect(0, 128, 8, 128);
-  const sky = new THREE.Mesh(new THREE.SphereGeometry(1500, 24, 16), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(sc), side: THREE.BackSide, fog: false, depthWrite: false }));
-  sky.renderOrder = -1; scene.add(sky);
+  skyMesh = new THREE.Mesh(new THREE.SphereGeometry(1500, 24, 16), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(sc), side: THREE.BackSide, fog: false, depthWrite: false }));
+  skyMesh.renderOrder = -1; scene.add(skyMesh);
   const st = new Float32Array(450);
   for (let i = 0; i < 150; i++) { const a = Math.random() * 6.283, e = 0.5 + Math.random() * 0.9, r = 1400;
     st[i * 3] = Math.cos(a) * Math.cos(e) * r; st[i * 3 + 1] = Math.sin(e) * r; st[i * 3 + 2] = Math.sin(a) * Math.cos(e) * r; }
@@ -144,6 +145,20 @@ function buildStadium() {
   }
 }
 buildStadium();
+function applyArenaStyle(style) {
+  const palettes = {
+    sunset: { sky: 0x2a1a38, fog: 0x3a2342, ground: 0xffffff, glow: 0x37f2c0 },
+    neon: { sky: 0x07142d, fog: 0x101d3b, ground: 0xb7c7ff, glow: 0x8c4dff },
+    ice: { sky: 0x9ac8e6, fog: 0x9ac8e6, ground: 0xd6f4ff, glow: 0x7be8ff },
+    desert: { sky: 0x47212c, fog: 0x6b3841, ground: 0xffd0a0, glow: 0xffb34f }
+  };
+  const p = palettes[style] || palettes.sunset;
+  scene.background.setHex(p.sky); scene.fog.color.setHex(p.fog);
+  if (skyMesh) skyMesh.material.color.setHex(style === 'ice' ? 0x8ab9d8 : style === 'neon' ? 0x697bff : style === 'desert' ? 0xffa15e : 0xffffff);
+  if (pitchMesh) pitchMesh.material.color.setHex(p.ground);
+  scene.traverse(o => { if (o.isLineLoop && o.material && o.material.color) o.material.color.setHex(p.glow); });
+}
+applyArenaStyle('sunset');
 
 // build car mesh for different model types (improved visuals)
 function carMesh(col, typeName) {
@@ -329,6 +344,9 @@ let cars = [];
 // UI and gameplay toggles
 let playerName = 'PLAYER';
 let playerCarModel = 'octane';
+let playerPaint = '#2fb8ff';
+let physicsStyle = 'standard';
+let localTwoPlayer = false;
 let goalExplosionStyle = 'classic';
 let paused = false;
 let lastTouch = null;
@@ -339,7 +357,7 @@ const SKILL = [
   { thr: 1, boost: true, steer: 4, cap: 1, wait: 0.25, sloppy: 1.2, flip: 0.9, aerial: true, drift: true }];
 function mkCar(team, k, ai, modelName) {
   const model = modelName || CAR_MODELS[(k) % CAR_MODELS.length].name;
-  const col = new THREE.Color(team ? ORANGE : BLUE).offsetHSL(0, 0, -0.09 * k);
+  const col = new THREE.Color(!team && k === 0 && !ai ? playerPaint : (team ? ORANGE : BLUE)).offsetHSL(0, 0, -0.09 * k);
   const car = { team, k, x: 0, y: 0.55, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, pitch: 0, ai, aiCd: 0, boost: 34, jumps: 0, jt: 0, flip: 0, fx: 0, fz: 0, fl: 0, ground: true };
   car.mesh = carMesh(col, model);
   car.model = model;
@@ -358,8 +376,9 @@ function buildTeams() {
     cars.push(c);
   }
   for (let k = 0; k < mode; k++) {
-    const c = mkCar(1, k, true);
-    c.displayName = 'ORANGE BOT ' + (k + 1);
+    const human = localTwoPlayer && k === 0;
+    const c = mkCar(1, k, !human, human ? 'dominus' : undefined);
+    c.displayName = human ? 'PLAYER 2' : 'ORANGE BOT ' + (k + 1);
     cars.push(c);
   }
 }
@@ -455,8 +474,9 @@ function drawMini() {
 // ---------- input ----------
 const keys = {}; let jumpQ = false;
 addEventListener('keydown', e => {
-  if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
+  if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code) || (e.code === 'Enter' && state === 'play')) e.preventDefault();
   if (!keys[e.code] && e.code === 'Space') jumpQ = true;
+  if (!keys[e.code] && e.code === 'Enter' && state === 'play' && localTwoPlayer) jumpQ2 = true;
   if (!keys[e.code] && e.code === 'KeyC') { ballCam = !ballCam; $('cam').textContent = ballCam ? 'Ball cam (C)' : 'Chase cam (C)'; }
   if (e.code === 'Enter' && (state === 'menu' || state === 'over') && document.activeElement !== $('name')) start();
   if (state === 'menu' || state === 'over') {
@@ -480,6 +500,18 @@ if (nameInput) nameInput.addEventListener('input', () => {
 });
 const explosionInput = $('explosion');
 if (explosionInput) explosionInput.addEventListener('change', () => { goalExplosionStyle = explosionInput.value; });
+const paintInput = $('paint');
+if (paintInput) paintInput.addEventListener('input', () => { playerPaint = paintInput.value || '#2fb8ff'; if (state === 'menu' || state === 'over') { buildTeams(); kickoff(); } });
+const stadiumInput = $('stadium');
+if (stadiumInput) stadiumInput.addEventListener('change', () => applyArenaStyle(stadiumInput.value));
+const physicsInput = $('physics');
+if (physicsInput) physicsInput.addEventListener('change', () => { physicsStyle = physicsInput.value || 'standard'; });
+const localTwoInput = $('localTwo');
+if (localTwoInput) localTwoInput.addEventListener('change', () => {
+  localTwoPlayer = localTwoInput.checked;
+  if (state === 'menu' || state === 'over') { buildTeams(); kickoff(); }
+  const go = $('go'); if (go) go.textContent = localTwoPlayer ? 'Local 2-player enabled — P1 WASD, P2 arrows' : 'Choose your setup, then press PLAY';
+});
 function handleMenuChoice(e) {
   if (e.target.closest && e.target.closest('input, select')) return;
   const b = e.target.closest && e.target.closest('button');
@@ -503,11 +535,12 @@ $('menu').addEventListener('pointerdown', handleMenuChoice);
 $('menu').addEventListener('click', handleMenuChoice);
 function playerCtl() {
   const j = jumpQ; jumpQ = false;
-  return {
-    throttle: ((keys.KeyW || keys.ArrowUp) ? 1 : 0) - ((keys.KeyS || keys.ArrowDown) ? 1 : 0),
-    steer: ((keys.KeyD || keys.ArrowRight) ? 1 : 0) - ((keys.KeyA || keys.ArrowLeft) ? 1 : 0),
-    jump: j, jumpHeld: !!keys.Space, hand: !!keys.KeyE, boost: !!(keys.ShiftLeft || keys.ShiftRight)
-  };
+  return { throttle: (keys.KeyW ? 1 : 0) - (keys.KeyS ? 1 : 0), steer: (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0), jump: j, jumpHeld: !!keys.Space, hand: !!keys.KeyE, boost: !!keys.ShiftLeft };
+}
+let jumpQ2 = false;
+function player2Ctl() {
+  const j = jumpQ2; jumpQ2 = false;
+  return { throttle: (keys.ArrowUp ? 1 : 0) - (keys.ArrowDown ? 1 : 0), steer: (keys.ArrowRight ? 1 : 0) - (keys.ArrowLeft ? 1 : 0), jump: j, jumpHeld: !!keys.Enter, hand: !!keys.Slash, boost: !!keys.ShiftRight };
 }
 const pred = []; // where the ball will be every 0.1s for the next 4 seconds
 function predict() {
@@ -589,7 +622,8 @@ function stepCar(c, ct, dt) {
   if (ground) {
     c.jumps = 0; c.jt = 0; c.hold = 0; c.pitch *= Math.max(0, 1 - 10 * dt);
     let vf = c.vx * sy + c.vz * cy, vs = c.vx * cy - c.vz * sy;
-    const hb = ct.hand ? 1 : 0, acc = 42 * Math.max(0, 1 - Math.abs(vf) / 36);
+    const hb = ct.hand ? 1 : 0, physicsAccel = physicsStyle === 'arcade' ? 1.3 : physicsStyle === 'heavy' ? 0.82 : 1;
+    const acc = 42 * physicsAccel * Math.max(0, 1 - Math.abs(vf) / 36);
     if (ct.throttle) vf += ct.throttle * (vf * ct.throttle < 0 ? 70 : acc) * dt; else vf *= Math.max(0, 1 - 0.9 * dt);
     if (bo) vf += 40 * dt;
     vf *= 1 - 0.5 * hb * dt;
@@ -598,7 +632,8 @@ function stepCar(c, ct, dt) {
     c.yaw -= ct.steer * sr * (vf >= 0 ? 1 : -1) * dt;
     c.vx = sy * vf + cy * vs; c.vz = cy * vf - sy * vs; c.vy = 0;
   } else {
-    c.vy -= G_CAR * dt; c.yaw -= ct.steer * 2.4 * dt;
+    const gravityScale = physicsStyle === 'floaty' ? 0.72 : physicsStyle === 'heavy' ? 1.2 : 1;
+    c.vy -= G_CAR * gravityScale * dt; c.yaw -= ct.steer * (physicsStyle === 'arcade' ? 3.1 : 2.4) * dt;
     if (c.hold > 0 && ct.jumpHeld && c.jumps === 1) { c.vy += 28 * dt; c.hold -= dt; } else c.hold = 0;
     if (!ct.throttle && c.y < 4 && c.vy < 0) c.pitch *= Math.max(0, 1 - 5 * dt);
     c.pitch = clamp(c.pitch - ct.throttle * 3 * dt, -1.3, 1.3);
@@ -769,7 +804,11 @@ function update(dt) {
     if (cd <= 0) { $('msg').textContent = ''; if (ot) state = 'over'; else { kickoff(); state = 'kick'; cd = 2.5; } return; }
   } else return;
   predict();
-  const cts = cars.map((c, i) => i === 0 ? playerCtl() : aiCtl(c, dt));
+  const cts = cars.map((c, i) => {
+    if (i === 0) return playerCtl();
+    if (localTwoPlayer && i === mode) return player2Ctl();
+    return aiCtl(c, dt);
+  });
   for (let n = 0; n < 2; n++) {
     const h = dt / 2;
     cars.forEach((c, i) => stepCar(c, cts[i], h)); cts.forEach(ct => { ct.jump = false; });
