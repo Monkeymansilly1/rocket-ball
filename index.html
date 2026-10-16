@@ -28,7 +28,7 @@
       <input id="name2" type="text" placeholder="Player 2 name" maxlength="12" value="PLAYER 2">
     </div>
 
-    <div class="opts car-opts"><span>Car</span>
+    <div class="opts car-opts"><span>P1 Car</span>
       <button data-car="octane" class="carbtn on">Octane</button>
       <button data-car="dominus" class="carbtn">Dominus</button>
       <button data-car="breakout" class="carbtn">Breakout</button>
@@ -37,9 +37,18 @@
       <button data-car="raptor" class="carbtn">Raptor</button>
       <button data-car="hyperion" class="carbtn">Hyperion</button>
     </div>
+    <div class="opts car-opts car-opts-p2"><span>P2 Car</span>
+      <button data-car2="octane" class="carbtn2">Octane</button>
+      <button data-car2="dominus" class="carbtn2 on">Dominus</button>
+      <button data-car2="breakout" class="carbtn2">Breakout</button>
+      <button data-car2="vortex" class="carbtn2">Vortex</button>
+      <button data-car2="striker" class="carbtn2">Striker</button>
+      <button data-car2="raptor" class="carbtn2">Raptor</button>
+      <button data-car2="hyperion" class="carbtn2">Hyperion</button>
+    </div>
 
     <div class="opts"><span>Explosion</span><select id="explosion" aria-label="Change goal explosion"><option value="classic">Classic</option><option value="fire">Firestorm</option><option value="galaxy">Galaxy</option><option value="lightning">Lightning</option></select></div>
-    <div class="opts"><span>Garage</span><label class="paint-label" for="paint">Paint</label><input id="paint" type="color" value="#2fb8ff" aria-label="Car paint colour"><label for="stadium">Stadium</label><select id="stadium"><option value="sunset">Sunset City</option><option value="neon">Neon Night</option><option value="ice">Ice Arena</option><option value="desert">Desert Dusk</option></select></div>
+    <div class="opts"><span>Garage</span><label class="paint-label" for="paint">P1 Paint</label><input id="paint" type="color" value="#2fb8ff" aria-label="Player 1 car paint colour"><label class="paint-label" for="paint2">P2 Paint</label><input id="paint2" type="color" value="#ff8a1f" aria-label="Player 2 car paint colour"><label for="stadium">Stadium</label><select id="stadium"><option value="sunset">Sunset City</option><option value="neon">Neon Night</option><option value="ice">Ice Arena</option><option value="desert">Desert Dusk</option></select></div>
     <div class="opts"><span>Physics</span><select id="physics"><option value="standard">Standard</option><option value="arcade">Arcade (snappy)</option><option value="floaty">Floaty aerials</option><option value="heavy">Heavy car</option></select><label class="toggle-label"><input id="localTwo" type="checkbox"> Local 2-player</label></div>
     <div class="opts"><span>Match</span><button data-mode="1">1v1</button><button data-mode="2">2v2</button><button data-mode="3">3v3</button></div>
     <div class="opts"><span>Bots</span><button data-diff="0">Easy</button><button data-diff="1">Medium</button><button data-diff="2">Hard</button></div>
