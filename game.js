@@ -989,9 +989,16 @@ function showVictoryScreen() {
   $('victoryTitle').textContent = winner;
   $('victoryScore').textContent = score[0] + '  —  ' + score[1];
   const rows = cars.map((car, idx) => ({car, stats: playerStats[idx] || {}, idx}));
-  $('victoryCars').innerHTML = rows.map(({car,idx}) => '<div class="victory-car-card '+(car.team ? 'orange-team' : 'blue-team')+'"><div class="victory-car-visual"><canvas class="victory-car-canvas" data-car-index="'+idx+'" aria-label="'+escapeStats(car.model || 'car')+' 3D preview"></canvas></div><div class="victory-car-name">'+escapeStats(car.displayName || ('PLAYER '+(idx+1)))+'</div><div class="victory-car-model">'+escapeStats(String(car.model || 'Octane').toUpperCase())+'</div></div>').join('');
-  renderVictoryCarPreviews(rows);
-  $('statsBody').innerHTML = rows.map(({car,stats,idx}) => '<tr><td><span class="team-dot" style="background:'+(car.team?'#ff8a1f':'#2fb8ff')+'"></span>'+escapeStats(car.displayName || ('PLAYER '+(idx+1)))+' <small class="stat-car-model">'+escapeStats(String(car.model || 'Octane').toUpperCase())+'</small></td><td>'+stats.goals+'</td><td>'+stats.assists+'</td><td>'+stats.shots+'</td><td>'+stats.saves+'</td><td>'+stats.clears+'</td></tr>').join('');
+  // Show just one car from the winning side during the intro; keep everyone in the stats table.
+  const winningTeam = score[0] === score[1] ? null : score[1] > score[0];
+  const winningRows = winningTeam === null ? [] : rows.filter(row => !!row.car.team === winningTeam);
+  const winnerCar = winningRows.slice().sort((a, b) => (b.stats.goals || 0) - (a.stats.goals || 0))[0];
+  const displayRows = winnerCar ? [winnerCar] : [];
+  $('victoryCars').innerHTML = displayRows.length
+    ? displayRows.map(({car,idx}) => '<div class="victory-car-card '+(car.team ? 'orange-team' : 'blue-team')+'"><div class="victory-car-visual"><canvas class="victory-car-canvas" data-car-index="'+idx+'" aria-label="'+escapeStats(car.model || 'car')+' 3D preview"></canvas></div><div class="victory-car-name">'+escapeStats(car.displayName || ('PLAYER '+(idx+1)))+'</div><div class="victory-car-model">'+escapeStats(String(car.model || 'Octane').toUpperCase())+'</div></div>').join('')
+    : '<div class="victory-draw-label">DRAW</div>';
+  renderVictoryCarPreviews(displayRows);
+  $('statsBody').innerHTML = rows.map(({car,stats,idx}) => '<tr><td><span class="team-dot" style="background:'+(car.team?'#ff8a1f':'#2fb8ff')+'"></span>'+escapeStats(car.displayName || ('PLAYER '+(idx+1)))+' <small class="stat-car-model">'+escapeStats(String(car.model || 'Octane').toUpperCase())+'</td><td>'+stats.goals+'</td><td>'+stats.assists+'</td><td>'+stats.shots+'</td><td>'+stats.saves+'</td><td>'+stats.clears+'</td></tr>').join('');
   const carsView = $('victoryCars'), statsView = $('victoryStats');
   if (carsView) carsView.style.display = 'grid';
   if (statsView) statsView.style.display = 'none';
