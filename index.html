@@ -33,10 +33,13 @@
     </div>
 
     <div class="opts"><span>Explosion</span><select id="explosion" aria-label="Change goal explosion"><option value="classic">Classic</option><option value="fire">Firestorm</option><option value="galaxy">Galaxy</option><option value="lightning">Lightning</option></select></div>
+    <div class="opts"><span>Garage</span><label class="paint-label" for="paint">Paint</label><input id="paint" type="color" value="#2fb8ff" aria-label="Car paint colour"><label for="stadium">Stadium</label><select id="stadium"><option value="sunset">Sunset City</option><option value="neon">Neon Night</option><option value="ice">Ice Arena</option><option value="desert">Desert Dusk</option></select></div>
+    <div class="opts"><span>Physics</span><select id="physics"><option value="standard">Standard</option><option value="arcade">Arcade (snappy)</option><option value="floaty">Floaty aerials</option><option value="heavy">Heavy car</option></select><label class="toggle-label"><input id="localTwo" type="checkbox"> Local 2-player</label></div>
     <div class="opts"><span>Match</span><button data-mode="1">1v1</button><button data-mode="2">2v2</button><button data-mode="3">3v3</button></div>
     <div class="opts"><span>Bots</span><button data-diff="0">Easy</button><button data-diff="1">Medium</button><button data-diff="2">Hard</button></div>
-    <p>Drive <b>W A S D</b> or arrows &nbsp; Jump / flip <b>Space</b> &nbsp; Boost <b>Shift</b> &nbsp; Camera <b>C</b> &nbsp; Drift <b>E</b> &nbsp; Mute <b>M</b> &nbsp; Pause <b>P</b></p>
-    <p>In the air: W/S tilt the nose, A/D turn. Press Space again with a direction to flip.</p>
+    <p>Player 1: <b>W A S D</b>, jump <b>Space</b>, boost <b>Left Shift</b>, drift <b>E</b>.</p>
+    <p>Player 2 (local): <b>Arrow keys</b>, jump <b>Enter</b>, boost <b>Right Shift</b>, drift <b>/</b>. Camera <b>C</b> · Mute <b>M</b> · Pause <b>P</b></p>
+    <p>In the air, steer and tilt to line up aerials. Press jump again with a direction to flip.</p>
     <button id="playBtn" class="play-btn" type="button">▶ PLAY</button>
     <p class="go" id="go">Choose your setup, then press PLAY</p>
   </div>
