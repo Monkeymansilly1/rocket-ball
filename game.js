@@ -1011,34 +1011,40 @@ function showVictoryScreen() {
   }, 5000);
 }
 function renderVictoryCarPreviews(rows) {
-  // Use the exact gameplay car meshes, with one shared WebGL renderer and
-  // scissored viewports so the victory lineup shows the real selected models.
+  // Render the selected winning car's actual gameplay mesh into its preview canvas.
   const canvases = Array.from(document.querySelectorAll('.victory-car-canvas'));
   if (!canvases.length || !window.THREE) return;
-  const width = Math.max(1, Math.floor(canvases[0].clientWidth || 180));
-  const height = Math.max(1, Math.floor(canvases[0].clientHeight || 76));
-  // Render each viewport to its own canvas through a lightweight renderer.
-  // Canvas textures are not used; each canvas is drawn from the matching live car mesh.
-  const renderEach = () => {
-    for (const item of previewCars) {
-      if (!item.canvas || !item.canvas.isConnected) continue;
-      const w = Math.max(1, item.canvas.clientWidth || width), h = Math.max(1, item.canvas.clientHeight || height);
-      const r = new THREE.WebGLRenderer({ canvas: item.canvas, alpha: true, antialias: true });
-      r.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
-      r.setSize(w, h, false);
-      const sceneOne = new THREE.Scene();
-      sceneOne.add(new THREE.HemisphereLight(0xd9f3ff, 0x1b2738, 2.2));
-      const light = new THREE.DirectionalLight(0xffffff, 2.5); light.position.set(3, 6, 5); sceneOne.add(light);
-      const fill = new THREE.DirectionalLight(0x49bfff, 1.1); fill.position.set(-4, 2, -3); sceneOne.add(fill);
-      const model = rows[item.idx].car.mesh.root.clone(true);
-      model.rotation.set(0.12, -0.55, 0); model.scale.setScalar(1.25); sceneOne.add(model);
-      const cam = new THREE.PerspectiveCamera(35, w / h, 0.1, 100);
-      cam.position.set(4.8, 3.0, 6.2); cam.lookAt(0, 0.3, 0);
-      r.render(sceneOne, cam);
-      r.dispose();
+  for (const canvas of canvases) {
+    const idx = Number(canvas.dataset.carIndex);
+    const row = rows.find(entry => entry.idx === idx);
+    if (!row || !row.car || !row.car.mesh || !row.car.mesh.root) continue;
+    const w = Math.max(1, Math.floor(canvas.clientWidth || 240));
+    const h = Math.max(1, Math.floor(canvas.clientHeight || 100));
+    try {
+      const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, preserveDrawingBuffer: true });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+      renderer.setSize(w, h, false);
+      const scene = new THREE.Scene();
+      scene.add(new THREE.HemisphereLight(0xe6f6ff, 0x263044, 2.5));
+      const key = new THREE.DirectionalLight(0xffffff, 3);
+      key.position.set(3, 6, 5);
+      scene.add(key);
+      const fill = new THREE.DirectionalLight(0x49bfff, 1.2);
+      fill.position.set(-4, 2, -3);
+      scene.add(fill);
+      const model = row.car.mesh.root.clone(true);
+      model.rotation.set(0.12, -0.55, 0);
+      model.scale.setScalar(1.25);
+      scene.add(model);
+      const camera = new THREE.PerspectiveCamera(35, w / h, 0.1, 100);
+      camera.position.set(4.8, 3.0, 6.2);
+      camera.lookAt(0, 0.3, 0);
+      renderer.render(scene, camera);
+      renderer.dispose();
+    } catch (error) {
+      console.error('Could not render winner car preview:', error);
     }
-  };
-  renderEach();
+  }
 }
 function escapeStats(value) { return String(value).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
 $('victoryPlayAgain').addEventListener('click', () => { const p=$('victory'); p.style.display='none'; p.dataset.shown=''; $('menu').style.display='grid'; state='menu'; $('mt').textContent='ROCKET ARENA 3D'; $('go').textContent='Choose your setup, then press PLAY'; });
