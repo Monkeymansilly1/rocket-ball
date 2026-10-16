@@ -1036,8 +1036,15 @@ function render(dt) {
   const splitActive = localTwoPlayer && state !== 'menu' && state !== 'over';
   document.body.classList.toggle('split-screen', splitActive);
   // During a replay, follow the player who scored instead of always following P1.
-  updateCam(dt, state === 'replay' ? replayCameraCarIndex : 0);
-  if (splitActive) updateCam(dt, state === 'replay' ? replayCameraCarIndex : mode, camera2, cam2);
+  if (state === 'menu') {
+    // Clean stadium-only garage backdrop: hide active match cars and ball.
+    camera.position.set(0, 62, 190); camera.lookAt(0, 4, 0); camera.fov = 62; camera.updateProjectionMatrix();
+    cars.forEach(c => { c.mesh.root.visible = false; }); ballMesh.visible = false;
+  } else {
+    cars.forEach(c => { c.mesh.root.visible = true; }); ballMesh.visible = true;
+    updateCam(dt, state === 'replay' ? replayCameraCarIndex : 0);
+    if (splitActive) updateCam(dt, state === 'replay' ? replayCameraCarIndex : mode, camera2, cam2);
+  }
   $('s0').textContent = score[0]; $('s1').textContent = score[1];
   const s = Math.ceil(clock); $('clock').textContent = ot ? 'OT' : Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
   const b = cars[0].boost; $('bf').style.width = (2.1 * b) + 'px'; $('bt').textContent = Math.round(b);
