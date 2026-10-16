@@ -78,3 +78,8 @@ body.split-screen #mini { display: none; }
 }
 
 #menu input#name2 { min-width: 140px; }
+
+/* Independent Player 2 garage choices */
+#menu .car-opts-p2 .carbtn2 { border-color: #9b6334; }
+#menu .car-opts-p2 .carbtn2.on { background: #ff8a1f; border-color: #ffb36f; color: #17100a; box-shadow: 0 0 12px rgba(255,138,31,.35); }
+#menu #paint2 { width: 46px; height: 36px; padding: 3px; cursor: pointer; }
