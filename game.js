@@ -1010,23 +1010,6 @@ function renderVictoryCarPreviews(rows) {
   if (!canvases.length || !window.THREE) return;
   const width = Math.max(1, Math.floor(canvases[0].clientWidth || 180));
   const height = Math.max(1, Math.floor(canvases[0].clientHeight || 76));
-  const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
-  renderer.setSize(width, height, false);
-  renderer.setClearColor(0x000000, 0);
-  const previewScene = new THREE.Scene();
-  previewScene.add(new THREE.HemisphereLight(0xd9f3ff, 0x1b2738, 2.2));
-  const keyLight = new THREE.DirectionalLight(0xffffff, 2.5); keyLight.position.set(3, 6, 5); previewScene.add(keyLight);
-  const fillLight = new THREE.DirectionalLight(0x49bfff, 1.1); fillLight.position.set(-4, 2, -3); previewScene.add(fillLight);
-  const previewCamera = new THREE.PerspectiveCamera(35, width / height, 0.1, 100);
-  previewCamera.position.set(4.8, 3.0, 6.2); previewCamera.lookAt(0, 0.35, 0);
-  const previewCars = rows.map(({car,idx}) => {
-    const source = car.mesh.root.clone(true);
-    source.rotation.set(0.12, -0.55, 0);
-    source.scale.setScalar(1.2);
-    previewScene.add(source);
-    return { source, idx, canvas: canvases.find(el => Number(el.dataset.carIndex) === idx) };
-  });
   // Render each viewport to its own canvas through a lightweight renderer.
   // Canvas textures are not used; each canvas is drawn from the matching live car mesh.
   const renderEach = () => {
@@ -1047,7 +1030,6 @@ function renderVictoryCarPreviews(rows) {
       r.render(sceneOne, cam);
       r.dispose();
     }
-    renderer.dispose();
   };
   renderEach();
 }
