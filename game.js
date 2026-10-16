@@ -286,6 +286,7 @@ function mkCar(team, k, ai, modelName) {
   const car = { team, k, x: 0, y: 0.55, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, pitch: 0, ai, aiCd: 0, boost: 34, jumps: 0, jt: 0, flip: 0, fx: 0, fz: 0, fl: 0, ground: true };
   car.mesh = carMesh(col, model);
   car.model = model;
+  car.displayName = ai ? (team ? 'ORANGE BOT ' : 'BLUE BOT ') + (k + 1) : playerName;
   // model-based properties
   const mdef = CAR_MODELS.find(m => m.name === model);
   car.hit = mdef.hit; car.mass = mdef.mass * 4; car.cap = mdef.cap; // scale mass multiplier into existing physics constants
@@ -294,8 +295,16 @@ function mkCar(team, k, ai, modelName) {
 function buildTeams() {
   for (const c of cars) scene.remove(c.mesh.root);
   cars = [];
-  for (let k = 0; k < mode; k++) cars.push(mkCar(0, k, k > 0, k === 0 ? playerCarModel : undefined));
-  for (let k = 0; k < mode; k++) cars.push(mkCar(1, k, true));
+  for (let k = 0; k < mode; k++) {
+    const c = mkCar(0, k, k > 0, k === 0 ? playerCarModel : undefined);
+    c.displayName = k === 0 ? playerName : 'BLUE BOT ' + (k + 1);
+    cars.push(c);
+  }
+  for (let k = 0; k < mode; k++) {
+    const c = mkCar(1, k, true);
+    c.displayName = 'ORANGE BOT ' + (k + 1);
+    cars.push(c);
+  }
 }
 const pads = [];
 for (const [x, z, big] of [[-72, -96, 1], [72, -96, 1], [-72, 96, 1], [72, 96, 1], [-74, 0, 1], [74, 0, 1], [0, -64], [0, 64], [-36, -40], [36, -40], [-36, 40], [36, 40], [0, 0],
@@ -662,11 +671,7 @@ function goal(team) {
   score[team]++; state = 'goal'; cd = 3;
 
   // determine scorer name from lastTouch
-  let scorerName = null;
-  if (lastTouch) {
-    if (lastTouch === cars[0]) scorerName = playerName;
-    else scorerName = lastTouch.ai ? (lastTouch.team ? 'ORANGE BOT' : 'BLUE BOT') : playerName;
-  }
+  const scorerName = lastTouch ? (lastTouch === cars[0] ? playerName : lastTouch.displayName) : null;
   const m = $('msg'); m.textContent = scorerName ? (scorerName.toUpperCase() + ' SCORES!') : ((team ? 'ORANGE' : 'BLUE') + ' SCORES!'); m.style.color = team ? '#ff8a1f' : '#2fb8ff';
 
   // fireworks + explosion
