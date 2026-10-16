@@ -44,6 +44,8 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #04070c; }
 #menu .opts button.on { box-shadow: 0 0 0 1px rgba(55,242,192,.18), 0 0 18px rgba(55,242,192,.13); }
 #player { position: absolute; top: 82px; left: 50%; transform: translateX(-50%); padding: 5px 13px; border-radius: 6px; background: rgba(5,10,18,.64); color: #fff; font-size: 18px; letter-spacing: 1px; }
 #msg { z-index: 2; pointer-events: none; font-size: clamp(42px, 7vw, 96px); font-weight: 900; letter-spacing: 1px; }
+#msg.replay-title { top: 12%; }
+#goalBy { position: absolute; left: 0; right: 0; bottom: 7%; z-index: 2; text-align: center; color: #fff; font-size: clamp(24px, 3.5vw, 48px); font-weight: 900; text-shadow: 0 3px 12px rgba(0,0,0,.85); }
 .play-btn:active { transform: translateY(0) scale(.99); }
 
 /* Garage and local multiplayer controls */
