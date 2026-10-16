@@ -144,71 +144,117 @@ buildStadium();
 // build car mesh for different model types (improved visuals)
 function carMesh(col, typeName) {
   const type = CAR_MODELS.find(t => t.name === typeName) || CAR_MODELS[0];
-  const root = new THREE.Group(); root.rotation.order = 'YXZ';
-  const body = new THREE.Group(); root.add(body);
-  const paint = new THREE.MeshStandardMaterial({ color: col, roughness: 0.25, metalness: 0.2, emissive: col, emissiveIntensity: 0.08 });
-  const dark = new THREE.MeshStandardMaterial({ color: 0x0b1420, roughness: 0.3, metalness: 0.5 });
-  const glassM = new THREE.MeshStandardMaterial({ color: 0x7fbfff, transparent: true, opacity: 0.25, metalness: 0.1, roughness: 0.2 });
-  const add = (geo, mat, x, y, z, rz, rx) => { const o = new THREE.Mesh(geo, mat); o.position.set(x, y, z); if (rz) o.rotation.z = rz; if (rx) o.rotation.x = rx; o.castShadow = true; body.add(o); };
+  const root = new THREE.Group();
+  root.rotation.order = 'YXZ';
+  const body = new THREE.Group();
+  root.add(body);
 
-  // Rounded lower body with separate bonnet and rear deck for a sportier silhouette
-  const shell = new THREE.Mesh(new THREE.SphereGeometry(1, 28, 18), paint);
-  shell.scale.set(type.width * 0.57, type.height * 0.48, type.len * 0.61);
-  shell.position.y = -0.02; shell.castShadow = true; body.add(shell);
-  add(new THREE.BoxGeometry(type.width * 0.82, type.height * 0.32, type.len * 0.34), paint, 0, type.height * 0.08, -type.len * 0.29, -0.025);
-  add(new THREE.BoxGeometry(type.width * 0.78, type.height * 0.28, type.len * 0.23), paint, 0, type.height * 0.1, type.len * 0.31);
-  // Low cabin with panoramic dark glass
-  add(new THREE.BoxGeometry(type.width * 0.58, type.height * 0.48, type.len * 0.43), dark, 0, type.height * 0.57, -0.03);
-  // windshield
-  const wind = new THREE.Mesh(new THREE.PlaneGeometry(type.width * 0.58, type.len * 0.35), glassM);
-  wind.rotation.x = -0.35; wind.position.set(0, type.height * 0.55, -type.len * 0.08); body.add(wind);
+  const paint = new THREE.MeshStandardMaterial({
+    color: col, roughness: 0.23, metalness: 0.28,
+    emissive: col, emissiveIntensity: 0.06
+  });
+  const trim = new THREE.MeshStandardMaterial({ color: 0x111824, roughness: 0.42, metalness: 0.28 });
+  const glass = new THREE.MeshPhysicalMaterial({
+    color: 0x83d9ff, roughness: 0.12, metalness: 0.15,
+    transparent: true, opacity: 0.88, clearcoat: 1, clearcoatRoughness: 0.08
+  });
+  const add = (geometry, material, x, y, z, rx = 0, ry = 0, rz = 0) => {
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.set(x, y, z);
+    mesh.rotation.set(rx, ry, rz);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    body.add(mesh);
+    return mesh;
+  };
 
-  // front bumper and rear diffuser
-  add(new THREE.BoxGeometry(type.width * 0.95, type.height * 0.45, type.len * 0.18), dark, 0, -0.02, -type.len * 0.56);
-  add(new THREE.BoxGeometry(type.width * 0.95, type.height * 0.45, type.len * 0.18), dark, 0, -0.02, type.len * 0.56);
+  // A low, recognisable sports-car body (the front is +Z, matching the driving physics).
+  add(new THREE.BoxGeometry(type.width * 0.94, type.height * 0.42, type.len * 0.82),
+      paint, 0, 0.02, 0);
+  add(new THREE.BoxGeometry(type.width * 0.84, type.height * 0.25, type.len * 0.32),
+      paint, 0, type.height * 0.16, type.len * 0.27);
+  add(new THREE.BoxGeometry(type.width * 0.9, type.height * 0.28, type.len * 0.22),
+      trim, 0, -0.025, type.len * 0.48);
+  add(new THREE.BoxGeometry(type.width * 0.9, type.height * 0.26, type.len * 0.22),
+      trim, 0, -0.025, -type.len * 0.48);
 
-  // spoiler for some models
-  if (type.name === 'dominus') add(new THREE.BoxGeometry(type.width * 0.9, type.height * 0.12, type.len * 0.25), paint, 0, type.height * 0.8, type.len * -0.65, 0, 0);
-  if (type.name === 'breakout') add(new THREE.BoxGeometry(type.width * 0.6, type.height * 0.12, type.len * 0.35), paint, 0, type.height * 0.6, type.len * -0.55);
+  // Sloped cabin with a dark panoramic windscreen and rear glass.
+  const cabin = new THREE.Mesh(new THREE.BoxGeometry(type.width * 0.58, type.height * 0.58, type.len * 0.4), glass);
+  cabin.position.set(0, type.height * 0.47, -type.len * 0.01);
+  cabin.castShadow = true;
+  body.add(cabin);
+  add(new THREE.BoxGeometry(type.width * 0.66, 0.07, type.len * 0.16), trim,
+      0, type.height * 0.76, -type.len * 0.02);
 
-  // headlights
-  const headL = new THREE.Mesh(new THREE.PlaneGeometry(type.width * 0.18, 0.12), new THREE.MeshBasicMaterial({ color: 0xffffcc, emissive: 0xffffcc }));
-  headL.position.set(-type.width * 0.25, 0.06, -type.len * 0.75); headL.rotation.x = -0.02; body.add(headL);
-  const headR = headL.clone(); headR.position.x = type.width * 0.25; body.add(headR);
-
-  // taillights
-  const tailL = new THREE.Mesh(new THREE.PlaneGeometry(type.width * 0.16, 0.09), new THREE.MeshBasicMaterial({ color: 0xff4b30, emissive: 0xff4b30 }));
-  tailL.position.set(-type.width * 0.22, 0.06, type.len * 0.75); tailL.rotation.x = 0.02; body.add(tailL);
-  const tailR = tailL.clone(); tailR.position.x = type.width * 0.22; body.add(tailR);
-
-  // wheels with rims
-  const wheels = [];
-  const tireMat = new THREE.MeshStandardMaterial({ color: 0x0b0b0b, roughness: 0.6, metalness: 0.1 });
-  const rimMat = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.2, metalness: 0.8 });
-  for (const sx of [-1, 1]) for (const sz of [-type.len * 0.38, type.len * 0.38]) {
-    const wheelGroup = new THREE.Group();
-    const tire = new THREE.Mesh(new THREE.CylinderGeometry(type.wheelR, type.wheelR, 0.38, 20), tireMat);
-    tire.rotation.x = Math.PI / 2; tire.position.set(sx * (type.width / 1.08), -0.08, sz);
-    // rim
-    const rim = new THREE.Mesh(new THREE.CylinderGeometry(type.wheelR * 0.55, type.wheelR * 0.55, 0.2, 20), rimMat);
-    rim.rotation.x = Math.PI / 2; rim.position.copy(tire.position);
-    wheelGroup.add(tire); wheelGroup.add(rim);
-    body.add(wheelGroup);
-    wheelGroup.userData = { side: sx };
-    wheels.push(wheelGroup);
+  // Front lights: warm white headlamps. Rear lights: slim red strips.
+  const headMat = new THREE.MeshStandardMaterial({ color: 0xfff5ce, emissive: 0xffdd91, emissiveIntensity: 1.2 });
+  const tailMat = new THREE.MeshStandardMaterial({ color: 0xff3434, emissive: 0xff1010, emissiveIntensity: 0.8 });
+  for (const sx of [-1, 1]) {
+    add(new THREE.BoxGeometry(type.width * 0.23, 0.075, 0.045), headMat,
+        sx * type.width * 0.29, 0.045, type.len * 0.42);
+    add(new THREE.BoxGeometry(type.width * 0.21, 0.07, 0.045), tailMat,
+        sx * type.width * 0.29, 0.04, -type.len * 0.42);
   }
 
-  // small antenna/topper
-  const antenna = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.7), dark);
-  antenna.position.set(0, type.height * 1.1, 0.35); body.add(antenna);
+  // Model-specific styling gives each selection its own silhouette.
+  if (type.name === 'octane') {
+    add(new THREE.BoxGeometry(type.width * 0.82, 0.16, type.len * 0.17),
+        paint, 0, type.height * 0.24, type.len * 0.34);
+    add(new THREE.BoxGeometry(type.width * 0.62, 0.09, type.len * 0.13),
+        trim, 0, type.height * 0.31, type.len * 0.36);
+  } else if (type.name === 'dominus') {
+    add(new THREE.BoxGeometry(type.width * 0.94, 0.1, type.len * 0.22),
+        paint, 0, type.height * 0.28, -type.len * 0.39);
+    add(new THREE.BoxGeometry(type.width * 0.78, 0.07, 0.12),
+        trim, 0, type.height * 0.48, -type.len * 0.49);
+    for (const sx of [-1, 1]) {
+      add(new THREE.BoxGeometry(0.06, 0.36, 0.06), trim, sx * type.width * 0.32,
+          type.height * 0.43, -type.len * 0.43);
+    }
+  } else if (type.name === 'breakout') {
+    add(new THREE.BoxGeometry(type.width * 0.72, 0.11, type.len * 0.28),
+        paint, 0, type.height * 0.34, type.len * 0.34);
+    add(new THREE.BoxGeometry(type.width * 0.88, 0.08, type.len * 0.18),
+        trim, 0, type.height * 0.28, -type.len * 0.42);
+  }
 
-  const flame = new THREE.Mesh(new THREE.ConeGeometry(0.45, 2.2, 12), new THREE.MeshBasicMaterial({ color: 0xffa030 }));
-  flame.rotation.x = -Math.PI / 2; flame.position.set(0, 0, -type.len * 0.75); flame.visible = false; body.add(flame);
+  // Four proper tyres with metallic hubcaps. The wheel cylinders face outwards.
+  const wheels = [];
+  const tireMat = new THREE.MeshStandardMaterial({ color: 0x080b10, roughness: 0.72, metalness: 0.06 });
+  const rimMat = new THREE.MeshStandardMaterial({ color: 0xc3d1df, roughness: 0.22, metalness: 0.85 });
+  for (const sx of [-1, 1]) {
+    for (const sz of [-type.len * 0.31, type.len * 0.31]) {
+      const wheelGroup = new THREE.Group();
+      wheelGroup.position.set(sx * type.width * 0.48, -0.12, sz);
+      const tire = new THREE.Mesh(new THREE.CylinderGeometry(type.wheelR * 0.78, type.wheelR * 0.78, 0.28, 24), tireMat);
+      tire.rotation.z = Math.PI / 2;
+      const rim = new THREE.Mesh(new THREE.CylinderGeometry(type.wheelR * 0.43, type.wheelR * 0.43, 0.29, 24), rimMat);
+      rim.rotation.z = Math.PI / 2;
+      wheelGroup.add(tire, rim);
+      wheelGroup.userData = { side: sx };
+      body.add(wheelGroup);
+      wheels.push(wheelGroup);
+    }
+  }
+
+  // Rear boost outlet points behind the car (-Z); the cone only appears when boosting.
+  const nozzle = add(new THREE.CylinderGeometry(0.2, 0.26, 0.22, 16), trim, 0, -0.02, -type.len * 0.48, Math.PI / 2);
+  const flame = new THREE.Mesh(new THREE.ConeGeometry(0.34, 1.8, 16),
+    new THREE.MeshBasicMaterial({ color: 0x43dfff, transparent: true, opacity: 0.95 }));
+  flame.rotation.x = Math.PI / 2;
+  flame.position.set(0, 0, -type.len * 0.77);
+  flame.visible = false;
+  body.add(flame);
+
+  // Light underglow distinguishes players and bots without obscuring the paint.
+  const glow = new THREE.Mesh(new THREE.BoxGeometry(type.width * 0.76, 0.025, type.len * 0.55),
+    new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.48 }));
+  glow.position.y = -0.28;
+  body.add(glow);
 
   scene.add(root);
   return { root, body, flame, type, wheels };
 }
-
 const ballTex = (() => {
   const c = document.createElement('canvas'); c.width = 256; c.height = 128; const g = c.getContext('2d');
   g.fillStyle = '#dfe9ef'; g.fillRect(0, 0, 256, 128); g.fillStyle = '#2b3a47';
@@ -346,7 +392,7 @@ addEventListener('keydown', e => {
   if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
   if (!keys[e.code] && e.code === 'Space') jumpQ = true;
   if (!keys[e.code] && e.code === 'KeyC') { ballCam = !ballCam; $('cam').textContent = ballCam ? 'Ball cam (C)' : 'Chase cam (C)'; }
-  if (e.code === 'Enter' && (state === 'menu' || state === 'over')) start();
+  if (e.code === 'Enter' && (state === 'menu' || state === 'over') && document.activeElement !== $('name')) start();
   if (state === 'menu' || state === 'over') {
     const n = { Digit1: 1, Digit2: 2, Digit3: 3 }[e.code], d = { Digit4: 0, Digit5: 1, Digit6: 2 }[e.code];
     if (n) pick('mode', n); if (d !== undefined) pick('diff', d);
@@ -360,8 +406,8 @@ addEventListener('keydown', e => {
   keys[e.code] = true;
 });
 addEventListener('keyup', e => { keys[e.code] = false; });
-$('playBtn').addEventListener('click', e => { e.stopPropagation(); if (state === 'menu' || state === 'over') start(); });
-$('menu').addEventListener('pointerdown', e => {
+$('playBtn').addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); if (state === 'menu' || state === 'over') start(); });\nconst nameInput = $('name');\nif (nameInput) nameInput.addEventListener('input', () => {\n  const cleaned = (nameInput.value || '').trim().slice(0, 12) || 'PLAYER';\n  $('player').textContent = cleaned;\n});\nconst explosionInput = $('explosion');\nif (explosionInput) explosionInput.addEventListener('change', () => { goalExplosionStyle = explosionInput.value; });
+$('menu').addEventListener('pointerdown', e => {\n  if (e.target.closest && e.target.closest('input, select')) return;
   const b = e.target.closest && e.target.closest('button');
   if (b) {
     if (b.dataset.mode) pick('mode', +b.dataset.mode);
