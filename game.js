@@ -347,6 +347,7 @@ const ball = { x: 0, y: BR + 6, z: 0, vx: 0, vy: 0, vz: 0 };
 let cars = [];
 // UI and gameplay toggles
 let playerName = 'PLAYER';
+let player2Name = 'PLAYER 2';
 let playerCarModel = 'octane';
 let playerPaint = '#2fb8ff';
 let physicsStyle = 'standard';
@@ -382,7 +383,7 @@ function buildTeams() {
   for (let k = 0; k < mode; k++) {
     const human = localTwoPlayer && k === 0;
     const c = mkCar(1, k, !human, human ? 'dominus' : undefined);
-    c.displayName = human ? 'PLAYER 2' : 'ORANGE BOT ' + (k + 1);
+    c.displayName = human ? player2Name : 'ORANGE BOT ' + (k + 1);
     cars.push(c);
   }
 }
@@ -404,6 +405,7 @@ function kickoff() {
 function start() {
   sfx.init(); // read UI choices
   const nameEl = $('name'); if (nameEl) playerName = (nameEl.value || 'PLAYER').toString().trim().slice(0,12) || 'PLAYER';
+  const name2El = $('name2'); if (name2El) player2Name = (name2El.value || 'PLAYER 2').toString().trim().slice(0,12) || 'PLAYER 2';
   const sel = document.querySelector('.car-opts button.on'); if (sel && sel.dataset.car) playerCarModel = sel.dataset.car;
   const explosionEl = $('explosion'); if (explosionEl) goalExplosionStyle = explosionEl.value;
   buildTeams(); score = [0, 0]; clock = MATCH; ot = false; pads.forEach(p => p.t = 0);
@@ -499,8 +501,15 @@ addEventListener('keyup', e => { keys[e.code] = false; });
 $('playBtn').addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); if (state === 'menu' || state === 'over') start(); });
 const nameInput = $('name');
 if (nameInput) nameInput.addEventListener('input', () => {
-  const cleaned = (nameInput.value || '').trim().slice(0, 12) || 'PLAYER';
-  $('player').textContent = cleaned;
+  playerName = (nameInput.value || '').trim().slice(0, 12) || 'PLAYER';
+  $('player').textContent = playerName;
+  if (cars[0]) cars[0].displayName = playerName;
+});
+const name2Input = $('name2');
+if (name2Input) name2Input.addEventListener('input', () => {
+  player2Name = (name2Input.value || '').trim().slice(0, 12) || 'PLAYER 2';
+  const tag = $('p2Tag'); if (tag) tag.textContent = player2Name.toUpperCase();
+  const p2 = cars[mode]; if (p2 && localTwoPlayer) p2.displayName = player2Name;
 });
 const explosionInput = $('explosion');
 if (explosionInput) explosionInput.addEventListener('change', () => { goalExplosionStyle = explosionInput.value; });
@@ -890,6 +899,7 @@ function render(dt) {
   const bf2 = $('bf2'), bt2 = $('bt2');
   if (bf2 && bt2) { const b2 = p2 ? p2.boost : 0; bf2.style.width = (2.1 * b2) + 'px'; bt2.textContent = Math.round(b2); bf2.style.background = b2 > 66 ? '#ffd35a' : '#ff8a1f'; }
   const pHUD = $('player'); if (pHUD) pHUD.textContent = playerName;
+  const p2Tag = $('p2Tag'); if (p2Tag) p2Tag.textContent = player2Name.toUpperCase();
   if (splitActive) {
     const half = Math.floor(innerWidth / 2);
     renderer.setScissorTest(true);
