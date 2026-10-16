@@ -989,7 +989,18 @@ function showVictoryScreen() {
   $('victoryTitle').textContent = winner;
   $('victoryScore').textContent = score[0] + '  —  ' + score[1];
   const rows = cars.map((car, idx) => ({car, stats: playerStats[idx] || {}, idx}));
-  $('statsBody').innerHTML = rows.map(({car,stats,idx}) => '<tr><td><span class="team-dot" style="background:'+(car.team?'#ff8a1f':'#2fb8ff')+'"></span>'+escapeStats(car.displayName || ('PLAYER '+(idx+1)))+'</td><td>'+stats.goals+'</td><td>'+stats.assists+'</td><td>'+stats.shots+'</td><td>'+stats.saves+'</td><td>'+stats.clears+'</td></tr>').join('');
+  $('victoryCars').innerHTML = rows.map(({car,idx}) => '<div class="victory-car-card '+(car.team ? 'orange-team' : 'blue-team')+'"><div class="victory-car-visual" style="--car-paint:'+car.mesh.root.children[0].children[0].material.color.getStyle()+'"><span class="car-emoji">🚘</span></div><div class="victory-car-name">'+escapeStats(car.displayName || ('PLAYER '+(idx+1)))+'</div><div class="victory-car-model">'+escapeStats(String(car.model || 'Octane').toUpperCase())+'</div></div>').join('');
+  $('statsBody').innerHTML = rows.map(({car,stats,idx}) => '<tr><td><span class="team-dot" style="background:'+(car.team?'#ff8a1f':'#2fb8ff')+'"></span>'+escapeStats(car.displayName || ('PLAYER '+(idx+1)))+' <small class="stat-car-model">'+escapeStats(String(car.model || 'Octane').toUpperCase())+'</small></td><td>'+stats.goals+'</td><td>'+stats.assists+'</td><td>'+stats.shots+'</td><td>'+stats.saves+'</td><td>'+stats.clears+'</td></tr>').join('');
+  const carsView = $('victoryCars'), statsView = $('victoryStats');
+  if (carsView) carsView.style.display = 'grid';
+  if (statsView) statsView.style.display = 'none';
+  if (panel._statsTimer) clearTimeout(panel._statsTimer);
+  panel._statsTimer = setTimeout(() => {
+    if (panel.style.display !== 'none') {
+      if (carsView) carsView.style.display = 'none';
+      if (statsView) statsView.style.display = 'block';
+    }
+  }, 5000);
 }
 function escapeStats(value) { return String(value).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
 $('victoryPlayAgain').addEventListener('click', () => { const p=$('victory'); p.style.display='none'; p.dataset.shown=''; $('menu').style.display='grid'; state='menu'; $('mt').textContent='ROCKET ARENA 3D'; $('go').textContent='Choose your setup, then press PLAY'; });
