@@ -897,6 +897,9 @@ function update(dt) {
       applyReplayFrame(replayFrames[replayIndex]);
       if (ot) {
         state = 'over';
+        // Overtime goals end the match from inside the replay branch, so show
+        // the final scoreboard here instead of leaving the arena frozen.
+        showVictoryScreen();
       } else {
         kickoff();
         state = 'kick';
