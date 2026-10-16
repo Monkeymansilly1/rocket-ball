@@ -417,6 +417,9 @@ for (const [x, z, big] of [[-72, -96, 1], [72, -96, 1], [-72, 96, 1], [72, 96, 1
 }
 const FORM = [[0, 0.55], [-26, 0.8], [26, 0.8]];
 function kickoff() {
+  replayHistory = [];
+  replayFrames = [];
+  replayIndex = 0;
   Object.assign(ball, { x: 0, y: BR + 6, z: 0, vx: 0, vy: 0, vz: 0 });
   lastTouch = null;
   for (const c of cars) {
