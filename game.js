@@ -446,7 +446,7 @@ function start() {
   const explosionEl = $('explosion'); if (explosionEl) goalExplosionStyle = explosionEl.value;
   buildTeams(); score = [0, 0]; clock = MATCH; ot = false; pads.forEach(p => p.t = 0);
   playerStats = cars.map(() => ({ goals: 0, assists: 0, shots: 0, saves: 0, clears: 0, shotsOnGoal: 0 }));
-  const victory = $('victory'); if (victory) victory.style.display = 'none';
+  const victory = $('victory'); if (victory) { victory.style.display = 'none'; victory.dataset.shown = ''; }
   kickoff(); state = 'kick'; cd = 3; $('menu').style.display = 'none'; $('msg').textContent = '';
   const pHUD = $('player'); if (pHUD) pHUD.textContent = playerName;
 }
