@@ -361,6 +361,7 @@ let replayHistory = [];
 let replayFrames = [];
 let replayIndex = 0;
 let goalScorerText = 'PLAYER';
+let replayCameraCarIndex = 0;
 const REPLAY_HISTORY_LIMIT = 301;
 function saveReplayFrame() {
   replayHistory.push({
@@ -839,6 +840,7 @@ function goal(team) {
   // Show the scorer first, before switching to the replay title.
   const scorerName = lastTouch ? (lastTouch === cars[0] ? playerName : lastTouch.displayName) : null;
   goalScorerText = scorerName || (team ? 'ORANGE' : 'BLUE');
+  replayCameraCarIndex = lastTouch ? Math.max(0, cars.indexOf(lastTouch)) : Math.max(0, cars.findIndex(c => c.team === team));
   const m = $('msg');
   m.classList.remove('replay-title');
   m.textContent = goalScorerText.toUpperCase() + ' SCORED!';
@@ -968,8 +970,9 @@ function render(dt) {
   stepParts(dt); drawMini(); sfx.update(cars[0], state === 'play');
   const splitActive = localTwoPlayer && state !== 'menu' && state !== 'over';
   document.body.classList.toggle('split-screen', splitActive);
-  updateCam(dt);
-  if (splitActive) updateCam(dt, mode, camera2, cam2);
+  // During a replay, follow the player who scored instead of always following P1.
+  updateCam(dt, state === 'replay' ? replayCameraCarIndex : 0);
+  if (splitActive) updateCam(dt, state === 'replay' ? replayCameraCarIndex : mode, camera2, cam2);
   $('s0').textContent = score[0]; $('s1').textContent = score[1];
   const s = Math.ceil(clock); $('clock').textContent = ot ? 'OT' : Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
   const b = cars[0].boost; $('bf').style.width = (2.1 * b) + 'px'; $('bt').textContent = Math.round(b);
