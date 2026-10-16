@@ -151,11 +151,14 @@ function carMesh(col, typeName) {
   const glassM = new THREE.MeshStandardMaterial({ color: 0x7fbfff, transparent: true, opacity: 0.25, metalness: 0.1, roughness: 0.2 });
   const add = (geo, mat, x, y, z, rz, rx) => { const o = new THREE.Mesh(geo, mat); o.position.set(x, y, z); if (rz) o.rotation.z = rz; if (rx) o.rotation.x = rx; o.castShadow = true; body.add(o); };
 
-  // main chassis - slightly rounded by stacking boxes
-  add(new THREE.BoxGeometry(type.width, type.height, type.len), paint, 0, 0, 0);
-  add(new THREE.BoxGeometry(type.width * 0.9, type.height * 0.7, type.len * 0.85), paint, 0, type.height * 0.25, -0.05);
-  // roof / cabin
-  add(new THREE.BoxGeometry(type.width * 0.6, type.height * 0.5, type.len * 0.5), dark, 0, type.height * 0.6, -0.05);
+  // Rounded lower body with separate bonnet and rear deck for a sportier silhouette
+  const shell = new THREE.Mesh(new THREE.SphereGeometry(1, 28, 18), paint);
+  shell.scale.set(type.width * 0.57, type.height * 0.48, type.len * 0.61);
+  shell.position.y = -0.02; shell.castShadow = true; body.add(shell);
+  add(new THREE.BoxGeometry(type.width * 0.82, type.height * 0.32, type.len * 0.34), paint, 0, type.height * 0.08, -type.len * 0.29, -0.025);
+  add(new THREE.BoxGeometry(type.width * 0.78, type.height * 0.28, type.len * 0.23), paint, 0, type.height * 0.1, type.len * 0.31);
+  // Low cabin with panoramic dark glass
+  add(new THREE.BoxGeometry(type.width * 0.58, type.height * 0.48, type.len * 0.43), dark, 0, type.height * 0.57, -0.03);
   // windshield
   const wind = new THREE.Mesh(new THREE.PlaneGeometry(type.width * 0.58, type.len * 0.35), glassM);
   wind.rotation.x = -0.35; wind.position.set(0, type.height * 0.55, -type.len * 0.08); body.add(wind);
