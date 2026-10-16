@@ -172,19 +172,28 @@ function carMesh(col, typeName) {
     return mesh;
   };
 
-  // A low, recognisable sports-car body (the front is +Z, matching the driving physics).
-  add(new THREE.BoxGeometry(type.width * 0.94, type.height * 0.42, type.len * 0.82),
+  // Each car gets a noticeably different chassis silhouette (front is +Z).
+  const chassis = {
+    octane:   [0.94, 0.42, 0.82, 0.84, 0.25, 0.32, 0.58, 0.58, 0.40, -0.01],
+    dominus:  [0.98, 0.32, 0.90, 0.72, 0.18, 0.25, 0.52, 0.40, 0.30, -0.04],
+    breakout: [0.82, 0.27, 0.88, 0.66, 0.15, 0.25, 0.50, 0.34, 0.34, -0.01],
+    vortex:   [0.98, 0.30, 0.86, 0.78, 0.18, 0.28, 0.48, 0.42, 0.30, -0.03],
+    striker:  [0.86, 0.34, 0.78, 0.68, 0.22, 0.30, 0.56, 0.52, 0.36, 0.00],
+    raptor:   [1.00, 0.46, 0.82, 0.82, 0.28, 0.32, 0.64, 0.62, 0.40, -0.02],
+    hyperion: [0.94, 0.28, 0.92, 0.66, 0.16, 0.30, 0.42, 0.38, 0.34, -0.02]
+  }[type.name] || [0.94, 0.42, 0.82, 0.84, 0.25, 0.32, 0.58, 0.58, 0.40, -0.01];
+  add(new THREE.BoxGeometry(type.width * chassis[0], type.height * chassis[1], type.len * chassis[2]),
       paint, 0, 0.02, 0);
-  add(new THREE.BoxGeometry(type.width * 0.84, type.height * 0.25, type.len * 0.32),
+  add(new THREE.BoxGeometry(type.width * chassis[3], type.height * chassis[4], type.len * chassis[5]),
       paint, 0, type.height * 0.16, type.len * 0.27);
-  add(new THREE.BoxGeometry(type.width * 0.9, type.height * 0.28, type.len * 0.22),
-      trim, 0, -0.025, type.len * 0.48);
-  add(new THREE.BoxGeometry(type.width * 0.9, type.height * 0.26, type.len * 0.22),
-      trim, 0, -0.025, -type.len * 0.48);
+  add(new THREE.BoxGeometry(type.width * 0.9, 0.09, type.len * 0.18),
+      trim, 0, -0.025, type.len * 0.47);
+  add(new THREE.BoxGeometry(type.width * 0.9, 0.08, type.len * 0.18),
+      trim, 0, -0.025, -type.len * 0.47);
 
-  // Sloped cabin with a dark panoramic windscreen and rear glass.
-  const cabin = new THREE.Mesh(new THREE.BoxGeometry(type.width * 0.58, type.height * 0.58, type.len * 0.4), glass);
-  cabin.position.set(0, type.height * 0.47, -type.len * 0.01);
+  // Cabin proportions differ per car so the profiles are easy to tell apart.
+  const cabin = new THREE.Mesh(new THREE.BoxGeometry(type.width * chassis[6], type.height * chassis[7], type.len * chassis[8]), glass);
+  cabin.position.set(0, type.height * (type.name === 'raptor' ? 0.54 : 0.47), type.len * chassis[9]);
   cabin.castShadow = true;
   body.add(cabin);
   add(new THREE.BoxGeometry(type.width * 0.66, 0.07, type.len * 0.16), trim,
@@ -471,17 +480,19 @@ if (nameInput) nameInput.addEventListener('input', () => {
 });
 const explosionInput = $('explosion');
 if (explosionInput) explosionInput.addEventListener('change', () => { goalExplosionStyle = explosionInput.value; });
-$('menu').addEventListener('pointerdown', e => {
+function handleMenuChoice(e) {
   if (e.target.closest && e.target.closest('input, select')) return;
   const b = e.target.closest && e.target.closest('button');
-  if (b) {
-    if (b.dataset.mode) pick('mode', +b.dataset.mode);
-    else if (b.dataset.diff) pick('diff', +b.dataset.diff);
-    else if (b.dataset.car) {
-      document.querySelectorAll('.car-opts button').forEach(x => x.classList.toggle('on', x === b));
-    }
+  if (!b) return;
+  if (b.dataset.mode) pick('mode', +b.dataset.mode);
+  else if (b.dataset.diff) pick('diff', +b.dataset.diff);
+  else if (b.dataset.car) {
+    playerCarModel = b.dataset.car;
+    document.querySelectorAll('.car-opts button').forEach(x => x.classList.toggle('on', x === b));
   }
-});
+}
+$('menu').addEventListener('pointerdown', handleMenuChoice);
+$('menu').addEventListener('click', handleMenuChoice);
 function playerCtl() {
   const j = jumpQ; jumpQ = false;
   return {
