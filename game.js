@@ -741,6 +741,9 @@ function hitBall(c) {
   let nf = lf - clamp(lf, -hf, hf), nl = ll - clamp(ll, -hf * 0.6, hf * 0.6), ny = dy - clamp(dy, -0.55, 0.55);
   let d = Math.hypot(nf, nl, ny);
   if (d >= BR) return;
+  // Contact itself determines the most recent touch. Don't leave an old bot
+  // credited just because the latest collision had no inward relative velocity.
+  lastTouch = c;
   if (d < 1e-4) { nf = nl = 0; ny = 1; d = 0; } else { nf /= d; nl /= d; ny /= d; }
   const nx = sy * nf + cy * nl, nz = cy * nf - sy * nl;
   ball.x += nx * (BR - d); ball.y += ny * (BR - d); ball.z += nz * (BR - d);
@@ -752,8 +755,6 @@ function hitBall(c) {
     c.vx -= nx * j / (c.mass || 4); c.vy -= ny * j / (c.mass || 4); c.vz -= nz * j / (c.mass || 4);
     if (c.fl) { ball.vx += nx * 4; ball.vy += ny * 4; ball.vz += nz * 4; }
     if (c.ground) ball.vy += 2;
-    // record last touch for goal crediting
-    lastTouch = c;
   }
   const s = Math.hypot(ball.vx, ball.vy, ball.vz); if (s > 80) { const k = 80 / s; ball.vx *= k; ball.vy *= k; ball.vz *= k; }
 }
