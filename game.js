@@ -489,6 +489,14 @@ function handleMenuChoice(e) {
   else if (b.dataset.car) {
     playerCarModel = b.dataset.car;
     document.querySelectorAll('.car-opts button').forEach(x => x.classList.toggle('on', x === b));
+    // Rebuild the player car immediately so the selection visibly changes in the arena,
+    // not only after PLAY is pressed. Do not interrupt an active match.
+    if (state === 'menu' || state === 'over') {
+      buildTeams();
+      kickoff();
+      const go = $('go');
+      if (go) go.textContent = 'Selected: ' + b.textContent.trim() + ' — press PLAY';
+    }
   }
 }
 $('menu').addEventListener('pointerdown', handleMenuChoice);
