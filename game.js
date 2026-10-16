@@ -15,7 +15,11 @@ const wrap = a => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a
 const CAR_MODELS = [
   { name: 'octane', len: 3.4, width: 2.0, height: 0.6, wheelR: 0.45, mass: 1.0, hit: 1.7, cap: 1.0 },
   { name: 'dominus', len: 3.8, width: 2.05, height: 0.5, wheelR: 0.42, mass: 1.05, hit: 1.9, cap: 0.95 },
-  { name: 'breakout', len: 3.6, width: 1.9, height: 0.45, wheelR: 0.42, mass: 0.95, hit: 1.6, cap: 1.05 }
+  { name: 'breakout', len: 3.6, width: 1.9, height: 0.45, wheelR: 0.42, mass: 0.95, hit: 1.6, cap: 1.05 },
+  { name: 'vortex', len: 3.55, width: 2.05, height: 0.48, wheelR: 0.43, mass: 1.0, hit: 1.75, cap: 1.04 },
+  { name: 'striker', len: 3.25, width: 1.88, height: 0.52, wheelR: 0.4, mass: 0.92, hit: 1.62, cap: 1.1 },
+  { name: 'raptor', len: 3.7, width: 2.15, height: 0.68, wheelR: 0.48, mass: 1.08, hit: 1.85, cap: 0.96 },
+  { name: 'hyperion', len: 3.9, width: 2.02, height: 0.46, wheelR: 0.41, mass: 1.02, hit: 1.88, cap: 1.02 }
 ];
 
 // ---------- renderer / scene ----------
@@ -216,6 +220,50 @@ function carMesh(col, typeName) {
         paint, 0, type.height * 0.34, type.len * 0.34);
     add(new THREE.BoxGeometry(type.width * 0.88, 0.08, type.len * 0.18),
         trim, 0, type.height * 0.28, -type.len * 0.42);
+    // Long low nose and a slim rear wing.
+    add(new THREE.BoxGeometry(type.width * 0.58, 0.055, type.len * 0.28),
+        paint, 0, 0.02, type.len * 0.43);
+  } else if (type.name === 'vortex') {
+    // Wide electric supercar with sculpted front splitter and rear diffuser.
+    add(new THREE.BoxGeometry(type.width * 0.96, 0.08, type.len * 0.2),
+        trim, 0, -0.12, type.len * 0.47);
+    add(new THREE.BoxGeometry(type.width * 0.78, 0.1, type.len * 0.17),
+        paint, 0, type.height * 0.34, -type.len * 0.4);
+    add(new THREE.BoxGeometry(type.width * 0.72, 0.08, 0.12),
+        trim, 0, type.height * 0.48, -type.len * 0.48);
+  } else if (type.name === 'striker') {
+    // Compact track coupe with a long bonnet and twin racing stripes.
+    add(new THREE.BoxGeometry(type.width * 0.8, 0.12, type.len * 0.3),
+        paint, 0, type.height * 0.28, type.len * 0.34);
+    for (const sx of [-1, 1]) {
+      add(new THREE.BoxGeometry(0.055, 0.018, type.len * 0.58),
+          new THREE.MeshStandardMaterial({ color: 0xf5f8ff, metalness: 0.25, roughness: 0.3 }),
+          sx * type.width * 0.13, type.height * 0.23, 0);
+    }
+    add(new THREE.BoxGeometry(type.width * 0.82, 0.08, 0.12),
+        trim, 0, type.height * 0.46, -type.len * 0.47);
+  } else if (type.name === 'raptor') {
+    // Rally-inspired wide-body car with chunky arches and a tall spoiler.
+    for (const sx of [-1, 1]) {
+      for (const sz of [-type.len * 0.31, type.len * 0.31]) {
+        add(new THREE.BoxGeometry(0.16, 0.17, 0.68), trim,
+            sx * type.width * 0.48, -0.015, sz);
+      }
+    }
+    add(new THREE.BoxGeometry(type.width * 0.95, 0.12, 0.16),
+        trim, 0, type.height * 0.72, -type.len * 0.48);
+    add(new THREE.BoxGeometry(0.08, 0.2, 0.08), trim,
+        -type.width * 0.3, type.height * 0.56, -type.len * 0.43);
+    add(new THREE.BoxGeometry(0.08, 0.2, 0.08), trim,
+        type.width * 0.3, type.height * 0.56, -type.len * 0.43);
+  } else if (type.name === 'hyperion') {
+    // Sleek futuristic hypercar: narrow cabin and angular rear aero.
+    add(new THREE.BoxGeometry(type.width * 0.54, type.height * 0.3, type.len * 0.3),
+        glass, 0, type.height * 0.58, -type.len * 0.02);
+    add(new THREE.BoxGeometry(type.width * 0.98, 0.075, type.len * 0.16),
+        paint, 0, -0.08, -type.len * 0.43);
+    add(new THREE.BoxGeometry(type.width * 0.86, 0.06, 0.1),
+        trim, 0, type.height * 0.47, -type.len * 0.48);
   }
 
   // Four proper tyres with metallic hubcaps. The wheel cylinders face outwards.
@@ -225,7 +273,7 @@ function carMesh(col, typeName) {
   for (const sx of [-1, 1]) {
     for (const sz of [-type.len * 0.31, type.len * 0.31]) {
       const wheelGroup = new THREE.Group();
-      wheelGroup.position.set(sx * type.width * 0.48, -0.12, sz);
+      wheelGroup.position.set(sx * type.width * 0.56, -0.12, sz);
       const tire = new THREE.Mesh(new THREE.CylinderGeometry(type.wheelR * 0.78, type.wheelR * 0.78, 0.28, 24), tireMat);
       tire.rotation.z = Math.PI / 2;
       const rim = new THREE.Mesh(new THREE.CylinderGeometry(type.wheelR * 0.43, type.wheelR * 0.43, 0.29, 24), rimMat);
@@ -756,7 +804,7 @@ function render(dt) {
       const wheelSpeed = sp * 0.6; // tweak multiplier for visual speed
       for (const w of m.wheels) {
         // rotate around local axis
-        w.rotation.z += wheelSpeed * dt * (w.userData.side || 1);
+        w.rotation.x += wheelSpeed * dt;
       }
     }
   }
