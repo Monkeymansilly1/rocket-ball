@@ -30,10 +30,14 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x2a1a38);
 scene.fog = new THREE.Fog(0x3a2342, 220, 900);
 const camera = new THREE.PerspectiveCamera(72, 1, 0.5, 2000);
+const camera2 = new THREE.PerspectiveCamera(72, 1, 0.5, 2000);
 function resize() {
   renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
   renderer.setSize(innerWidth, innerHeight, false);
-  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  const split = !!($('localTwo') && $('localTwo').checked);
+  const viewWidth = split ? Math.max(1, Math.floor(innerWidth / 2)) : innerWidth;
+  camera.aspect = viewWidth / innerHeight; camera.updateProjectionMatrix();
+  camera2.aspect = viewWidth / innerHeight; camera2.updateProjectionMatrix();
 }
 addEventListener('resize', resize); resize();
 
@@ -509,6 +513,7 @@ if (physicsInput) physicsInput.addEventListener('change', () => { physicsStyle =
 const localTwoInput = $('localTwo');
 if (localTwoInput) localTwoInput.addEventListener('change', () => {
   localTwoPlayer = localTwoInput.checked;
+  resize();
   if (state === 'menu' || state === 'over') { buildTeams(); kickoff(); }
   const go = $('go'); if (go) go.textContent = localTwoPlayer ? 'Local 2-player enabled — P1 WASD, P2 arrows' : 'Choose your setup, then press PLAY';
 });
@@ -822,29 +827,30 @@ function update(dt) {
 
 // ---------- camera + render ----------
 const cam = { x: 0, y: 6, z: -60, lx: 0, ly: 2, lz: 0 };
+const cam2 = { x: 0, y: 6, z: 60, lx: 0, ly: 2, lz: 0 };
 const axis = new THREE.Vector3();
-function updateCam(dt) {
-  const c = cars[0]; let dx = -Math.sin(c.yaw), dz = -Math.cos(c.yaw);
+function updateCam(dt, carIndex = 0, targetCamera = camera, camState = cam) {
+  const c = cars[carIndex] || cars[0]; let dx = -Math.sin(c.yaw), dz = -Math.cos(c.yaw);
   if (ballCam) { const bx = c.x - ball.x, bz = c.z - ball.z, l = Math.hypot(bx, bz); if (l > 0.5) { dx = bx / l; dz = bz / l; } }
   const k = 1 - Math.exp(-7 * dt);
   const tx = clamp(c.x + dx * 11, -HW + 2, HW - 2), tz = clamp(c.z + dz * 11, -HL + 2, HL - 2), ty = clamp(c.y + 4.6, 2, CEIL - 1);
-  cam.x += (tx - cam.x) * k; cam.y += (ty - cam.y) * k; cam.z += (tz - cam.z) * k;
+  camState.x += (tx - camState.x) * k; camState.y += (ty - camState.y) * k; camState.z += (tz - camState.z) * k;
   let lx = c.x - dx * 9, ly = 1.5, lz = c.z - dz * 9;
   if (ballCam) { lx = ball.x; ly = ball.y; lz = ball.z; }
-  cam.lx += (lx - cam.lx) * k; cam.ly += (ly - cam.ly) * k; cam.lz += (lz - cam.lz) * k;
+  camState.lx += (lx - camState.lx) * k; camState.ly += (ly - camState.ly) * k; camState.lz += (lz - camState.lz) * k;
 
   // camera shake
   if (camShakeTime > 0) {
     camShakeTime -= dt;
     const shakeAmp = Math.min(1, camShakeTime * 2);
-    cam.x += (Math.random() - 0.5) * 2 * shakeAmp;
-    cam.y += (Math.random() - 0.5) * 1.2 * shakeAmp;
-    cam.z += (Math.random() - 0.5) * 2 * shakeAmp;
+    camState.x += (Math.random() - 0.5) * 2 * shakeAmp;
+    camState.y += (Math.random() - 0.5) * 1.2 * shakeAmp;
+    camState.z += (Math.random() - 0.5) * 2 * shakeAmp;
   }
 
-  camera.position.set(cam.x, cam.y, cam.z); camera.lookAt(cam.lx, cam.ly, cam.lz);
+  targetCamera.position.set(camState.x, camState.y, camState.z); targetCamera.lookAt(camState.lx, camState.ly, camState.lz);
   sun.position.set(c.x + 30, 80, c.z + 25); sun.target.position.set(c.x, 0, c.z); sun.target.updateMatrixWorld();
-  camera.fov += (70 + Math.hypot(c.vx, c.vy, c.vz) * 0.4 + (c.fl ? 6 : 0) - camera.fov) * k; camera.updateProjectionMatrix();
+  targetCamera.fov += (70 + Math.hypot(c.vx, c.vy, c.vz) * 0.4 + (c.fl ? 6 : 0) - targetCamera.fov) * k; targetCamera.updateProjectionMatrix();
 }
 function render(dt) {
   for (const c of cars) {
@@ -871,13 +877,30 @@ function render(dt) {
   if (sp > 0.05) { axis.set(ball.vz, 0, -ball.vx).normalize(); ballMesh.rotateOnWorldAxis(axis, sp * dt / BR); }
   if (state === 'play' && Math.hypot(sp, ball.vy) > 26) emit(ball.x, ball.y, ball.z, (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2, 0.4, 0.3, 0.9, 0.8);
   for (const p of pads) p.mesh.material.opacity = p.t > 0 ? 0.12 : 0.9;
-  stepParts(dt); drawMini(); sfx.update(cars[0], state === 'play'); updateCam(dt);
+  stepParts(dt); drawMini(); sfx.update(cars[0], state === 'play');
+  const splitActive = localTwoPlayer && state !== 'menu' && state !== 'over';
+  document.body.classList.toggle('split-screen', splitActive);
+  updateCam(dt);
+  if (splitActive) updateCam(dt, mode, camera2, cam2);
   $('s0').textContent = score[0]; $('s1').textContent = score[1];
   const s = Math.ceil(clock); $('clock').textContent = ot ? 'OT' : Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
   const b = cars[0].boost; $('bf').style.width = (2.1 * b) + 'px'; $('bt').textContent = Math.round(b);
   $('bf').style.background = b > 66 ? '#ffd35a' : '#37f2c0';
+  const p2 = cars[mode];
+  const bf2 = $('bf2'), bt2 = $('bt2');
+  if (bf2 && bt2) { const b2 = p2 ? p2.boost : 0; bf2.style.width = (2.1 * b2) + 'px'; bt2.textContent = Math.round(b2); bf2.style.background = b2 > 66 ? '#ffd35a' : '#ff8a1f'; }
   const pHUD = $('player'); if (pHUD) pHUD.textContent = playerName;
-  renderer.render(scene, camera);
+  if (splitActive) {
+    const half = Math.floor(innerWidth / 2);
+    renderer.setScissorTest(true);
+    renderer.setViewport(0, 0, half, innerHeight); renderer.setScissor(0, 0, half, innerHeight); renderer.render(scene, camera);
+    renderer.setViewport(half, 0, innerWidth - half, innerHeight); renderer.setScissor(half, 0, innerWidth - half, innerHeight); renderer.render(scene, camera2);
+    renderer.setScissorTest(false);
+  } else {
+    renderer.setViewport(0, 0, innerWidth, innerHeight);
+    renderer.setScissorTest(false);
+    renderer.render(scene, camera);
+  }
 }
 
 // ---------- loop ----------
