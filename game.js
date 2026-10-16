@@ -360,6 +360,7 @@ let lastTouch = null;
 let replayHistory = [];
 let replayFrames = [];
 let replayIndex = 0;
+let goalScorerText = 'PLAYER';
 const REPLAY_HISTORY_LIMIT = 301;
 function saveReplayFrame() {
   replayHistory.push({
@@ -417,6 +418,8 @@ for (const [x, z, big] of [[-72, -96, 1], [72, -96, 1], [-72, 96, 1], [72, 96, 1
 }
 const FORM = [[0, 0.55], [-26, 0.8], [26, 0.8]];
 function kickoff() {
+  const msgEl = $('msg'); if (msgEl) msgEl.classList.remove('replay-title');
+  const goalByEl = $('goalBy'); if (goalByEl) goalByEl.textContent = '';
   replayHistory = [];
   replayFrames = [];
   replayIndex = 0;
@@ -835,8 +838,10 @@ function goal(team) {
 
   // Show the scorer first, before switching to the replay title.
   const scorerName = lastTouch ? (lastTouch === cars[0] ? playerName : lastTouch.displayName) : null;
+  goalScorerText = scorerName || (team ? 'ORANGE' : 'BLUE');
   const m = $('msg');
-  m.textContent = (scorerName ? scorerName.toUpperCase() : (team ? 'ORANGE' : 'BLUE')) + ' SCORED!';
+  m.classList.remove('replay-title');
+  m.textContent = goalScorerText.toUpperCase() + ' SCORED!';
   m.style.color = team ? '#ff8a1f' : '#2fb8ff';
 
   // fireworks + explosion
@@ -879,7 +884,8 @@ function update(dt) {
       if (replayFrames.length > 1) {
         state = 'replay';
         replayIndex = 0;
-        const m = $('msg'); if (m) { m.textContent = 'GOAL REPLAY'; m.style.color = '#fff'; }
+        const m = $('msg'); if (m) { m.textContent = 'GOAL REPLAY'; m.style.color = '#fff'; m.classList.add('replay-title'); }
+        const goalByEl = $('goalBy'); if (goalByEl) goalByEl.textContent = 'Goal by ' + goalScorerText + '!!!';
       } else {
         $('msg').textContent = '';
         if (ot) state = 'over';
