@@ -357,6 +357,26 @@ let localTwoPlayer = false;
 let goalExplosionStyle = 'classic';
 let paused = false;
 let lastTouch = null;
+let replayHistory = [];
+let replayFrames = [];
+let replayIndex = 0;
+const REPLAY_HISTORY_LIMIT = 300;
+function saveReplayFrame() {
+  replayHistory.push({
+    cars: cars.map(c => ({ x:c.x, y:c.y, z:c.z, vx:c.vx, vy:c.vy, vz:c.vz, yaw:c.yaw, pitch:c.pitch, flip:c.flip, fx:c.fx, fz:c.fz, fl:c.fl })),
+    ball: { x:ball.x, y:ball.y, z:ball.z, vx:ball.vx, vy:ball.vy, vz:ball.vz }
+  });
+  if (replayHistory.length > REPLAY_HISTORY_LIMIT) replayHistory.shift();
+}
+function applyReplayFrame(frame) {
+  if (!frame) return;
+  frame.cars.forEach((p, i) => {
+    const c = cars[i]; if (!c) return;
+    Object.assign(c, p);
+  });
+  Object.assign(ball, frame.ball);
+}
+
 
 const SKILL = [
   { thr: 0.65, boost: false, steer: 2.2, cap: 0.6, wait: 1.5, sloppy: 10, flip: 0, aerial: false, drift: false },
@@ -803,10 +823,15 @@ function stepBall(dt) {
 }
 function goal(team) {
   score[team]++; state = 'goal'; cd = 3;
+  // Include the actual scoring moment, then replay the build-up to the goal.
+  saveReplayFrame();
+  replayFrames = replayHistory.slice(-150);
+  replayIndex = 0;
+  if (replayFrames.length > 1) state = 'replay';
 
   // determine scorer name from lastTouch
   const scorerName = lastTouch ? (lastTouch === cars[0] ? playerName : lastTouch.displayName) : null;
-  const m = $('msg'); m.textContent = scorerName ? (scorerName.toUpperCase() + ' SCORES!') : ((team ? 'ORANGE' : 'BLUE') + ' SCORES!'); m.style.color = team ? '#ff8a1f' : '#2fb8ff';
+  const m = $('msg'); m.textContent = replayFrames.length > 1 ? 'GOAL REPLAY' : (scorerName ? (scorerName.toUpperCase() + ' SCORES!') : ((team ? 'ORANGE' : 'BLUE') + ' SCORES!')); m.style.color = team ? '#ff8a1f' : '#2fb8ff';
 
   // fireworks + explosion
   goalExplosion(team);
@@ -822,6 +847,18 @@ function goal(team) {
 function update(dt) {
   t += dt;
   if (state === 'kick') { cd -= dt; jumpQ = false; $('msg').style.color = '#fff'; $('msg').textContent = cd > 0 ? Math.ceil(cd) : 'GO!'; if (cd <= 0) { state = 'play'; $('msg').textContent = ''; } return; }
+  if (state === 'replay') {
+    replayIndex += dt * 48; // replay at a slightly slowed pace
+    if (replayIndex >= replayFrames.length - 1) {
+      replayIndex = replayFrames.length - 1;
+      applyReplayFrame(replayFrames[replayIndex]);
+      state = 'goal'; cd = 1.2;
+      const m = $('msg'); if (m) m.textContent = 'GOAL!';
+    } else {
+      applyReplayFrame(replayFrames[Math.floor(replayIndex)]);
+    }
+    return;
+  }
   if (state === 'play') { clock -= dt; if (clock <= 0) { clock = 0; if (score[0] === score[1]) ot = true; else state = 'over'; } }
   else if (state === 'goal') {
     cd -= dt; dt *= 0.5;
@@ -872,6 +909,8 @@ function updateCam(dt, carIndex = 0, targetCamera = camera, camState = cam) {
   targetCamera.fov += (70 + Math.hypot(c.vx, c.vy, c.vz) * 0.4 + (c.fl ? 6 : 0) - targetCamera.fov) * k; targetCamera.updateProjectionMatrix();
 }
 function render(dt) {
+  if (state === 'play') saveReplayFrame();
+  if (state === 'replay' && replayFrames.length) applyReplayFrame(replayFrames[Math.min(Math.floor(replayIndex), replayFrames.length - 1)]);
   for (const c of cars) {
     const m = c.mesh;
     m.root.position.set(c.x, c.y, c.z); m.root.rotation.set(-c.pitch, c.yaw, 0);
