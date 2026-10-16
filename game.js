@@ -357,6 +357,9 @@ let localTwoPlayer = false;
 let goalExplosionStyle = 'classic';
 let paused = false;
 let lastTouch = null;
+let previousTouch = null;
+let playerStats = [];
+let eventCooldown = {};
 let replayHistory = [];
 let replayFrames = [];
 let replayIndex = 0;
@@ -419,6 +422,8 @@ for (const [x, z, big] of [[-72, -96, 1], [72, -96, 1], [-72, 96, 1], [72, 96, 1
 }
 const FORM = [[0, 0.55], [-26, 0.8], [26, 0.8]];
 function kickoff() {
+  previousTouch = null;
+  eventCooldown = {};
   const msgEl = $('msg'); if (msgEl) msgEl.classList.remove('replay-title');
   const goalByEl = $('goalBy'); if (goalByEl) goalByEl.textContent = '';
   replayHistory = [];
@@ -440,6 +445,8 @@ function start() {
   const paint2El = $('paint2'); if (paint2El) player2Paint = paint2El.value || '#ff8a1f';
   const explosionEl = $('explosion'); if (explosionEl) goalExplosionStyle = explosionEl.value;
   buildTeams(); score = [0, 0]; clock = MATCH; ot = false; pads.forEach(p => p.t = 0);
+  playerStats = cars.map(() => ({ goals: 0, assists: 0, shots: 0, saves: 0, clears: 0, shotsOnGoal: 0 }));
+  const victory = $('victory'); if (victory) victory.style.display = 'none';
   kickoff(); state = 'kick'; cd = 3; $('menu').style.display = 'none'; $('msg').textContent = '';
   const pHUD = $('player'); if (pHUD) pHUD.textContent = playerName;
 }
@@ -743,7 +750,15 @@ function hitBall(c) {
   if (d >= BR) return;
   // Contact itself determines the most recent touch. Don't leave an old bot
   // credited just because the latest collision had no inward relative velocity.
-  lastTouch = c;
+  if (lastTouch !== c) { previousTouch = lastTouch; lastTouch = c; }
+  const stat = playerStats[cars.indexOf(c)];
+  const nearOwnGoal = Math.abs(c.z - (c.team ? -HL : HL)) < 28;
+  if (stat && nearOwnGoal && Math.abs(ball.z) > HL - 35 && ball.vz * (c.team ? 1 : -1) > 2 && (eventCooldown['clear'+cars.indexOf(c)] || 0) <= t) {
+    stat.clears++; eventCooldown['clear'+cars.indexOf(c)] = t + 3; showGameEvent('CLEARANCE', '#37f2c0');
+  }
+  if (stat && Math.abs(ball.z) > HL - 24 && Math.abs(ball.x) < GW + 12 && ball.vz * (c.team ? 1 : -1) > 1 && (eventCooldown['save'+cars.indexOf(c)] || 0) <= t) {
+    stat.saves++; eventCooldown['save'+cars.indexOf(c)] = t + 3; showGameEvent('SAVE!', '#37f2c0');
+  }
   if (d < 1e-4) { nf = nl = 0; ny = 1; d = 0; } else { nf /= d; nl /= d; ny /= d; }
   const nx = sy * nf + cy * nl, nz = cy * nf - sy * nl;
   ball.x += nx * (BR - d); ball.y += ny * (BR - d); ball.z += nz * (BR - d);
@@ -829,8 +844,17 @@ function stepBall(dt) {
     ball.z = sz * (HL - BR); ball.vz = -sz * Math.abs(ball.vz) * 0.72;
   }
 }
+function showGameEvent(label, color = '#fff') {
+  const el = $('eventCallout'); if (!el) return;
+  el.textContent = label; el.style.color = color; el.classList.remove('event-pop'); void el.offsetWidth; el.classList.add('event-pop');
+}
 function goal(team) {
   score[team]++;
+  const scorerIndex = lastTouch ? cars.indexOf(lastTouch) : -1;
+  if (scorerIndex >= 0 && playerStats[scorerIndex]) playerStats[scorerIndex].goals++;
+  const assistIndex = previousTouch ? cars.indexOf(previousTouch) : -1;
+  if (assistIndex >= 0 && assistIndex !== scorerIndex && cars[assistIndex].team === team && playerStats[assistIndex]) playerStats[assistIndex].assists++;
+  if (scorerIndex >= 0 && playerStats[scorerIndex]) playerStats[scorerIndex].shotsOnGoal++;
   state = 'goal';
   cd = 2.5; // let the scorer message and goal explosion play before the replay
   // Keep ten seconds of live gameplay plus the frame in which the goal was scored.
@@ -884,7 +908,17 @@ function update(dt) {
     }
     return;
   }
-  if (state === 'play') { clock -= dt; if (clock <= 0) { clock = 0; if (score[0] === score[1]) ot = true; else state = 'over'; } }
+  if (state === 'play') {
+    // Count a shot when the ball is travelling into the attacking goal area.
+    for (let ti = 0; ti < 2; ti++) {
+      const attackDir = ti === 0 ? 1 : -1;
+      if (ball.vz * attackDir > 10 && Math.abs(ball.z) > HL - 32 && Math.abs(ball.x) < GW + 15 && (eventCooldown['shot'+ti] || 0) <= t) {
+        const shooter = lastTouch ? cars.indexOf(lastTouch) : -1;
+        if (shooter >= 0 && cars[shooter].team === ti && playerStats[shooter]) { playerStats[shooter].shots++; playerStats[shooter].shotsOnGoal++; }
+        eventCooldown['shot'+ti] = t + 2.5; showGameEvent('SHOT ON GOAL', '#ffe36e');
+      }
+    }
+    clock -= dt; if (clock <= 0) { clock = 0; if (score[0] === score[1]) ot = true; else state = 'over'; } }
   else if (state === 'goal') {
     cd -= dt;
     dt *= 0.5;
@@ -926,11 +960,21 @@ function update(dt) {
     bump(); stepBall(h); cars.forEach(hitBall);
   }
   if (state === 'over') {
-    const m = $('msg'); m.style.color = '#fff'; m.textContent = score[0] > score[1] ? 'YOU WIN' : 'ORANGE WINS';
-    $('mt').textContent = score[0] + ' - ' + score[1]; $('go').textContent = 'Press Enter or click to play again'; $('menu').style.display = 'grid';
+    showVictoryScreen();
   }
 }
 
+function showVictoryScreen() {
+  const panel = $('victory'); if (!panel || panel.dataset.shown === 'yes') return;
+  panel.dataset.shown = 'yes'; panel.style.display = 'grid';
+  const winner = score[0] > score[1] ? playerName.toUpperCase() + ' WINS' : score[1] > score[0] ? 'ORANGE WINS' : 'DRAW';
+  $('victoryTitle').textContent = winner;
+  $('victoryScore').textContent = score[0] + '  —  ' + score[1];
+  const rows = cars.map((car, idx) => ({car, stats: playerStats[idx] || {}, idx}));
+  $('statsBody').innerHTML = rows.map(({car,stats,idx}) => '<tr><td><span class="team-dot" style="background:'+(car.team?'#ff8a1f':'#2fb8ff')+'"></span>'+escapeStats(car.displayName || ('PLAYER '+(idx+1)))+'</td><td>'+stats.goals+'</td><td>'+stats.assists+'</td><td>'+stats.shots+'</td><td>'+stats.saves+'</td><td>'+stats.clears+'</td></tr>').join('');
+}
+function escapeStats(value) { return String(value).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
+$('victoryPlayAgain').addEventListener('click', () => { const p=$('victory'); p.style.display='none'; p.dataset.shown=''; $('menu').style.display='grid'; state='menu'; $('mt').textContent='ROCKET ARENA 3D'; $('go').textContent='Choose your setup, then press PLAY'; });
 // ---------- camera + render ----------
 const cam = { x: 0, y: 6, z: -60, lx: 0, ly: 2, lz: 0 };
 const cam2 = { x: 0, y: 6, z: 60, lx: 0, ly: 2, lz: 0 };
