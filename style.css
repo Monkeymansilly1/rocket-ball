@@ -36,3 +36,12 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #04070c; }
 #menu .play-btn:hover { transform: translateY(-2px); filter: brightness(1.1); }
 #menu button:focus-visible { outline: 3px solid white; outline-offset: 2px; }
 @media (max-height: 760px) { #menu { gap: 3px; } #menu p { font-size: 14px; } #menu h1 { margin-bottom: 4px; } #menu .go { margin-top: 5px; font-size: 22px; } }
+
+/* Cleaner car/game setup UI and explicit interaction states */
+#menu .opts button, #menu input, #menu select { pointer-events: auto; }
+#menu .opts button { border-radius: 7px; transition: transform .12s ease, background .12s ease, border-color .12s ease; }
+#menu .opts button:hover { transform: translateY(-1px); border-color: #37f2c0; color: #fff; }
+#menu .opts button.on { box-shadow: 0 0 0 1px rgba(55,242,192,.18), 0 0 18px rgba(55,242,192,.13); }
+#player { position: absolute; top: 82px; left: 50%; transform: translateX(-50%); padding: 5px 13px; border-radius: 6px; background: rgba(5,10,18,.64); color: #fff; font-size: 18px; letter-spacing: 1px; }
+#msg { z-index: 2; pointer-events: none; font-size: clamp(42px, 7vw, 96px); font-weight: 900; letter-spacing: 1px; }
+.play-btn:active { transform: translateY(0) scale(.99); }
