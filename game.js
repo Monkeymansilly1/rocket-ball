@@ -223,6 +223,7 @@ let cars = [];
 // UI and gameplay toggles
 let playerName = 'PLAYER';
 let playerCarModel = 'octane';
+let goalExplosionStyle = 'classic';
 let paused = false;
 let lastTouch = null;
 
@@ -266,6 +267,7 @@ function start() {
   sfx.init(); // read UI choices
   const nameEl = $('name'); if (nameEl) playerName = (nameEl.value || 'PLAYER').toString().trim().slice(0,12) || 'PLAYER';
   const sel = document.querySelector('.car-opts button.on'); if (sel && sel.dataset.car) playerCarModel = sel.dataset.car;
+  const explosionEl = $('explosion'); if (explosionEl) goalExplosionStyle = explosionEl.value;
   buildTeams(); score = [0, 0]; clock = MATCH; ot = false; pads.forEach(p => p.t = 0);
   kickoff(); state = 'kick'; cd = 3; $('menu').style.display = 'none'; $('msg').textContent = '';
   const pHUD = $('player'); if (pHUD) pHUD.textContent = playerName;
@@ -355,6 +357,7 @@ addEventListener('keydown', e => {
   keys[e.code] = true;
 });
 addEventListener('keyup', e => { keys[e.code] = false; });
+$('playBtn').addEventListener('click', e => { e.stopPropagation(); if (state === 'menu' || state === 'over') start(); });
 $('menu').addEventListener('pointerdown', e => {
   const b = e.target.closest && e.target.closest('button');
   if (b) {
@@ -363,7 +366,7 @@ $('menu').addEventListener('pointerdown', e => {
     else if (b.dataset.car) {
       document.querySelectorAll('.car-opts button').forEach(x => x.classList.toggle('on', x === b));
     }
-  } else if (state === 'menu' || state === 'over') start();
+  }
 });
 function playerCtl() {
   const j = jumpQ; jumpQ = false;
@@ -541,15 +544,26 @@ let camShakeTime = 0;
 function goalExplosion(team) {
   const cx = ball.x, cy = Math.max(ball.y, 2.5), cz = ball.z;
   // color palette
-  const cs = team ? [1, 0.54, 0.12] : [0.18, 0.72, 1];
+  const palettes = {
+    classic: team ? [1, 0.54, 0.12] : [0.18, 0.72, 1],
+    fire: [1, 0.18 + Math.random() * 0.25, 0.025],
+    galaxy: [0.62, 0.2, 1],
+    lightning: [0.55, 0.9, 1]
+  };
+  const cs = palettes[goalExplosionStyle] || palettes.classic;
+  const burstCount = goalExplosionStyle === 'galaxy' ? 520 : goalExplosionStyle === 'lightning' ? 260 : 400;
   // large particle burst
-  for (let i = 0; i < 400; i++) {
+  for (let i = 0; i < burstCount; i++) {
     const a = Math.random() * Math.PI * 2, e = Math.random() * 1.6, s = 12 + Math.random() * 32;
-    const r = i % 6 ? cs : [1, 0.9, 0.6];
+    const r = i % 6 ? (goalExplosionStyle === 'galaxy' && i % 3 === 0 ? [0.15, 0.65, 1] : cs) : [1, 0.9, 0.6];
     emit(cx, cy, cz, Math.cos(a) * Math.cos(e) * s, Math.sin(e) * s + 6, Math.sin(a) * Math.cos(e) * s, 1.6 + Math.random() * 0.8, r[0], r[1], r[2]);
   }
   // confetti shards (heavier)
-  for (let i = 0; i < 120; i++) emit(cx, cy, cz, (Math.random() - 0.5) * 40, Math.random() * 30, (Math.random() - 0.5) * 40, 1.2, Math.random() > 0.5 ? cs[0] : 1, Math.random() > 0.5 ? cs[1] : 1, Math.random() > 0.5 ? cs[2] : 1);
+  for (let i = 0; i < 120; i++) {
+    const vx = (Math.random() - 0.5) * (goalExplosionStyle === 'lightning' ? 64 : 40);
+    const vz = (Math.random() - 0.5) * (goalExplosionStyle === 'lightning' ? 64 : 40);
+    emit(cx, cy, cz, vx, Math.random() * 30, vz, 1.2, cs[0], cs[1], cs[2]);
+  }
 
   // flash light
   const pl = new THREE.PointLight(team ? ORANGE : BLUE, 6, 300); pl.position.set(cx, cy, cz); scene.add(pl);
@@ -557,8 +571,8 @@ function goalExplosion(team) {
   const lightInterval = setInterval(() => { pl.intensity *= 0.7; lightLife -= 0.06; if (lightLife <= 0) { scene.remove(pl); clearInterval(lightInterval); } }, 60);
 
   // expanding ring
-  const ringGeo = new THREE.RingGeometry(8, 10, 64);
-  const ring = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: team ? ORANGE : BLUE, transparent: true, opacity: 0.9, side: THREE.DoubleSide }));
+  const ringGeo = new THREE.RingGeometry(goalExplosionStyle === 'lightning' ? 4 : 8, goalExplosionStyle === 'lightning' ? 5 : 10, 64);
+  const ring = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: goalExplosionStyle === 'classic' ? (team ? ORANGE : BLUE) : new THREE.Color(cs[0], cs[1], cs[2]), transparent: true, opacity: 0.9, side: THREE.DoubleSide }));
   ring.rotation.x = -Math.PI / 2; ring.position.set(cx, 1.5, cz); scene.add(ring);
   let rscale = 1.0;
   const ringInterval = setInterval(() => { rscale += 0.25; ring.scale.set(rscale, rscale, rscale); ring.material.opacity *= 0.86; if (ring.material.opacity < 0.03) { scene.remove(ring); clearInterval(ringInterval); } }, 40);
@@ -602,9 +616,9 @@ function goal(team) {
   let scorerName = null;
   if (lastTouch) {
     if (lastTouch === cars[0]) scorerName = playerName;
-    else scorerName = lastTouch.team ? 'ORANGE BOT' : 'BLUE BOT';
+    else scorerName = lastTouch.ai ? (lastTouch.team ? 'ORANGE BOT' : 'BLUE BOT') : playerName;
   }
-  const m = $('msg'); m.textContent = scorerName ? (scorerName + ' SCORES!') : ((team ? 'ORANGE' : 'BLUE') + ' SCORES!'); m.style.color = team ? '#ff8a1f' : '#2fb8ff';
+  const m = $('msg'); m.textContent = scorerName ? (scorerName.toUpperCase() + ' SCORES!') : ((team ? 'ORANGE' : 'BLUE') + ' SCORES!'); m.style.color = team ? '#ff8a1f' : '#2fb8ff';
 
   // fireworks + explosion
   goalExplosion(team);
