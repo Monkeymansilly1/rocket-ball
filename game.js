@@ -989,7 +989,8 @@ function showVictoryScreen() {
   $('victoryTitle').textContent = winner;
   $('victoryScore').textContent = score[0] + '  —  ' + score[1];
   const rows = cars.map((car, idx) => ({car, stats: playerStats[idx] || {}, idx}));
-  $('victoryCars').innerHTML = rows.map(({car,idx}) => '<div class="victory-car-card '+(car.team ? 'orange-team' : 'blue-team')+'"><div class="victory-car-visual" style="--car-paint:'+car.mesh.root.children[0].children[0].material.color.getStyle()+'"><span class="car-emoji">🚘</span></div><div class="victory-car-name">'+escapeStats(car.displayName || ('PLAYER '+(idx+1)))+'</div><div class="victory-car-model">'+escapeStats(String(car.model || 'Octane').toUpperCase())+'</div></div>').join('');
+  $('victoryCars').innerHTML = rows.map(({car,idx}) => '<div class="victory-car-card '+(car.team ? 'orange-team' : 'blue-team')+'"><div class="victory-car-visual"><canvas class="victory-car-canvas" data-car-index="'+idx+'" aria-label="'+escapeStats(car.model || 'car')+' 3D preview"></canvas></div><div class="victory-car-name">'+escapeStats(car.displayName || ('PLAYER '+(idx+1)))+'</div><div class="victory-car-model">'+escapeStats(String(car.model || 'Octane').toUpperCase())+'</div></div>').join('');
+  renderVictoryCarPreviews(rows);
   $('statsBody').innerHTML = rows.map(({car,stats,idx}) => '<tr><td><span class="team-dot" style="background:'+(car.team?'#ff8a1f':'#2fb8ff')+'"></span>'+escapeStats(car.displayName || ('PLAYER '+(idx+1)))+' <small class="stat-car-model">'+escapeStats(String(car.model || 'Octane').toUpperCase())+'</small></td><td>'+stats.goals+'</td><td>'+stats.assists+'</td><td>'+stats.shots+'</td><td>'+stats.saves+'</td><td>'+stats.clears+'</td></tr>').join('');
   const carsView = $('victoryCars'), statsView = $('victoryStats');
   if (carsView) carsView.style.display = 'grid';
@@ -1001,6 +1002,54 @@ function showVictoryScreen() {
       if (statsView) statsView.style.display = 'block';
     }
   }, 5000);
+}
+function renderVictoryCarPreviews(rows) {
+  // Use the exact gameplay car meshes, with one shared WebGL renderer and
+  // scissored viewports so the victory lineup shows the real selected models.
+  const canvases = Array.from(document.querySelectorAll('.victory-car-canvas'));
+  if (!canvases.length || !window.THREE) return;
+  const width = Math.max(1, Math.floor(canvases[0].clientWidth || 180));
+  const height = Math.max(1, Math.floor(canvases[0].clientHeight || 76));
+  const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+  renderer.setSize(width, height, false);
+  renderer.setClearColor(0x000000, 0);
+  const previewScene = new THREE.Scene();
+  previewScene.add(new THREE.HemisphereLight(0xd9f3ff, 0x1b2738, 2.2));
+  const keyLight = new THREE.DirectionalLight(0xffffff, 2.5); keyLight.position.set(3, 6, 5); previewScene.add(keyLight);
+  const fillLight = new THREE.DirectionalLight(0x49bfff, 1.1); fillLight.position.set(-4, 2, -3); previewScene.add(fillLight);
+  const previewCamera = new THREE.PerspectiveCamera(35, width / height, 0.1, 100);
+  previewCamera.position.set(4.8, 3.0, 6.2); previewCamera.lookAt(0, 0.35, 0);
+  const previewCars = rows.map(({car,idx}) => {
+    const source = car.mesh.root.clone(true);
+    source.rotation.set(0.12, -0.55, 0);
+    source.scale.setScalar(1.2);
+    previewScene.add(source);
+    return { source, idx, canvas: canvases.find(el => Number(el.dataset.carIndex) === idx) };
+  });
+  // Render each viewport to its own canvas through a lightweight renderer.
+  // Canvas textures are not used; each canvas is drawn from the matching live car mesh.
+  const renderEach = () => {
+    for (const item of previewCars) {
+      if (!item.canvas || !item.canvas.isConnected) continue;
+      const w = Math.max(1, item.canvas.clientWidth || width), h = Math.max(1, item.canvas.clientHeight || height);
+      const r = new THREE.WebGLRenderer({ canvas: item.canvas, alpha: true, antialias: true });
+      r.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+      r.setSize(w, h, false);
+      const sceneOne = new THREE.Scene();
+      sceneOne.add(new THREE.HemisphereLight(0xd9f3ff, 0x1b2738, 2.2));
+      const light = new THREE.DirectionalLight(0xffffff, 2.5); light.position.set(3, 6, 5); sceneOne.add(light);
+      const fill = new THREE.DirectionalLight(0x49bfff, 1.1); fill.position.set(-4, 2, -3); sceneOne.add(fill);
+      const model = rows[item.idx].car.mesh.root.clone(true);
+      model.rotation.set(0.12, -0.55, 0); model.scale.setScalar(1.25); sceneOne.add(model);
+      const cam = new THREE.PerspectiveCamera(35, w / h, 0.1, 100);
+      cam.position.set(4.8, 3.0, 6.2); cam.lookAt(0, 0.3, 0);
+      r.render(sceneOne, cam);
+      r.dispose();
+    }
+    renderer.dispose();
+  };
+  renderEach();
 }
 function escapeStats(value) { return String(value).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
 $('victoryPlayAgain').addEventListener('click', () => { const p=$('victory'); p.style.display='none'; p.dataset.shown=''; $('menu').style.display='grid'; state='menu'; $('mt').textContent='ROCKET ARENA 3D'; $('go').textContent='Choose your setup, then press PLAY'; });
