@@ -350,6 +350,8 @@ let playerName = 'PLAYER';
 let player2Name = 'PLAYER 2';
 let playerCarModel = 'octane';
 let playerPaint = '#2fb8ff';
+let player2CarModel = 'dominus';
+let player2Paint = '#ff8a1f';
 let physicsStyle = 'standard';
 let localTwoPlayer = false;
 let goalExplosionStyle = 'classic';
@@ -362,7 +364,7 @@ const SKILL = [
   { thr: 1, boost: true, steer: 4, cap: 1, wait: 0.25, sloppy: 1.2, flip: 0.9, aerial: true, drift: true }];
 function mkCar(team, k, ai, modelName) {
   const model = modelName || CAR_MODELS[(k) % CAR_MODELS.length].name;
-  const col = new THREE.Color(!team && k === 0 && !ai ? playerPaint : (team ? ORANGE : BLUE)).offsetHSL(0, 0, -0.09 * k);
+  const col = new THREE.Color(!ai && k === 0 ? (team ? player2Paint : playerPaint) : (team ? ORANGE : BLUE)).offsetHSL(0, 0, -0.09 * k);
   const car = { team, k, x: 0, y: 0.55, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, pitch: 0, ai, aiCd: 0, boost: 34, jumps: 0, jt: 0, flip: 0, fx: 0, fz: 0, fl: 0, ground: true };
   car.mesh = carMesh(col, model);
   car.model = model;
@@ -382,7 +384,7 @@ function buildTeams() {
   }
   for (let k = 0; k < mode; k++) {
     const human = localTwoPlayer && k === 0;
-    const c = mkCar(1, k, !human, human ? 'dominus' : undefined);
+    const c = mkCar(1, k, !human, human ? player2CarModel : undefined);
     c.displayName = human ? player2Name : 'ORANGE BOT ' + (k + 1);
     cars.push(c);
   }
@@ -406,7 +408,9 @@ function start() {
   sfx.init(); // read UI choices
   const nameEl = $('name'); if (nameEl) playerName = (nameEl.value || 'PLAYER').toString().trim().slice(0,12) || 'PLAYER';
   const name2El = $('name2'); if (name2El) player2Name = (name2El.value || 'PLAYER 2').toString().trim().slice(0,12) || 'PLAYER 2';
-  const sel = document.querySelector('.car-opts button.on'); if (sel && sel.dataset.car) playerCarModel = sel.dataset.car;
+  const sel = document.querySelector('.car-opts:not(.car-opts-p2) button.on'); if (sel && sel.dataset.car) playerCarModel = sel.dataset.car;
+  const sel2 = document.querySelector('.car-opts-p2 button.on'); if (sel2 && sel2.dataset.car2) player2CarModel = sel2.dataset.car2;
+  const paint2El = $('paint2'); if (paint2El) player2Paint = paint2El.value || '#ff8a1f';
   const explosionEl = $('explosion'); if (explosionEl) goalExplosionStyle = explosionEl.value;
   buildTeams(); score = [0, 0]; clock = MATCH; ot = false; pads.forEach(p => p.t = 0);
   kickoff(); state = 'kick'; cd = 3; $('menu').style.display = 'none'; $('msg').textContent = '';
@@ -515,6 +519,8 @@ const explosionInput = $('explosion');
 if (explosionInput) explosionInput.addEventListener('change', () => { goalExplosionStyle = explosionInput.value; });
 const paintInput = $('paint');
 if (paintInput) paintInput.addEventListener('input', () => { playerPaint = paintInput.value || '#2fb8ff'; if (state === 'menu' || state === 'over') { buildTeams(); kickoff(); } });
+const paint2Input = $('paint2');
+if (paint2Input) paint2Input.addEventListener('input', () => { player2Paint = paint2Input.value || '#ff8a1f'; if (state === 'menu' || state === 'over') { buildTeams(); kickoff(); } });
 const stadiumInput = $('stadium');
 if (stadiumInput) stadiumInput.addEventListener('change', () => applyArenaStyle(stadiumInput.value));
 const physicsInput = $('physics');
@@ -532,16 +538,20 @@ function handleMenuChoice(e) {
   if (!b) return;
   if (b.dataset.mode) pick('mode', +b.dataset.mode);
   else if (b.dataset.diff) pick('diff', +b.dataset.diff);
-  else if (b.dataset.car) {
-    playerCarModel = b.dataset.car;
-    document.querySelectorAll('.car-opts button').forEach(x => x.classList.toggle('on', x === b));
-    // Rebuild the player car immediately so the selection visibly changes in the arena,
-    // not only after PLAY is pressed. Do not interrupt an active match.
+  else if (b.dataset.car || b.dataset.car2) {
+    if (b.dataset.car) {
+      playerCarModel = b.dataset.car;
+      document.querySelectorAll('.car-opts:not(.car-opts-p2) button').forEach(x => x.classList.toggle('on', x === b));
+    } else {
+      player2CarModel = b.dataset.car2;
+      document.querySelectorAll('.car-opts-p2 button').forEach(x => x.classList.toggle('on', x === b));
+    }
+    // Rebuild in the menu so each player's garage choice is immediately visible.
     if (state === 'menu' || state === 'over') {
       buildTeams();
       kickoff();
       const go = $('go');
-      if (go) go.textContent = 'Selected: ' + b.textContent.trim() + ' — press PLAY';
+      if (go) go.textContent = (b.dataset.car2 ? 'P2 selected: ' : 'P1 selected: ') + b.textContent.trim() + ' — press PLAY';
     }
   }
 }
