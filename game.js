@@ -551,10 +551,24 @@ if (name2Input) name2Input.addEventListener('input', () => {
 });
 const explosionInput = $('explosion');
 if (explosionInput) explosionInput.addEventListener('change', () => { goalExplosionStyle = explosionInput.value; });
+function updateGaragePreview() {
+  const car = $('menuCarShowcase');
+  if (!car) return;
+  const chosen = CAR_MODELS.find(m => m.name === playerCarModel) || CAR_MODELS[0];
+  car.style.setProperty('--garage-paint', playerPaint || '#2fb8ff');
+  const body = car.querySelector('.car-body'), nose = car.querySelector('.car-nose'), roof = car.querySelector('.car-roof'), glow = car.querySelector('.car-glow');
+  if (body) body.style.background = 'linear-gradient(165deg,#ffffff,' + (playerPaint || '#2fb8ff') + ' 35%,#10283c 125%)';
+  if (nose) nose.style.background = 'linear-gradient(145deg,' + (playerPaint || '#2fb8ff') + ',#10283c)';
+  if (roof) roof.style.background = 'linear-gradient(145deg,' + (playerPaint || '#2fb8ff') + ',#12344d)';
+  if (glow) glow.style.background = playerPaint || '#2fb8ff';
+  const label = car.querySelector('.showcase-label');
+  if (label) label.textContent = (chosen.label || chosen.name || playerCarModel).toUpperCase() + ' · ' + (playerPaint || '#2fb8ff').toUpperCase();
+}
 const paintInput = $('paint');
-if (paintInput) paintInput.addEventListener('input', () => { playerPaint = paintInput.value || '#2fb8ff'; if (state === 'menu' || state === 'over') { buildTeams(); kickoff(); } });
+if (paintInput) paintInput.addEventListener('input', () => { playerPaint = paintInput.value || '#2fb8ff'; updateGaragePreview(); if (state === 'menu' || state === 'over') { buildTeams(); kickoff(); } });
 const paint2Input = $('paint2');
 if (paint2Input) paint2Input.addEventListener('input', () => { player2Paint = paint2Input.value || '#ff8a1f'; if (state === 'menu' || state === 'over') { buildTeams(); kickoff(); } });
+updateGaragePreview();
 const stadiumInput = $('stadium');
 if (stadiumInput) stadiumInput.addEventListener('change', () => applyArenaStyle(stadiumInput.value));
 const physicsInput = $('physics');
@@ -575,6 +589,7 @@ function handleMenuChoice(e) {
   else if (b.dataset.car || b.dataset.car2) {
     if (b.dataset.car) {
       playerCarModel = b.dataset.car;
+      updateGaragePreview();
       document.querySelectorAll('.car-opts:not(.car-opts-p2) button').forEach(x => x.classList.toggle('on', x === b));
     } else {
       player2CarModel = b.dataset.car2;
