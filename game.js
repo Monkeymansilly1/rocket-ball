@@ -415,8 +415,16 @@ addEventListener('keydown', e => {
   keys[e.code] = true;
 });
 addEventListener('keyup', e => { keys[e.code] = false; });
-$('playBtn').addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); if (state === 'menu' || state === 'over') start(); });\nconst nameInput = $('name');\nif (nameInput) nameInput.addEventListener('input', () => {\n  const cleaned = (nameInput.value || '').trim().slice(0, 12) || 'PLAYER';\n  $('player').textContent = cleaned;\n});\nconst explosionInput = $('explosion');\nif (explosionInput) explosionInput.addEventListener('change', () => { goalExplosionStyle = explosionInput.value; });
-$('menu').addEventListener('pointerdown', e => {\n  if (e.target.closest && e.target.closest('input, select')) return;
+$('playBtn').addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); if (state === 'menu' || state === 'over') start(); });
+const nameInput = $('name');
+if (nameInput) nameInput.addEventListener('input', () => {
+  const cleaned = (nameInput.value || '').trim().slice(0, 12) || 'PLAYER';
+  $('player').textContent = cleaned;
+});
+const explosionInput = $('explosion');
+if (explosionInput) explosionInput.addEventListener('change', () => { goalExplosionStyle = explosionInput.value; });
+$('menu').addEventListener('pointerdown', e => {
+  if (e.target.closest && e.target.closest('input, select')) return;
   const b = e.target.closest && e.target.closest('button');
   if (b) {
     if (b.dataset.mode) pick('mode', +b.dataset.mode);
