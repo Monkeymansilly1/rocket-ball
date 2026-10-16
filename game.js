@@ -840,7 +840,12 @@ function goal(team) {
   // Show the scorer first, before switching to the replay title.
   const scorerName = lastTouch ? (lastTouch === cars[0] ? playerName : lastTouch.displayName) : null;
   goalScorerText = scorerName || (team ? 'ORANGE' : 'BLUE');
-  replayCameraCarIndex = lastTouch ? Math.max(0, cars.indexOf(lastTouch)) : Math.max(0, cars.findIndex(c => c.team === team));
+  // Only trust lastTouch when it belongs to the team that was awarded the goal.
+  // Otherwise follow the first car on the scoring team, never default to P1.
+  replayCameraCarIndex = lastTouch && lastTouch.team === team
+    ? cars.indexOf(lastTouch)
+    : cars.findIndex(c => c.team === team);
+  if (replayCameraCarIndex < 0) replayCameraCarIndex = 0;
   const m = $('msg');
   m.classList.remove('replay-title');
   m.textContent = goalScorerText.toUpperCase() + ' SCORED!';
@@ -886,6 +891,18 @@ function update(dt) {
       if (replayFrames.length > 1) {
         state = 'replay';
         replayIndex = 0;
+        // Snap the replay camera behind the selected scorer immediately; don't
+        // let the previous player's camera position linger into the replay.
+        const scorer = cars[replayCameraCarIndex] || cars[0];
+        const backX = -Math.sin(scorer.yaw), backZ = -Math.cos(scorer.yaw);
+        for (const camState of [cam, ...(localTwoPlayer ? [cam2] : [])]) {
+          camState.x = scorer.x + backX * 11;
+          camState.y = clamp(scorer.y + 4.6, 2, CEIL - 1);
+          camState.z = scorer.z + backZ * 11;
+          camState.lx = scorer.x - backX * 9;
+          camState.ly = 1.5;
+          camState.lz = scorer.z - backZ * 9;
+        }
         const m = $('msg'); if (m) { m.textContent = 'GOAL REPLAY'; m.style.color = '#fff'; m.classList.add('replay-title'); }
         const goalByEl = $('goalBy'); if (goalByEl) goalByEl.textContent = 'Goal by ' + goalScorerText + '!!!';
       } else {
