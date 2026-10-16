@@ -28,11 +28,13 @@
       <button data-car="breakout" class="carbtn">Breakout</button>
     </div>
 
+    <div class="opts"><span>Explosion</span><select id="explosion"><option value="classic">Classic</option><option value="fire">Firestorm</option><option value="galaxy">Galaxy</option><option value="lightning">Lightning</option></select></div>
     <div class="opts"><span>Match</span><button data-mode="1">1v1</button><button data-mode="2">2v2</button><button data-mode="3">3v3</button></div>
     <div class="opts"><span>Bots</span><button data-diff="0">Easy</button><button data-diff="1">Medium</button><button data-diff="2">Hard</button></div>
     <p>Drive <b>W A S D</b> or arrows &nbsp; Jump / flip <b>Space</b> &nbsp; Boost <b>Shift</b> &nbsp; Camera <b>C</b> &nbsp; Drift <b>E</b> &nbsp; Mute <b>M</b> &nbsp; Pause <b>P</b></p>
     <p>In the air: W/S tilt the nose, A/D turn. Press Space again with a direction to flip.</p>
-    <p class="go" id="go">Press Enter or click to kick off</p>
+    <button id="playBtn" class="play-btn" type="button">▶ PLAY</button>
+    <p class="go" id="go">Choose your setup, then press PLAY</p>
   </div>
   <canvas id="mini" width="120" height="156"></canvas>
 </div>
