@@ -360,7 +360,7 @@ let lastTouch = null;
 let replayHistory = [];
 let replayFrames = [];
 let replayIndex = 0;
-const REPLAY_HISTORY_LIMIT = 300;
+const REPLAY_HISTORY_LIMIT = 301;
 function saveReplayFrame() {
   replayHistory.push({
     cars: cars.map(c => ({ x:c.x, y:c.y, z:c.z, vx:c.vx, vy:c.vy, vz:c.vz, yaw:c.yaw, pitch:c.pitch, flip:c.flip, fx:c.fx, fz:c.fz, fl:c.fl })),
@@ -825,16 +825,19 @@ function stepBall(dt) {
   }
 }
 function goal(team) {
-  score[team]++; state = 'goal'; cd = 3;
-  // Include the actual scoring moment, then replay the build-up to the goal.
+  score[team]++;
+  state = 'goal';
+  cd = 2.5; // let the scorer message and goal explosion play before the replay
+  // Keep ten seconds of live gameplay plus the frame in which the goal was scored.
   saveReplayFrame();
-  replayFrames = replayHistory.slice(-150);
+  replayFrames = replayHistory.slice(-301);
   replayIndex = 0;
-  if (replayFrames.length > 1) state = 'replay';
 
-  // determine scorer name from lastTouch
+  // Show the scorer first, before switching to the replay title.
   const scorerName = lastTouch ? (lastTouch === cars[0] ? playerName : lastTouch.displayName) : null;
-  const m = $('msg'); m.textContent = replayFrames.length > 1 ? 'GOAL REPLAY' : (scorerName ? (scorerName.toUpperCase() + ' SCORES!') : ((team ? 'ORANGE' : 'BLUE') + ' SCORES!')); m.style.color = team ? '#ff8a1f' : '#2fb8ff';
+  const m = $('msg');
+  m.textContent = (scorerName ? scorerName.toUpperCase() : (team ? 'ORANGE' : 'BLUE')) + ' SCORED!';
+  m.style.color = team ? '#ff8a1f' : '#2fb8ff';
 
   // fireworks + explosion
   goalExplosion(team);
@@ -851,12 +854,18 @@ function update(dt) {
   t += dt;
   if (state === 'kick') { cd -= dt; jumpQ = false; $('msg').style.color = '#fff'; $('msg').textContent = cd > 0 ? Math.ceil(cd) : 'GO!'; if (cd <= 0) { state = 'play'; $('msg').textContent = ''; } return; }
   if (state === 'replay') {
-    replayIndex += dt * 48; // replay at a slightly slowed pace
+    replayIndex += dt * 30; // recorded at about 30 frames per second: replay ten seconds at normal speed
     if (replayIndex >= replayFrames.length - 1) {
       replayIndex = replayFrames.length - 1;
       applyReplayFrame(replayFrames[replayIndex]);
-      state = 'goal'; cd = 1.2;
-      const m = $('msg'); if (m) m.textContent = 'GOAL!';
+      if (ot) {
+        state = 'over';
+      } else {
+        kickoff();
+        state = 'kick';
+        cd = 2.5;
+      }
+      const m = $('msg'); if (m) m.textContent = ot ? '' : 'KICK OFF';
     } else {
       applyReplayFrame(replayFrames[Math.floor(replayIndex)]);
     }
@@ -864,8 +873,20 @@ function update(dt) {
   }
   if (state === 'play') { clock -= dt; if (clock <= 0) { clock = 0; if (score[0] === score[1]) ot = true; else state = 'over'; } }
   else if (state === 'goal') {
-    cd -= dt; dt *= 0.5;
-    if (cd <= 0) { $('msg').textContent = ''; if (ot) state = 'over'; else { kickoff(); state = 'kick'; cd = 2.5; } return; }
+    cd -= dt;
+    dt *= 0.5;
+    if (cd <= 0) {
+      if (replayFrames.length > 1) {
+        state = 'replay';
+        replayIndex = 0;
+        const m = $('msg'); if (m) { m.textContent = 'GOAL REPLAY'; m.style.color = '#fff'; }
+      } else {
+        $('msg').textContent = '';
+        if (ot) state = 'over';
+        else { kickoff(); state = 'kick'; cd = 2.5; }
+      }
+      return;
+    }
   } else return;
   predict();
   const cts = cars.map((c, i) => {
