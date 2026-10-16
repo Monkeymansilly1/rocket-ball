@@ -76,3 +76,5 @@ body.split-screen #mini { display: none; }
   body.split-screen #cam { left: 10px; bottom: 42px; font-size: 12px; }
   #p1Tag { left: 8px; } #p2Tag { right: 8px; }
 }
+
+#menu input#name2 { min-width: 140px; }
