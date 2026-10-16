@@ -148,3 +148,18 @@ body:has(#menu[style*="display: grid"]) #p2Tag { display:none !important; }
 #menu .opts, #menu p, #menu h1, #menu .play-btn { position:relative; z-index:2; }
 @media(max-width:1050px){ #menuCarShowcase { right:4px; bottom:12px; transform:scale(.78); transform-origin:bottom right; opacity:.75; } }
 @media(max-width:720px){ #menu { width:100%; } #menuCarShowcase { display:block; right:0; bottom:4px; transform:scale(.62); transform-origin:bottom right; opacity:.48; } }
+
+
+/* Centered garage: stadium remains the full-screen backdrop; no side-docked menu */
+#menu { inset:0 !important; width:100% !important; min-height:100vh; box-sizing:border-box; display:grid; align-content:center; justify-content:center; justify-items:center; padding:22px clamp(12px,4vw,54px) !important; gap:5px; overflow-y:auto; background:linear-gradient(90deg,rgba(3,8,18,.62),rgba(3,8,18,.78) 50%,rgba(3,8,18,.62)) !important; border:0 !important; backdrop-filter:blur(2px); }
+#menu h1 { width:100%; text-align:center; }
+#menu .opts { width:min(900px,94vw); }
+#menu p { max-width:min(900px,94vw); }
+#menuCarShowcase { position:relative !important; inset:auto !important; transform:none !important; width:300px !important; height:165px !important; margin:0 auto 4px; order:-1; }
+.showcase-car { left:22px !important; top:25px !important; width:260px !important; transform:rotate(-7deg) !important; }
+.showcase-platform { bottom:15px !important; }
+.showcase-label { bottom:-2px !important; }
+#menu .car-opts { gap:5px; }
+#menu .car-opts button { padding:6px 11px; }
+@media(max-height:850px){ #menu { align-content:start; } #menuCarShowcase { height:125px !important; transform:scale(.82) !important; transform-origin:top center !important; margin-bottom:-18px; } #menu h1 { font-size:clamp(32px,4vw,54px); margin-bottom:4px; } #menu .go { margin-top:5px; } }
+@media(max-width:720px){ #menu { width:100% !important; } #menuCarShowcase { display:block !important; opacity:1 !important; right:auto !important; bottom:auto !important; } #menu .opts { gap:5px; } }
