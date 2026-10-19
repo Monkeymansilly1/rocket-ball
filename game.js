@@ -8,7 +8,32 @@ if (typeof THREE === 'undefined') {
 // ---------- tuning (units are roughly metres) ----------
 const HW = 80, HL = 104, GW = 15, GH = 10.5, GD = 14, CEIL = 44, CH = 14, BR = 2.4;
 const G_CAR = 28, G_BALL = 17, MATCH = 180, BLUE = 0x2fb8ff, ORANGE = 0xff8a1f;
+const WALL_RAMP_WIDTH = 14, WALL_RAMP_HEIGHT = 8.4;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const rampEase = t => t * t * (3 - 2 * t);
+function rampProfile(distance, outerEdge) {
+  const start = outerEdge - WALL_RAMP_WIDTH;
+  const span = WALL_RAMP_WIDTH - 0.5;
+  const t = clamp((distance - start) / span, 0, 1);
+  if (distance <= start) return { height: 0, slope: 0 };
+  const height = WALL_RAMP_HEIGHT * rampEase(t);
+  const slope = WALL_RAMP_HEIGHT * 6 * t * (1 - t) / span;
+  return { height, slope };
+}
+function arenaRampAt(x, z) {
+  let best = { height: 0, dx: 0, dz: 0, side: false };
+  const ax = Math.abs(x), az = Math.abs(z);
+  const side = rampProfile(ax, HW - 0.5);
+  if (side.height > best.height && ax > HW - WALL_RAMP_WIDTH) {
+    best = { height: side.height, dx: Math.sign(x) * side.slope, dz: 0, side: true };
+  }
+  // The end ramps sit either side of each goal mouth, leaving the goal opening clear.
+  if (ax > GW + 2 && ax <= HW - WALL_RAMP_WIDTH && az > HL - WALL_RAMP_WIDTH) {
+    const end = rampProfile(az, HL - 0.5);
+    if (end.height > best.height) best = { height: end.height, dx: 0, dz: Math.sign(z) * end.slope, side: false };
+  }
+  return best;
+}
 let pitchMesh = null, skyMesh = null;
 const wrap = a => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
 
@@ -93,6 +118,40 @@ function buildArena() {
     const net = new THREE.Mesh(new THREE.BoxGeometry(2 * GW, GH, GD, 12, 5, 5), new THREE.MeshBasicMaterial({ color: col, wireframe: true, transparent: true, opacity: 0.3 }));
     net.position.set(0, GH / 2, sz * (HL + GD / 2)); scene.add(net);
     const pl = new THREE.PointLight(col, 1.2, 60); pl.position.set(0, 6, sz * (HL - 5)); scene.add(pl);
+  }
+  const rampMat = new THREE.MeshStandardMaterial({ color: 0x438b43, roughness: 0.88, metalness: 0.02, side: THREE.DoubleSide });
+  const addRampMesh = (axis, sign, alongMin, alongMax) => {
+    const acrossSteps = 28, alongSteps = Math.max(8, Math.ceil((alongMax - alongMin) / 5));
+    const positions = [], uvs = [], indices = [];
+    for (let j = 0; j <= alongSteps; j++) {
+      const v = j / alongSteps;
+      const along = alongMin + (alongMax - alongMin) * v;
+      for (let i = 0; i <= acrossSteps; i++) {
+        const t = i / acrossSteps;
+        const rise = WALL_RAMP_HEIGHT * rampEase(t);
+        if (axis === 'x') {
+          positions.push(sign * (HW - WALL_RAMP_WIDTH + t * (WALL_RAMP_WIDTH - 0.5)), rise + 0.035, along);
+        } else {
+          positions.push(along, rise + 0.035, sign * (HL - WALL_RAMP_WIDTH + t * (WALL_RAMP_WIDTH - 0.5)));
+        }
+        uvs.push(t, v);
+      }
+    }
+    for (let j = 0; j < alongSteps; j++) for (let i = 0; i < acrossSteps; i++) {
+      const a = j * (acrossSteps + 1) + i, b = a + acrossSteps + 1;
+      indices.push(a, b, a + 1, b, b + 1, a + 1);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    geo.setIndex(indices); geo.computeVertexNormals();
+    const mesh = new THREE.Mesh(geo, rampMat);
+    mesh.receiveShadow = true; mesh.castShadow = true; scene.add(mesh);
+  };
+  for (const sign of [-1, 1]) {
+    addRampMesh('x', sign, -HL + CH, HL - CH);
+    addRampMesh('z', sign, -(HW - WALL_RAMP_WIDTH), -(GW + 2));
+    addRampMesh('z', sign, GW + 2, HW - WALL_RAMP_WIDTH);
   }
   const oct = [[HW - CH, HL], [HW, HL - CH], [HW, -(HL - CH)], [HW - CH, -HL], [-(HW - CH), -HL], [-HW, -(HL - CH)], [-HW, HL - CH], [-(HW - CH), HL]];
   const loop = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(oct.map(p => new THREE.Vector3(p[0], CEIL, p[1]))), new THREE.LineBasicMaterial({ color: 0x37f2c0, transparent: true, opacity: 0.6 }));
@@ -343,7 +402,7 @@ ballMesh.castShadow = true; scene.add(ballMesh);
 
 // ---------- state ----------
 let state = 'menu', t = 0, score = [0, 0], clock = MATCH, ot = false, cd = 0, ballCam = false, mode = 2, diff = 1, muted = false;
-const ball = { x: 0, y: BR + 6, z: 0, vx: 0, vy: 0, vz: 0 };
+const ball = { x: 0, y: BR + 6, z: 0, vx: 0, vy: 0, vz: 0, onRamp: false };
 let cars = [];
 // UI and gameplay toggles
 let playerName = 'PLAYER';
@@ -455,7 +514,7 @@ const SKILL = [
 function mkCar(team, k, ai, modelName) {
   const model = modelName || CAR_MODELS[(k) % CAR_MODELS.length].name;
   const col = new THREE.Color(!ai && k === 0 ? (team ? player2Paint : playerPaint) : (team ? ORANGE : BLUE)).offsetHSL(0, 0, -0.09 * k);
-  const car = { team, k, x: 0, y: 0.55, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, pitch: 0, ai, aiCd: 0, boost: 34, jumps: 0, jt: 0, flip: 0, fx: 0, fz: 0, fl: 0, ground: true, demoTimer: 0, demoCooldown: 0 };
+  const car = { team, k, x: 0, y: 0.55, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, pitch: 0, roll: 0, wallRide: false, ai, aiCd: 0, boost: 34, jumps: 0, jt: 0, flip: 0, fx: 0, fz: 0, fl: 0, ground: true, demoTimer: 0, demoCooldown: 0 };
   car.mesh = carMesh(col, model);
   car.model = model;
   car.displayName = ai ? (team ? 'ORANGE BOT ' : 'BLUE BOT ') + (k + 1) : playerName;
@@ -496,11 +555,11 @@ function kickoff() {
   replayHistory = [];
   replayFrames = [];
   replayIndex = 0;
-  Object.assign(ball, { x: 0, y: BR + 6, z: 0, vx: 0, vy: 0, vz: 0 });
+  Object.assign(ball, { x: 0, y: BR + 6, z: 0, vx: 0, vy: 0, vz: 0, onRamp: false });
   lastTouch = null;
   for (const c of cars) {
     const f = FORM[c.k], s = c.team ? 1 : -1;
-    Object.assign(c, { x: f[0] * (c.team ? -1 : 1), y: 0.55, z: s * f[1] * HL, vx: 0, vy: 0, vz: 0, yaw: c.team ? Math.PI : 0, pitch: 0, boost: 34, jumps: 0, jt: 0, flip: 0, fl: 0, ground: true, aiCd: 0, wait: SKILL[diff].wait });
+    Object.assign(c, { x: f[0] * (c.team ? -1 : 1), y: 0.55, z: s * f[1] * HL, vx: 0, vy: 0, vz: 0, yaw: c.team ? Math.PI : 0, pitch: 0, roll: 0, wallRide: false, boost: 34, jumps: 0, jt: 0, flip: 0, fl: 0, ground: true, aiCd: 0, wait: SKILL[diff].wait });
   }
 }
 function start() {
@@ -769,8 +828,17 @@ function stepCar(c, ct, dt) {
     return;
   }
   c.jt += dt; if (c.flip > 0) c.flip -= dt;
+  const startingRamp = arenaRampAt(c.x, c.z);
+  c.wallRide = startingRamp.height > 0.03 && c.y <= startingRamp.height + 0.8 && c.vy <= 0.5;
+  if (c.wallRide) {
+    c.y = startingRamp.height + 0.55;
+    if (c.vy < 0) c.vy = 0;
+    if (startingRamp.side) c.roll += (Math.atan(startingRamp.dx) - c.roll) * clamp(12 * dt, 0, 1);
+  } else {
+    c.roll += (0 - c.roll) * clamp(7 * dt, 0, 1);
+  }
   const sy = Math.sin(c.yaw), cy = Math.cos(c.yaw);
-  const ground = c.y <= 0.56; c.ground = ground;
+  const ground = c.y <= 0.56 || c.wallRide; c.ground = ground;
   const bo = ct.boost && c.boost > 0;
   if (bo) { c.boost = Math.max(0, c.boost - 33 * dt); emitBoost(c); }
   c.fl = bo ? 1 : 0;
@@ -778,23 +846,23 @@ function stepCar(c, ct, dt) {
     c.jumps = 0; c.jt = 0; c.hold = 0; c.pitch *= Math.max(0, 1 - 10 * dt);
     let vf = c.vx * sy + c.vz * cy, vs = c.vx * cy - c.vz * sy;
     const hb = ct.hand ? 1 : 0, physicsAccel = physicsStyle === 'arcade' ? 1.3 : physicsStyle === 'heavy' ? 0.82 : 1;
-    const acc = 42 * physicsAccel * Math.max(0, 1 - Math.abs(vf) / 36);
+    const acc = 46 * physicsAccel * Math.max(0, 1 - Math.abs(vf) / 40);
     if (ct.throttle) vf += ct.throttle * (vf * ct.throttle < 0 ? 70 : acc) * dt; else vf *= Math.max(0, 1 - 0.9 * dt);
-    if (bo) vf += 40 * dt;
+    if (bo) vf += 43 * dt;
     vf *= 1 - 0.5 * hb * dt;
-    vf = clamp(vf, -24, (bo ? 56 : 36) * (c.cap || 1)); vs *= Math.max(0, 1 - (hb ? 1.6 : 9) * dt);
+    vf = clamp(vf, -26, (bo ? 62 : 40) * (c.cap || 1)); vs *= Math.max(0, 1 - (hb ? 1.6 : 9) * dt);
     const sr = (3.4 - 2.0 * clamp(Math.abs(vf) / 45, 0, 1)) * (1 + 0.6 * hb) * clamp(Math.abs(vf) / 2.5, 0, 1);
     c.yaw -= ct.steer * sr * (vf >= 0 ? 1 : -1) * dt;
     c.vx = sy * vf + cy * vs; c.vz = cy * vf - sy * vs; c.vy = 0;
   } else {
     const gravityScale = physicsStyle === 'floaty' ? 0.72 : physicsStyle === 'heavy' ? 1.2 : 1;
-    c.vy -= G_CAR * gravityScale * dt; c.yaw -= ct.steer * (physicsStyle === 'arcade' ? 3.1 : 2.4) * dt;
+    c.vy -= G_CAR * gravityScale * dt; c.yaw -= ct.steer * (physicsStyle === 'arcade' ? 3.4 : 2.85) * dt;
     if (c.hold > 0 && ct.jumpHeld && c.jumps === 1) { c.vy += 28 * dt; c.hold -= dt; } else c.hold = 0;
     if (!ct.throttle && c.y < 4 && c.vy < 0) c.pitch *= Math.max(0, 1 - 5 * dt);
-    c.pitch = clamp(c.pitch - ct.throttle * 3 * dt, -1.3, 1.3);
+    c.pitch = clamp(c.pitch - ct.throttle * 3.4 * dt, -1.3, 1.3);
     if (bo) {
       const cp = Math.cos(c.pitch);
-      c.vx += sy * cp * 55 * dt; c.vy += Math.sin(c.pitch) * 55 * dt; c.vz += cy * cp * 55 * dt;
+      c.vx += sy * cp * 58 * dt; c.vy += Math.sin(c.pitch) * 58 * dt; c.vz += cy * cp * 58 * dt;
     }
     const sp = Math.hypot(c.vx, c.vy, c.vz); if (sp > 58) { const k = 58 / sp; c.vx *= k; c.vy *= k; c.vz *= k; }
   }
@@ -817,6 +885,18 @@ function stepCar(c, ct, dt) {
   if (ov > 0) {
     const sx = Math.sign(c.x), sz = Math.sign(c.z), vn = (c.vx * sx + c.vz * sz) * 0.7071;
     c.x -= sx * ov / 2; c.z -= sz * ov / 2; if (vn > 0) { c.vx -= sx * vn * 0.7071 * 1.2; c.vz -= sz * vn * 0.7071 * 1.2; }
+  }
+  const rampNow = arenaRampAt(c.x, c.z);
+  const rampSupportY = rampNow.height + 0.55;
+  if (rampNow.height > 0.03 && ((c.wallRide && !ct.jump) || (c.y <= rampSupportY + 0.22 && c.vy <= 0.5))) {
+    c.y = rampSupportY; c.vy = 0; c.wallRide = true;
+    if (rampNow.side) {
+      const rollTarget = Math.atan(rampNow.dx);
+      c.roll += (rollTarget - c.roll) * clamp(12 * dt, 0, 1);
+    } else c.roll += (0 - c.roll) * clamp(8 * dt, 0, 1);
+  } else {
+    c.wallRide = false;
+    c.roll += (0 - c.roll) * clamp(7 * dt, 0, 1);
   }
   for (const p of pads) {
     p.t = Math.max(0, p.t - dt);
@@ -964,6 +1044,16 @@ function stepBall(dt) {
     if (az > HL + GD - BR) { ball.z = sz * (HL + GD - BR); ball.vz = -sz * Math.abs(ball.vz) * 0.4; }
   } else if (az > HL - BR && !(Math.abs(ball.x) + BR < GW && ball.y + BR < GH)) {
     ball.z = sz * (HL - BR); ball.vz = -sz * Math.abs(ball.vz) * 0.72;
+  }
+  const ramp = arenaRampAt(ball.x, ball.z);
+  const rampSurfaceY = ramp.height + BR;
+  const rampVelocityY = ball.vx * ramp.dx + ball.vz * ramp.dz;
+  if (ramp.height > 0.025 && ((ball.y <= rampSurfaceY + 0.18 && ball.vy <= rampVelocityY + 2) || (ball.onRamp && ball.y <= rampSurfaceY + 3))) {
+    ball.y = rampSurfaceY;
+    ball.vy = rampVelocityY;
+    ball.onRamp = true;
+  } else {
+    ball.onRamp = false;
   }
 }
 function showGameEvent(label, color = '#fff') {
@@ -1213,7 +1303,7 @@ function render(dt) {
   if (state === 'replay' && replayFrames.length) applyReplayFrame(replayFrames[Math.min(Math.floor(replayIndex), replayFrames.length - 1)]);
   for (const c of cars) {
     const m = c.mesh;
-    m.root.position.set(c.x, c.y, c.z); m.root.rotation.set(-c.pitch, c.yaw, 0);
+    m.root.position.set(c.x, c.y, c.z); m.root.rotation.set(-c.pitch, c.yaw, c.roll || 0);
     m.flame.visible = !!c.fl; m.flame.scale.set(1, 0.7 + Math.random() * 0.6, 1);
     m.body.rotation.set(0, 0, 0);
     if (c.flip > 0) {
