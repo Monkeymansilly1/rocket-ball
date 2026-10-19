@@ -897,7 +897,7 @@ function stepCar(c, ct, dt) {
       c.hold = Math.max(0, c.hold - dt);
     } else c.hold = 0;
     if (!ct.throttle && c.y < 4 && c.vy < 0) c.pitch *= Math.max(0, 1 - 5 * dt);
-    c.pitch = clamp(c.pitch - ct.throttle * PHYSICS_TUNING.PITCH_TORQUE_SPEED * dt, -1.5, 1.5);
+    c.pitch = wrap(c.pitch - ct.throttle * PHYSICS_TUNING.PITCH_TORQUE_SPEED * dt);
     c.roll = wrap(c.roll + (ct.roll || 0) * PHYSICS_TUNING.ROLL_TORQUE_SPEED * dt);
   }
   // Boost continuously accelerates along the car's nose on ground and in air.
