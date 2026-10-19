@@ -1083,8 +1083,8 @@ function bump() {
       eventCooldown[pairKey] = t + 0.22;
       const impulse = Math.min(25, 4 + closingSpeed * 0.78);
       // Knock both cars apart, with a small vertical jolt for a heavy hit.
-      a.vx -= nx * impulse * bShare; a.vz -= nz * impulse * bShare;
-      b.vx += nx * impulse * aShare; b.vz += nz * impulse * aShare;
+      a.vx -= nx * impulse * aShare; a.vz -= nz * impulse * aShare;
+      b.vx += nx * impulse * bShare; b.vz += nz * impulse * bShare;
       if (closingSpeed > 13) {
         const pop = Math.min(3.5, closingSpeed * 0.055);
         if (a.y > 0.7 || a.wallRide) a.vy += pop * 0.5;
