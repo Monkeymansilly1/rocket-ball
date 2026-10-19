@@ -17,7 +17,7 @@ const PHYSICS_TUNING = {
   DOUBLE_JUMP_WINDOW: 1.25, DOUBLE_JUMP_IMPULSE: 9.5, DODGE_IMPULSE: 17,
   PITCH_TORQUE_SPEED: 3.4, YAW_TORQUE_SPEED: 2.85, ROLL_TORQUE_SPEED: 4.2,
   // Ball bounce and impact tuning.
-  BALL_GRAVITY_FORCE: 17, MAX_BALL_SPEED: 80, BALL_RESTITUTION: 0.82,
+  BALL_GRAVITY_FORCE: 24, MAX_BALL_SPEED: 80, BALL_RESTITUTION: 0.82,
   BALL_FLOOR_RESTITUTION: 0.78, BALL_WALL_RESTITUTION: 0.84, BALL_SURFACE_FRICTION: 0.035,
   BALL_HIT_MULTIPLIER: 1.35, BALL_HIT_FORWARD_FORCE: 6, BALL_FORWARD_SPEED_FACTOR: 0.34,
   BALL_FLIP_HIT_BONUS: 8, BALL_BOOST_HIT_BONUS: 5, BALL_UPWARD_POP: 5.5
@@ -1037,6 +1037,11 @@ function hitBall(c) {
       PHYSICS_TUNING.BALL_HIT_MULTIPLIER / (1 + 1 / mass);
     ball.vx += nx * impulse; ball.vy += ny * impulse; ball.vz += nz * impulse;
     c.vx -= nx * impulse / mass; c.vy -= ny * impulse / mass; c.vz -= nz * impulse / mass;
+    const carSpeedAfterImpact = Math.hypot(c.vx, c.vy, c.vz);
+    if (carSpeedAfterImpact > PHYSICS_TUNING.MAX_SPEED) {
+      const carScale = PHYSICS_TUNING.MAX_SPEED / carSpeedAfterImpact;
+      c.vx *= carScale; c.vy *= carScale; c.vz *= carScale;
+    }
     const forwardImpulse = (PHYSICS_TUNING.BALL_HIT_FORWARD_FORCE +
       Math.min(forwardSpeed, PHYSICS_TUNING.MAX_SPEED) * PHYSICS_TUNING.BALL_FORWARD_SPEED_FACTOR +
       (c.flip > 0 ? PHYSICS_TUNING.BALL_FLIP_HIT_BONUS : 0) +
