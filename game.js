@@ -1061,7 +1061,8 @@ function showVictoryScreen() {
   if (panel._statsTimer) clearTimeout(panel._statsTimer);
   panel._statsTimer = setTimeout(() => {
     if (panel.style.display !== 'none') {
-      if (carsView) carsView.style.display = 'none';
+      // Keep the winner nameplates visible above the actual cars while stats slide in below.
+      if (carsView) carsView.style.display = 'grid';
       if (statsView) statsView.style.display = 'block';
     }
   }, 5000);
