@@ -348,6 +348,70 @@ let cars = [];
 // UI and gameplay toggles
 let playerName = 'PLAYER';
 let player2Name = 'PLAYER 2';
+const profilePictures = { p1: '', p2: '' };
+function profileAvatarHTML(car, idx) {
+  const key = idx === 0 ? 'p1' : (localTwoPlayer && idx === mode ? 'p2' : '');
+  const src = key ? profilePictures[key] : '';
+  const name = car.displayName || ('PLAYER ' + (idx + 1));
+  const color = car.team ? '#ff8a1f' : '#2fb8ff';
+  if (src && /^data:image\/jpeg;base64,/.test(src)) {
+    return '<img class="player-avatar" src="' + src + '" alt="' + escapeStats(name) + ' profile picture" style="--avatar-color:' + color + '">';
+  }
+  return '<span class="player-avatar player-avatar-fallback" style="--avatar-color:' + color + '" aria-label="' + escapeStats(name) + ' avatar">' + escapeStats((name.trim().charAt(0) || '?').toUpperCase()) + '</span>';
+}
+function initProfilePictureControls() {
+  const controls = [
+    { key: 'p1', input: 'profile1', preview: 'profilePreview1', clear: 'clearProfile1', storage: 'rocketArenaProfileP1' },
+    { key: 'p2', input: 'profile2', preview: 'profilePreview2', clear: 'clearProfile2', storage: 'rocketArenaProfileP2' }
+  ];
+  for (const item of controls) {
+    const input = $(item.input), preview = $(item.preview), clear = $(item.clear);
+    if (!input || !preview || !clear) continue;
+    try {
+      const saved = localStorage.getItem(item.storage) || '';
+      if (/^data:image\/jpeg;base64,/.test(saved)) profilePictures[item.key] = saved;
+    } catch (_) {}
+    if (profilePictures[item.key]) {
+      preview.src = profilePictures[item.key];
+      preview.hidden = false;
+    }
+    input.addEventListener('change', () => {
+      const file = input.files && input.files[0];
+      if (!file) return;
+      if (!file.type.startsWith('image/')) { alert('Choose an image file.'); input.value = ''; return; }
+      if (file.size > 8 * 1024 * 1024) { alert('Please choose an image smaller than 8 MB.'); input.value = ''; return; }
+      const reader = new FileReader();
+      reader.onerror = () => alert('Could not read that picture. Try another image.');
+      reader.onload = () => {
+        const image = new Image();
+        image.onerror = () => alert('Could not open that picture. Try another image.');
+        image.onload = () => {
+          const size = 256, canvas = document.createElement('canvas');
+          canvas.width = size; canvas.height = size;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return;
+          const scale = Math.max(size / image.naturalWidth, size / image.naturalHeight);
+          const w = image.naturalWidth * scale, h = image.naturalHeight * scale;
+          ctx.drawImage(image, (size - w) / 2, (size - h) / 2, w, h);
+          const data = canvas.toDataURL('image/jpeg', 0.82);
+          profilePictures[item.key] = data;
+          try { localStorage.setItem(item.storage, data); }
+          catch (_) { alert('Picture loaded for this session, but your browser could not save it for next time.'); }
+          preview.src = data;
+          preview.hidden = false;
+        };
+        image.src = String(reader.result || '');
+      };
+      reader.readAsDataURL(file);
+    });
+    clear.addEventListener('click', e => {
+      e.preventDefault(); e.stopPropagation();
+      profilePictures[item.key] = '';
+      try { localStorage.removeItem(item.storage); } catch (_) {}
+      preview.removeAttribute('src'); preview.hidden = true; input.value = '';
+    });
+  }
+}
 let playerCarModel = 'octane';
 let playerPaint = '#2fb8ff';
 let player2CarModel = 'dominus';
@@ -538,6 +602,7 @@ addEventListener('keydown', e => {
 });
 addEventListener('keyup', e => { keys[e.code] = false; });
 $('playBtn').addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); if (state === 'menu' || state === 'over') start(); });
+initProfilePictureControls();
 const nameInput = $('name');
 if (nameInput) nameInput.addEventListener('input', () => {
   playerName = (nameInput.value || '').trim().slice(0, 12) || 'PLAYER';
@@ -1045,17 +1110,17 @@ function showVictoryScreen() {
     });
     rows.filter(row => !!row.car.team !== winningTeam).forEach(row => { row.car.mesh.root.visible = false; });
     ballMesh.visible = false;
-    camera.position.set(0, 7.5, winningTeam ? -24 : 24);
-    camera.lookAt(0, 3.8, winningTeam ? -15 : 15);
+    camera.position.set(0, 6.5, winningTeam ? -24 : 24);
+    camera.lookAt(0, 1.15, winningTeam ? -15 : 15);
     camera.fov = 48;
     camera.updateProjectionMatrix();
     document.body.classList.add('victory-screen');
   }
   const displayRows = winnerCar ? winningRows : [];
   $('victoryCars').innerHTML = displayRows.map(({car,idx}) =>
-    '<div class="victory-car-card '+(car.team ? 'orange-team' : 'blue-team')+'"><div class="victory-car-name">'+escapeStats(car.displayName || ('PLAYER '+(idx+1)))+'</div><div class="victory-car-model">'+escapeStats(String(car.model || 'Octane').toUpperCase())+'</div></div>'
+    '<div class="victory-car-card '+(car.team ? 'orange-team' : 'blue-team')+'"><div class="victory-player-identity">'+profileAvatarHTML(car,idx)+'<div><div class="victory-car-name">'+escapeStats(car.displayName || ('PLAYER '+(idx+1)))+'</div><div class="victory-car-model">'+escapeStats(String(car.model || 'Octane').toUpperCase())+'</div></div></div></div>'
   ).join('') || '<div class="victory-draw-label">DRAW</div>';
-  $('statsBody').innerHTML = rows.map(({car,stats,idx}) => '<tr><td><span class="team-dot" style="background:'+(car.team?'#ff8a1f':'#2fb8ff')+'"></span>'+escapeStats(car.displayName || ('PLAYER '+(idx+1)))+' <small class="stat-car-model">'+escapeStats(String(car.model || 'Octane').toUpperCase())+'</td><td>'+stats.goals+'</td><td>'+stats.assists+'</td><td>'+stats.shots+'</td><td>'+stats.saves+'</td><td>'+stats.clears+'</td><td>'+(stats.demos || 0)+'</td></tr>').join('');
+  $('statsBody').innerHTML = rows.map(({car,stats,idx}) => '<tr><td><div class="stat-player-cell"><span class="team-dot" style="background:'+(car.team?'#ff8a1f':'#2fb8ff')+'"></span>'+profileAvatarHTML(car,idx)+'<span class="stat-player-label"><strong>'+escapeStats(car.displayName || ('PLAYER '+(idx+1)))+'</strong><small class="stat-car-model">'+escapeStats(String(car.model || 'Octane').toUpperCase())+'</small></span></div></td><td>'+stats.goals+'</td><td>'+stats.assists+'</td><td>'+stats.shots+'</td><td>'+stats.saves+'</td><td>'+stats.clears+'</td><td>'+(stats.demos || 0)+'</td></tr>').join('');
   const carsView = $('victoryCars'), statsView = $('victoryStats');
   if (carsView) carsView.style.display = 'grid';
   if (statsView) statsView.style.display = 'none';
@@ -1173,8 +1238,8 @@ function render(dt) {
     const winTeam = score[0] === score[1] ? null : score[1] > score[0];
     cars.forEach(c => { c.mesh.root.visible = winTeam !== null && !!c.team === winTeam && c.demoTimer <= 0; });
     ballMesh.visible = false;
-    camera.position.set(0, 7.5, winTeam ? -24 : 24);
-    camera.lookAt(0, 3.8, winTeam ? -15 : 15);
+    camera.position.set(0, 6.5, winTeam ? -24 : 24);
+    camera.lookAt(0, 1.15, winTeam ? -15 : 15);
     camera.fov = 48; camera.updateProjectionMatrix();
   } else {
     cars.forEach(c => { c.mesh.root.visible = c.demoTimer <= 0; }); ballMesh.visible = true;
