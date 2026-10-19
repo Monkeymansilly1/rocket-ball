@@ -97,8 +97,8 @@ body.split-screen #mini { display: none; }
 #eventCallout { position:absolute; left:50%; top:36%; transform:translate(-50%,-50%) scale(.8); opacity:0; font-size:clamp(22px,3vw,42px); font-weight:1000; font-style:italic; letter-spacing:2px; text-shadow:0 3px 12px #000; pointer-events:none; }
 #eventCallout.event-pop { animation:eventPop 1.5s ease-out forwards; }
 @keyframes eventPop { 0%{opacity:0;transform:translate(-50%,-20%) scale(.7)} 12%{opacity:1;transform:translate(-50%,0) scale(1.08)} 72%{opacity:1} 100%{opacity:0;transform:translate(-50%,-35%) scale(1)} }
-#victory { position:fixed; inset:0; z-index:10; place-items:center; padding:20px; box-sizing:border-box; background:linear-gradient(135deg,rgba(4,9,23,.94),rgba(13,27,49,.92)); color:#f4f9ff; font-family:Arial,sans-serif; pointer-events:auto; overflow:auto; }
-.victory-card { width:min(920px,96vw); padding:clamp(18px,4vw,38px); box-sizing:border-box; background:linear-gradient(145deg,rgba(23,42,68,.98),rgba(7,16,31,.98)); border:1px solid rgba(95,190,255,.5); border-top:5px solid #37f2c0; border-radius:14px; box-shadow:0 20px 70px #0009; text-align:center; }
+#victory { position:fixed; inset:0; z-index:10; place-items:center; padding:20px; box-sizing:border-box; background:linear-gradient(180deg,rgba(4,9,23,.16),rgba(4,9,23,.52)); color:#f4f9ff; font-family:Arial,sans-serif; pointer-events:auto; overflow:auto; }
+.victory-card { width:min(1100px,98vw); padding:clamp(12px,3vw,28px); box-sizing:border-box; background:transparent; border:0; border-radius:0; box-shadow:none; text-align:center; }
 .victory-kicker { color:#37f2c0; font-size:13px; font-weight:900; letter-spacing:5px; }
 #victoryTitle { margin:10px 0 0; font-size:clamp(32px,6vw,64px); font-style:italic; font-weight:1000; color:#fff; text-shadow:0 0 25px #2fb8ff55; }
 #victoryScore { margin:0 0 24px; font-size:clamp(32px,5vw,52px); font-weight:900; color:#ffca64; }
@@ -166,8 +166,8 @@ body:has(#menu[style*="display: grid"]) #p2Tag { display:none !important; }
 
 
 /* Post-match intro: reveal every player's car and name first, then stats after 5s */
-.victory-cars { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:14px; margin:20px 0 12px; }
-.victory-car-card { min-width:0; padding:14px 8px 12px; border-radius:10px; background:linear-gradient(160deg,#ffffff12,#00000022); border:1px solid #ffffff24; animation:victoryCarIn .55s cubic-bezier(.2,.8,.2,1) both; }
+.victory-cars { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:14px; max-width:900px; margin:clamp(130px,24vh,230px) auto 12px; }
+.victory-car-card { min-width:0; padding:10px 8px 12px; border-radius:9px; background:rgba(4,12,24,.58); border:1px solid #ffffff35; animation:victoryCarIn .55s cubic-bezier(.2,.8,.2,1) both; }
 .victory-car-card.blue-team { border-bottom:3px solid #2fb8ff; }
 .victory-car-card.orange-team { border-bottom:3px solid #ff8a1f; }
 .victory-car-visual { height:76px; display:grid; place-items:center; position:relative; margin-bottom:7px; }
