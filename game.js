@@ -7,7 +7,22 @@ if (typeof THREE === 'undefined') {
 }
 // ---------- tuning (units are roughly metres) ----------
 const HW = 80, HL = 104, GW = 15, GH = 10.5, GD = 14, CEIL = 44, CH = 14, BR = 2.4;
-const G_CAR = 28, G_BALL = 17, MATCH = 180, BLUE = 0x2fb8ff, ORANGE = 0xff8a1f;
+const PHYSICS_TUNING = {
+  // Car movement: metre-like units and velocity per second.
+  GRAVITY_FORCE: 28, MAX_SPEED: 55, GROUND_MAX_SPEED: 40, REVERSE_MAX_SPEED: 26,
+  BOOST_FORCE: 58, BOOST_DRAIN_PER_SECOND: 33, GROUND_ACCELERATION: 46,
+  TURN_RATE_SLOW: 3.4, TURN_RATE_FAST: 1.4, HANDBRAKE_TURN_MULTIPLIER: 1.6,
+  NORMAL_LATERAL_FRICTION: 9, POWERSLIDE_FRICTION_MULTIPLIER: 0.18,
+  JUMP_IMPULSE: 11, JUMP_HOLD_FORCE: 28, JUMP_HOLD_DURATION: 0.2,
+  DOUBLE_JUMP_WINDOW: 1.25, DOUBLE_JUMP_IMPULSE: 9.5, DODGE_IMPULSE: 17,
+  PITCH_TORQUE_SPEED: 3.4, YAW_TORQUE_SPEED: 2.85, ROLL_TORQUE_SPEED: 4.2,
+  // Ball bounce and impact tuning.
+  BALL_GRAVITY_FORCE: 17, MAX_BALL_SPEED: 80, BALL_RESTITUTION: 0.82,
+  BALL_FLOOR_RESTITUTION: 0.78, BALL_WALL_RESTITUTION: 0.84, BALL_SURFACE_FRICTION: 0.035,
+  BALL_HIT_MULTIPLIER: 1.35, BALL_HIT_FORWARD_FORCE: 6, BALL_FORWARD_SPEED_FACTOR: 0.34,
+  BALL_FLIP_HIT_BONUS: 8, BALL_BOOST_HIT_BONUS: 5, BALL_UPWARD_POP: 5.5
+};
+const MATCH = 180, BLUE = 0x2fb8ff, ORANGE = 0xff8a1f;
 const WALL_RAMP_WIDTH = 14, WALL_RAMP_HEIGHT = 8.4;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const rampEase = t => t * t * (3 - 2 * t);
@@ -492,8 +507,8 @@ let replayCameraCarIndex = 0;
 const REPLAY_HISTORY_LIMIT = 301;
 function saveReplayFrame() {
   replayHistory.push({
-    cars: cars.map(c => ({ x:c.x, y:c.y, z:c.z, vx:c.vx, vy:c.vy, vz:c.vz, yaw:c.yaw, pitch:c.pitch, flip:c.flip, fx:c.fx, fz:c.fz, fl:c.fl })),
-    ball: { x:ball.x, y:ball.y, z:ball.z, vx:ball.vx, vy:ball.vy, vz:ball.vz }
+    cars: cars.map(c => ({ x:c.x, y:c.y, z:c.z, vx:c.vx, vy:c.vy, vz:c.vz, yaw:c.yaw, pitch:c.pitch, roll:c.roll, wallRide:c.wallRide, flip:c.flip, fx:c.fx, fz:c.fz, fl:c.fl })),
+    ball: { x:ball.x, y:ball.y, z:ball.z, vx:ball.vx, vy:ball.vy, vz:ball.vz, onRamp:ball.onRamp }
   });
   if (replayHistory.length > REPLAY_HISTORY_LIMIT) replayHistory.shift();
 }
@@ -736,19 +751,29 @@ $('menu').addEventListener('pointerdown', handleMenuChoice);
 $('menu').addEventListener('click', handleMenuChoice);
 function playerCtl() {
   const j = jumpQ; jumpQ = false;
-  return { throttle: (keys.KeyW ? 1 : 0) - (keys.KeyS ? 1 : 0), steer: (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0), jump: j, jumpHeld: !!keys.Space, hand: !!keys.KeyE, boost: !!keys.ShiftLeft };
+  return {
+    throttle: (keys.KeyW ? 1 : 0) - (keys.KeyS ? 1 : 0),
+    steer: (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0),
+    roll: (keys.KeyE ? 1 : 0) - (keys.KeyQ ? 1 : 0),
+    jump: j, jumpHeld: !!keys.Space, hand: !!keys.KeyE, boost: !!keys.ShiftLeft
+  };
 }
 let jumpQ2 = false;
 function player2Ctl() {
   const j = jumpQ2; jumpQ2 = false;
-  return { throttle: (keys.ArrowUp ? 1 : 0) - (keys.ArrowDown ? 1 : 0), steer: (keys.ArrowRight ? 1 : 0) - (keys.ArrowLeft ? 1 : 0), jump: j, jumpHeld: !!keys.Enter, hand: !!keys.Slash, boost: !!keys.ShiftRight };
+  return {
+    throttle: (keys.ArrowUp ? 1 : 0) - (keys.ArrowDown ? 1 : 0),
+    steer: (keys.ArrowRight ? 1 : 0) - (keys.ArrowLeft ? 1 : 0),
+    roll: (keys.Numpad3 ? 1 : 0) - (keys.Numpad1 ? 1 : 0),
+    jump: j, jumpHeld: !!keys.Enter, hand: !!keys.Slash, boost: !!keys.ShiftRight
+  };
 }
 const pred = []; // where the ball will be every 0.1s for the next 4 seconds
 function predict() {
   let x = ball.x, y = ball.y, z = ball.z, vx = ball.vx, vy = ball.vy, vz = ball.vz; pred.length = 0;
   for (let i = 0; i < 40; i++) {
     for (let k = 0; k < 4; k++) {
-      const h = 0.025; vy -= G_BALL * h; x += vx * h; y += vy * h; z += vz * h;
+      const h = 0.025; vy -= PHYSICS_TUNING.BALL_GRAVITY_FORCE * h; x += vx * h; y += vy * h; z += vz * h;
       if (y < BR) { y = BR; vy = -vy * 0.62; }
       if (y > CEIL - BR) { y = CEIL - BR; vy = -Math.abs(vy) * 0.5; }
       if (Math.abs(x) > HW - BR) { x = Math.sign(x) * (HW - BR); vx = -vx * 0.72; }
@@ -839,48 +864,84 @@ function stepCar(c, ct, dt) {
   }
   const sy = Math.sin(c.yaw), cy = Math.cos(c.yaw);
   const ground = c.y <= 0.56 || c.wallRide; c.ground = ground;
-  const bo = ct.boost && c.boost > 0;
-  if (bo) { c.boost = Math.max(0, c.boost - 33 * dt); emitBoost(c); }
+  const bo = !!ct.boost && c.boost > 0;
+  if (bo) { c.boost = Math.max(0, c.boost - PHYSICS_TUNING.BOOST_DRAIN_PER_SECOND * dt); emitBoost(c); }
   c.fl = bo ? 1 : 0;
   if (ground) {
     c.jumps = 0; c.jt = 0; c.hold = 0; c.pitch *= Math.max(0, 1 - 10 * dt);
     let vf = c.vx * sy + c.vz * cy, vs = c.vx * cy - c.vz * sy;
-    const hb = ct.hand ? 1 : 0, physicsAccel = physicsStyle === 'arcade' ? 1.3 : physicsStyle === 'heavy' ? 0.82 : 1;
-    const acc = 46 * physicsAccel * Math.max(0, 1 - Math.abs(vf) / 40);
-    if (ct.throttle) vf += ct.throttle * (vf * ct.throttle < 0 ? 70 : acc) * dt; else vf *= Math.max(0, 1 - 0.9 * dt);
-    if (bo) vf += 43 * dt;
-    vf *= 1 - 0.5 * hb * dt;
-    vf = clamp(vf, -26, (bo ? 62 : 40) * (c.cap || 1)); vs *= Math.max(0, 1 - (hb ? 1.6 : 9) * dt);
-    const sr = (3.4 - 2.0 * clamp(Math.abs(vf) / 45, 0, 1)) * (1 + 0.6 * hb) * clamp(Math.abs(vf) / 2.5, 0, 1);
+    const hb = ct.hand ? 1 : 0;
+    const physicsAccel = physicsStyle === 'arcade' ? 1.3 : physicsStyle === 'heavy' ? 0.82 : 1;
+    const acc = PHYSICS_TUNING.GROUND_ACCELERATION * physicsAccel *
+      Math.max(0, 1 - Math.abs(vf) / PHYSICS_TUNING.MAX_SPEED);
+    if (ct.throttle) vf += ct.throttle * (vf * ct.throttle < 0 ? 70 : acc) * dt;
+    else vf *= Math.max(0, 1 - 0.9 * dt);
+    const lateralFriction = PHYSICS_TUNING.NORMAL_LATERAL_FRICTION *
+      (hb ? PHYSICS_TUNING.POWERSLIDE_FRICTION_MULTIPLIER : 1);
+    vs *= Math.max(0, 1 - lateralFriction * dt);
+    const forwardCap = (bo ? PHYSICS_TUNING.MAX_SPEED : PHYSICS_TUNING.GROUND_MAX_SPEED) * (c.cap || 1);
+    vf = clamp(vf, -PHYSICS_TUNING.REVERSE_MAX_SPEED, Math.min(forwardCap, PHYSICS_TUNING.MAX_SPEED));
+    const speedRatio = clamp(Math.abs(vf) / PHYSICS_TUNING.MAX_SPEED, 0, 1);
+    const turnRate = PHYSICS_TUNING.TURN_RATE_SLOW -
+      (PHYSICS_TUNING.TURN_RATE_SLOW - PHYSICS_TUNING.TURN_RATE_FAST) * speedRatio;
+    const sr = turnRate * (hb ? PHYSICS_TUNING.HANDBRAKE_TURN_MULTIPLIER : 1) *
+      clamp(Math.abs(vf) / 2.5, 0, 1);
     c.yaw -= ct.steer * sr * (vf >= 0 ? 1 : -1) * dt;
     c.vx = sy * vf + cy * vs; c.vz = cy * vf - sy * vs; c.vy = 0;
   } else {
     const gravityScale = physicsStyle === 'floaty' ? 0.72 : physicsStyle === 'heavy' ? 1.2 : 1;
-    c.vy -= G_CAR * gravityScale * dt; c.yaw -= ct.steer * (physicsStyle === 'arcade' ? 3.4 : 2.85) * dt;
-    if (c.hold > 0 && ct.jumpHeld && c.jumps === 1) { c.vy += 28 * dt; c.hold -= dt; } else c.hold = 0;
+    c.vy -= PHYSICS_TUNING.GRAVITY_FORCE * gravityScale * dt;
+    c.yaw -= ct.steer * (physicsStyle === 'arcade' ? 3.4 : PHYSICS_TUNING.YAW_TORQUE_SPEED) * dt;
+    if (c.hold > 0 && ct.jumpHeld && c.jumps === 1) {
+      c.vy += PHYSICS_TUNING.JUMP_HOLD_FORCE * dt;
+      c.hold = Math.max(0, c.hold - dt);
+    } else c.hold = 0;
     if (!ct.throttle && c.y < 4 && c.vy < 0) c.pitch *= Math.max(0, 1 - 5 * dt);
-    c.pitch = clamp(c.pitch - ct.throttle * 3.4 * dt, -1.3, 1.3);
-    if (bo) {
-      const cp = Math.cos(c.pitch);
-      c.vx += sy * cp * 58 * dt; c.vy += Math.sin(c.pitch) * 58 * dt; c.vz += cy * cp * 58 * dt;
-    }
-    const sp = Math.hypot(c.vx, c.vy, c.vz); if (sp > 58) { const k = 58 / sp; c.vx *= k; c.vy *= k; c.vz *= k; }
+    c.pitch = clamp(c.pitch - ct.throttle * PHYSICS_TUNING.PITCH_TORQUE_SPEED * dt, -1.5, 1.5);
+    c.roll = wrap(c.roll + (ct.roll || 0) * PHYSICS_TUNING.ROLL_TORQUE_SPEED * dt);
+  }
+  // Boost continuously accelerates along the car's nose on ground and in air.
+  if (bo) {
+    const cp = Math.cos(c.pitch);
+    c.vx += Math.sin(c.yaw) * cp * PHYSICS_TUNING.BOOST_FORCE * dt;
+    c.vy += Math.sin(c.pitch) * PHYSICS_TUNING.BOOST_FORCE * dt;
+    c.vz += Math.cos(c.yaw) * cp * PHYSICS_TUNING.BOOST_FORCE * dt;
   }
   if (ct.jump) {
-    if (ground) { c.vy = 11; c.jumps = 1; c.jt = 0; c.hold = 0.22; c.y += 0.05; }
-    else if (c.jumps === 1 && c.jt < 1.4) {
+    if (ground) {
+      c.vy = PHYSICS_TUNING.JUMP_IMPULSE; c.jumps = 1; c.jt = 0;
+      c.hold = PHYSICS_TUNING.JUMP_HOLD_DURATION; c.y += 0.05;
+    } else if (c.jumps === 1 && c.jt < PHYSICS_TUNING.DOUBLE_JUMP_WINDOW) {
       c.jumps = 2;
       const f = ct.dodge ? ct.dodge[0] : ct.throttle, s = ct.dodge ? ct.dodge[1] : ct.steer;
-      if (f || s) { c.vx += (sy * f - cy * s) * 17; c.vz += (cy * f + sy * s) * 17; c.vy = Math.max(c.vy, 3); c.flip = 0.55; c.fx = f; c.fz = s; }
-      else c.vy = 9.5;
+      if (f || s) {
+        c.vx += (sy * f - cy * s) * PHYSICS_TUNING.DODGE_IMPULSE;
+        c.vz += (cy * f + sy * s) * PHYSICS_TUNING.DODGE_IMPULSE;
+        c.vy = Math.max(c.vy, 3); c.flip = 0.55; c.fx = f; c.fz = s;
+      } else c.vy = PHYSICS_TUNING.DOUBLE_JUMP_IMPULSE;
     }
   }
   if (c.ai) c.boost = Math.min(100, c.boost + 8 * dt);
+  const carSpeed = Math.hypot(c.vx, c.vy, c.vz);
+  if (carSpeed > PHYSICS_TUNING.MAX_SPEED) {
+    const scale = PHYSICS_TUNING.MAX_SPEED / carSpeed;
+    c.vx *= scale; c.vy *= scale; c.vz *= scale;
+  }
   c.x += c.vx * dt; c.y += c.vy * dt; c.z += c.vz * dt;
   if (c.y < 0.55) { c.y = 0.55; if (c.vy < 0) c.vy = 0; }
   if (c.y > CEIL - 0.6) { c.y = CEIL - 0.6; if (c.vy > 0) c.vy = 0; }
-  if (Math.abs(c.x) > HW - 1.3) { c.x = Math.sign(c.x) * (HW - 1.3); c.vx *= -0.2; }
-  if (Math.abs(c.z) > HL - 1.9) { c.z = Math.sign(c.z) * (HL - 1.9); c.vz *= -0.2; }
+  if (Math.abs(c.x) > HW - 1.3) {
+    const sx = Math.sign(c.x); c.x = sx * (HW - 1.3);
+    const edgeRamp = arenaRampAt(c.x, c.z);
+    if (edgeRamp.height > 0.3 && c.y <= edgeRamp.height + 1.5) c.vx = 0;
+    else c.vx *= -0.2;
+  }
+  if (Math.abs(c.z) > HL - 1.9) {
+    const sz = Math.sign(c.z); c.z = sz * (HL - 1.9);
+    const edgeRamp = arenaRampAt(c.x, c.z);
+    if (edgeRamp.height > 0.3 && Math.abs(c.x) > GW + 2 && c.y <= edgeRamp.height + 1.5) c.vz = 0;
+    else c.vz *= -0.2;
+  }
   const ov = Math.abs(c.x) + Math.abs(c.z) - (HW + HL - CH - 2.5); // rounded corners
   if (ov > 0) {
     const sx = Math.sign(c.x), sz = Math.sign(c.z), vn = (c.vx * sx + c.vz * sz) * 0.7071;
@@ -967,13 +1028,27 @@ function hitBall(c) {
   const vn = (ball.vx - c.vx) * nx + (ball.vy - c.vy) * ny + (ball.vz - c.vz) * nz;
   if (vn < 0) {
     if (vn < -4) sparks(vn);
-    const j = -1.6 * vn / (1 + 1 / (c.mass || 4));
-    ball.vx += nx * j; ball.vy += ny * j; ball.vz += nz * j;
-    c.vx -= nx * j / (c.mass || 4); c.vy -= ny * j / (c.mass || 4); c.vz -= nz * j / (c.mass || 4);
-    if (c.fl) { ball.vx += nx * 4; ball.vy += ny * 4; ball.vz += nz * 4; }
-    if (c.ground) ball.vy += 2;
+    const mass = c.mass || 4;
+    const forwardX = Math.sin(c.yaw) * Math.cos(c.pitch), forwardY = Math.sin(c.pitch), forwardZ = Math.cos(c.yaw) * Math.cos(c.pitch);
+    const forwardSpeed = Math.max(0, c.vx * forwardX + c.vy * forwardY + c.vz * forwardZ);
+    const impulse = -vn * (1 + PHYSICS_TUNING.BALL_RESTITUTION) *
+      PHYSICS_TUNING.BALL_HIT_MULTIPLIER / (1 + 1 / mass);
+    ball.vx += nx * impulse; ball.vy += ny * impulse; ball.vz += nz * impulse;
+    c.vx -= nx * impulse / mass; c.vy -= ny * impulse / mass; c.vz -= nz * impulse / mass;
+    const forwardImpulse = (PHYSICS_TUNING.BALL_HIT_FORWARD_FORCE +
+      Math.min(forwardSpeed, PHYSICS_TUNING.MAX_SPEED) * PHYSICS_TUNING.BALL_FORWARD_SPEED_FACTOR +
+      (c.flip > 0 ? PHYSICS_TUNING.BALL_FLIP_HIT_BONUS : 0) +
+      (c.fl ? PHYSICS_TUNING.BALL_BOOST_HIT_BONUS : 0)) * PHYSICS_TUNING.BALL_HIT_MULTIPLIER;
+    ball.vx += forwardX * forwardImpulse; ball.vy += forwardY * forwardImpulse; ball.vz += forwardZ * forwardImpulse;
+    const frontBumperHit = lf > 0.25 && dy > -0.35 && dy < 2.35;
+    const undersideHit = ny > 0.3 && dy > 0.1;
+    if (frontBumperHit || undersideHit) ball.vy += PHYSICS_TUNING.BALL_UPWARD_POP;
   }
-  const s = Math.hypot(ball.vx, ball.vy, ball.vz); if (s > 80) { const k = 80 / s; ball.vx *= k; ball.vy *= k; ball.vz *= k; }
+  const s = Math.hypot(ball.vx, ball.vy, ball.vz);
+  if (s > PHYSICS_TUNING.MAX_BALL_SPEED) {
+    const k = PHYSICS_TUNING.MAX_BALL_SPEED / s;
+    ball.vx *= k; ball.vy *= k; ball.vz *= k;
+  }
 }
 
 // goal explosion helpers
@@ -1020,14 +1095,15 @@ function goalExplosion(team) {
 }
 
 function stepBall(dt) {
-  ball.vy -= G_BALL * dt;
+  ball.vy -= PHYSICS_TUNING.BALL_GRAVITY_FORCE * dt;
   const dr = 1 - 0.03 * dt; ball.vx *= dr; ball.vz *= dr;
   ball.x += ball.vx * dt; ball.y += ball.vy * dt; ball.z += ball.vz * dt;
   if (ball.y < BR) {
-    ball.y = BR; ball.vy = -ball.vy * 0.62; if (Math.abs(ball.vy) < 1.5) ball.vy = 0;
+    ball.y = BR; ball.vy = -ball.vy * PHYSICS_TUNING.BALL_FLOOR_RESTITUTION;
+    if (Math.abs(ball.vy) < 1.5) ball.vy = 0;
     const f = Math.max(0, 1 - 0.35 * dt); ball.vx *= f; ball.vz *= f;
   }
-  if (ball.y > CEIL - BR) { ball.y = CEIL - BR; ball.vy = -Math.abs(ball.vy) * 0.5; }
+  if (ball.y > CEIL - BR) { ball.y = CEIL - BR; ball.vy = -Math.abs(ball.vy) * PHYSICS_TUNING.BALL_RESTITUTION; }
   const az = Math.abs(ball.z), sz = Math.sign(ball.z);
   if (state === 'play' && az > HL && Math.abs(ball.x) < GW && ball.y < GH) return goal(ball.z > 0 ? 0 : 1);
   if (az <= HL) { // rounded corners so the ball never sits in a corner
@@ -1037,13 +1113,31 @@ function stepBall(dt) {
       ball.x -= sx * ov / 2; ball.z -= sz * ov / 2; if (vn > 0) { ball.vx -= sx * vn * 0.7071 * 1.72; ball.vz -= sz * vn * 0.7071 * 1.72; }
     }
   }
-  if (Math.abs(ball.x) > HW - BR && az <= HL) { ball.x = Math.sign(ball.x) * (HW - BR); ball.vx = -Math.sign(ball.x) * Math.abs(ball.vx) * 0.72; }
+  if (Math.abs(ball.x) > HW - BR && az <= HL) {
+    const sx = Math.sign(ball.x), edgeX = sx * (HW - BR), edgeRamp = arenaRampAt(edgeX, ball.z);
+    const ridingRamp = edgeRamp.height > 0.2 && ball.y < edgeRamp.height + BR + 2.5;
+    ball.x = edgeX;
+    if (ridingRamp) ball.vz *= Math.max(0, 1 - PHYSICS_TUNING.BALL_SURFACE_FRICTION * dt);
+    else {
+      ball.vx = -sx * Math.abs(ball.vx) * PHYSICS_TUNING.BALL_WALL_RESTITUTION;
+      const damp = Math.max(0, 1 - PHYSICS_TUNING.BALL_SURFACE_FRICTION * dt);
+      ball.vy *= damp; ball.vz *= damp;
+    }
+  }
   if (az > HL) { // inside a goal pocket
     if (Math.abs(ball.x) > GW - BR) { ball.x = Math.sign(ball.x) * (GW - BR); ball.vx = -Math.sign(ball.x) * Math.abs(ball.vx) * 0.5; }
     if (ball.y > GH - BR) { ball.y = GH - BR; ball.vy = -Math.abs(ball.vy) * 0.5; }
     if (az > HL + GD - BR) { ball.z = sz * (HL + GD - BR); ball.vz = -sz * Math.abs(ball.vz) * 0.4; }
   } else if (az > HL - BR && !(Math.abs(ball.x) + BR < GW && ball.y + BR < GH)) {
-    ball.z = sz * (HL - BR); ball.vz = -sz * Math.abs(ball.vz) * 0.72;
+    const edgeZ = sz * (HL - BR), edgeRamp = arenaRampAt(ball.x, edgeZ);
+    const ridingRamp = edgeRamp.height > 0.2 && Math.abs(ball.x) > GW + 2 && ball.y < edgeRamp.height + BR + 2.5;
+    ball.z = edgeZ;
+    if (ridingRamp) ball.vx *= Math.max(0, 1 - PHYSICS_TUNING.BALL_SURFACE_FRICTION * dt);
+    else {
+      ball.vz = -sz * Math.abs(ball.vz) * PHYSICS_TUNING.BALL_WALL_RESTITUTION;
+      const damp = Math.max(0, 1 - PHYSICS_TUNING.BALL_SURFACE_FRICTION * dt);
+      ball.vx *= damp; ball.vy *= damp;
+    }
   }
   const ramp = arenaRampAt(ball.x, ball.z);
   const rampSurfaceY = ramp.height + BR;
@@ -1059,6 +1153,11 @@ function stepBall(dt) {
     ball.onRamp = true;
   } else {
     ball.onRamp = false;
+  }
+  const ballSpeed = Math.hypot(ball.vx, ball.vy, ball.vz);
+  if (ballSpeed > PHYSICS_TUNING.MAX_BALL_SPEED) {
+    const factor = PHYSICS_TUNING.MAX_BALL_SPEED / ballSpeed;
+    ball.vx *= factor; ball.vy *= factor; ball.vz *= factor;
   }
 }
 function showGameEvent(label, color = '#fff') {
@@ -1375,7 +1474,12 @@ function render(dt) {
 
 // ---------- loop ----------
 buildTeams(); kickoff(); pick('mode', 2); pick('diff', 1);
-window.rocketArena = { ball, get cars() { return cars; }, get score() { return score; }, get state() { return state; } };
+window.rocketArena = {
+  ball, physics: PHYSICS_TUNING,
+  get cars() { return cars; },
+  get score() { return score; },
+  get state() { return state; }
+};
 let last = performance.now();
 (function loop(now) {
   const dt = Math.min(1 / 30, (now - last) / 1000); last = now;
