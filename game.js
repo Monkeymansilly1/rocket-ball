@@ -770,14 +770,65 @@ function player2Ctl() {
 }
 const pred = []; // where the ball will be every 0.1s for the next 4 seconds
 function predict() {
-  let x = ball.x, y = ball.y, z = ball.z, vx = ball.vx, vy = ball.vy, vz = ball.vz; pred.length = 0;
+  let x = ball.x, y = ball.y, z = ball.z, vx = ball.vx, vy = ball.vy, vz = ball.vz;
+  let onRamp = !!ball.onRamp;
+  pred.length = 0;
   for (let i = 0; i < 40; i++) {
     for (let k = 0; k < 4; k++) {
-      const h = 0.025; vy -= PHYSICS_TUNING.BALL_GRAVITY_FORCE * h; x += vx * h; y += vy * h; z += vz * h;
-      if (y < BR) { y = BR; vy = -vy * 0.62; }
-      if (y > CEIL - BR) { y = CEIL - BR; vy = -Math.abs(vy) * 0.5; }
-      if (Math.abs(x) > HW - BR) { x = Math.sign(x) * (HW - BR); vx = -vx * 0.72; }
-      if (Math.abs(z) > HL - BR && !(Math.abs(x) < GW && y < GH)) { z = Math.sign(z) * (HL - BR); vz = -vz * 0.72; }
+      const h = 0.025;
+      vy -= PHYSICS_TUNING.BALL_GRAVITY_FORCE * h;
+      const drag = 1 - 0.03 * h; vx *= drag; vz *= drag;
+      x += vx * h; y += vy * h; z += vz * h;
+      if (y < BR) {
+        y = BR; vy = -vy * PHYSICS_TUNING.BALL_FLOOR_RESTITUTION;
+        if (Math.abs(vy) < 1.5) vy = 0;
+        const groundDrag = Math.max(0, 1 - 0.35 * h); vx *= groundDrag; vz *= groundDrag;
+      }
+      if (y > CEIL - BR) { y = CEIL - BR; vy = -Math.abs(vy) * PHYSICS_TUNING.BALL_RESTITUTION; }
+
+      const az = Math.abs(z), sz = Math.sign(z);
+      if (Math.abs(x) > HW - BR && az <= HL) {
+        const sx = Math.sign(x), edgeX = sx * (HW - BR);
+        const edgeRamp = arenaRampAt(edgeX, z);
+        const ridingRamp = edgeRamp.height > 0.2 && y < edgeRamp.height + BR + 2.5;
+        x = edgeX;
+        if (ridingRamp) vz *= Math.max(0, 1 - PHYSICS_TUNING.BALL_SURFACE_FRICTION * h);
+        else {
+          vx = -sx * Math.abs(vx) * PHYSICS_TUNING.BALL_WALL_RESTITUTION;
+          const damp = Math.max(0, 1 - PHYSICS_TUNING.BALL_SURFACE_FRICTION * h);
+          vy *= damp; vz *= damp;
+        }
+      }
+      if (az > HL - BR && !(Math.abs(x) + BR < GW && y + BR < GH)) {
+        const edgeZ = sz * (HL - BR), edgeRamp = arenaRampAt(x, edgeZ);
+        const ridingRamp = edgeRamp.height > 0.2 && Math.abs(x) > GW + 2 && y < edgeRamp.height + BR + 2.5;
+        z = edgeZ;
+        if (ridingRamp) vx *= Math.max(0, 1 - PHYSICS_TUNING.BALL_SURFACE_FRICTION * h);
+        else {
+          vz = -sz * Math.abs(vz) * PHYSICS_TUNING.BALL_WALL_RESTITUTION;
+          const damp = Math.max(0, 1 - PHYSICS_TUNING.BALL_SURFACE_FRICTION * h);
+          vx *= damp; vy *= damp;
+        }
+      }
+
+      const ramp = arenaRampAt(x, z);
+      const rampSurfaceY = ramp.height + BR;
+      const rampVelocityY = vx * ramp.dx + vz * ramp.dz;
+      if (ramp.height > 0.025 && (y < rampSurfaceY - 0.05 ||
+          (y <= rampSurfaceY + 0.18 && vy <= rampVelocityY + 2) ||
+          (onRamp && y <= rampSurfaceY + 3))) {
+        const normalVelocity = vy - rampVelocityY;
+        const normalLengthSq = 1 + ramp.dx * ramp.dx + ramp.dz * ramp.dz;
+        vx += normalVelocity * ramp.dx / normalLengthSq;
+        vz += normalVelocity * ramp.dz / normalLengthSq;
+        vy -= normalVelocity / normalLengthSq;
+        y = rampSurfaceY; onRamp = true;
+      } else onRamp = false;
+      const speed = Math.hypot(vx, vy, vz);
+      if (speed > PHYSICS_TUNING.MAX_BALL_SPEED) {
+        const factor = PHYSICS_TUNING.MAX_BALL_SPEED / speed;
+        vx *= factor; vy *= factor; vz *= factor;
+      }
     }
     pred.push({ x, y, z });
   }
