@@ -989,15 +989,32 @@ function showVictoryScreen() {
   $('victoryTitle').textContent = winner;
   $('victoryScore').textContent = score[0] + '  —  ' + score[1];
   const rows = cars.map((car, idx) => ({car, stats: playerStats[idx] || {}, idx}));
-  // Show just one car from the winning side during the intro; keep everyone in the stats table.
   const winningTeam = score[0] === score[1] ? null : score[1] > score[0];
   const winningRows = winningTeam === null ? [] : rows.filter(row => !!row.car.team === winningTeam);
   const winnerCar = winningRows.slice().sort((a, b) => (b.stats.goals || 0) - (a.stats.goals || 0))[0];
-  const displayRows = winnerCar ? [winnerCar] : [];
-  $('victoryCars').innerHTML = displayRows.length
-    ? displayRows.map(({car,idx}) => '<div class="victory-car-card '+(car.team ? 'orange-team' : 'blue-team')+'"><div class="victory-car-visual"><canvas class="victory-car-canvas" data-car-index="'+idx+'" aria-label="'+escapeStats(car.model || 'car')+' 3D preview"></canvas></div><div class="victory-car-name">'+escapeStats(car.displayName || ('PLAYER '+(idx+1)))+'</div><div class="victory-car-model">'+escapeStats(String(car.model || 'Octane').toUpperCase())+'</div></div>').join('')
-    : '<div class="victory-draw-label">DRAW</div>';
-  renderVictoryCarPreviews(displayRows);
+  // Put the winning team into a proper on-pitch celebration lineup and frame it with the main camera.
+  if (winnerCar) {
+    const lineup = winningRows.length ? winningRows : [winnerCar];
+    lineup.forEach((row, i) => {
+      const car = row.car;
+      car.x = (i - (lineup.length - 1) / 2) * 7;
+      car.z = winningTeam ? -10 : 10;
+      car.y = 0.6;
+      car.yaw = winningTeam ? Math.PI : 0;
+      car.vx = car.vy = car.vz = 0;
+      car.mesh.root.visible = true;
+    });
+    rows.filter(row => !!row.car.team !== winningTeam).forEach(row => { row.car.mesh.root.visible = false; });
+    ballMesh.visible = false;
+    camera.position.set(0, 12, winningTeam ? -35 : 35);
+    camera.lookAt(0, 2, winningTeam ? -8 : 8);
+    camera.fov = 42;
+    camera.updateProjectionMatrix();
+  }
+  const displayRows = winnerCar ? winningRows : [];
+  $('victoryCars').innerHTML = displayRows.map(({car,idx}) =>
+    '<div class="victory-car-card '+(car.team ? 'orange-team' : 'blue-team')+'"><div class="victory-car-name">'+escapeStats(car.displayName || ('PLAYER '+(idx+1)))+'</div><div class="victory-car-model">'+escapeStats(String(car.model || 'Octane').toUpperCase())+'</div></div>'
+  ).join('') || '<div class="victory-draw-label">DRAW</div>';
   $('statsBody').innerHTML = rows.map(({car,stats,idx}) => '<tr><td><span class="team-dot" style="background:'+(car.team?'#ff8a1f':'#2fb8ff')+'"></span>'+escapeStats(car.displayName || ('PLAYER '+(idx+1)))+' <small class="stat-car-model">'+escapeStats(String(car.model || 'Octane').toUpperCase())+'</td><td>'+stats.goals+'</td><td>'+stats.assists+'</td><td>'+stats.shots+'</td><td>'+stats.saves+'</td><td>'+stats.clears+'</td></tr>').join('');
   const carsView = $('victoryCars'), statsView = $('victoryStats');
   if (carsView) carsView.style.display = 'grid';
@@ -1110,6 +1127,12 @@ function render(dt) {
     // Clean stadium-only garage backdrop: hide active match cars and ball.
     camera.position.set(0, 62, 190); camera.lookAt(0, 4, 0); camera.fov = 62; camera.updateProjectionMatrix();
     cars.forEach(c => { c.mesh.root.visible = false; }); ballMesh.visible = false;
+  } else if (state === 'over') {
+    // Keep the celebration camera fixed on the winning cars; their lineup is set in showVictoryScreen().
+    ballMesh.visible = false;
+    camera.position.set(0, 12, score[1] > score[0] ? -35 : 35);
+    camera.lookAt(0, 2, score[1] > score[0] ? -8 : 8);
+    camera.fov = 42; camera.updateProjectionMatrix();
   } else {
     cars.forEach(c => { c.mesh.root.visible = true; }); ballMesh.visible = true;
     updateCam(dt, state === 'replay' ? replayCameraCarIndex : 0);
