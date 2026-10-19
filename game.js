@@ -1037,16 +1037,17 @@ function showVictoryScreen() {
       const car = row.car;
       car.x = (i - (winningRows.length - 1) / 2) * 5.2;
       car.z = winningTeam ? -15 : 15;
-      car.y = 0.55; car.pitch = 0;
+      car.y = 0.55; car.pitch = 0; car.flip = 0; car.fx = car.fz = 0;
       car.yaw = winningTeam ? Math.PI : 0;
       car.vx = car.vy = car.vz = 0; car.fl = 0;
+      car.mesh.body.rotation.set(0, 0, 0);
       car.mesh.root.visible = true;
     });
     rows.filter(row => !!row.car.team !== winningTeam).forEach(row => { row.car.mesh.root.visible = false; });
     ballMesh.visible = false;
-    camera.position.set(0, 8, winningTeam ? -30 : 30);
-    camera.lookAt(0, 3.6, winningTeam ? -15 : 15);
-    camera.fov = 50;
+    camera.position.set(0, 7.5, winningTeam ? -24 : 24);
+    camera.lookAt(0, 3.8, winningTeam ? -15 : 15);
+    camera.fov = 48;
     camera.updateProjectionMatrix();
     document.body.classList.add('victory-screen');
   }
@@ -1172,9 +1173,9 @@ function render(dt) {
     const winTeam = score[0] === score[1] ? null : score[1] > score[0];
     cars.forEach(c => { c.mesh.root.visible = winTeam !== null && !!c.team === winTeam && c.demoTimer <= 0; });
     ballMesh.visible = false;
-    camera.position.set(0, 8, winTeam ? -30 : 30);
-    camera.lookAt(0, 3.6, winTeam ? -15 : 15);
-    camera.fov = 50; camera.updateProjectionMatrix();
+    camera.position.set(0, 7.5, winTeam ? -24 : 24);
+    camera.lookAt(0, 3.8, winTeam ? -15 : 15);
+    camera.fov = 48; camera.updateProjectionMatrix();
   } else {
     cars.forEach(c => { c.mesh.root.visible = c.demoTimer <= 0; }); ballMesh.visible = true;
     updateCam(dt, state === 'replay' ? replayCameraCarIndex : 0);
