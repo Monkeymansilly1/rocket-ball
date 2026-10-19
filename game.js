@@ -49,7 +49,7 @@ function arenaRampAt(x, z) {
   }
   return best;
 }
-let pitchMesh = null, skyMesh = null;
+let pitchMesh = null, skyMesh = null, rampMeshMaterial = null;
 const wrap = a => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
 
 // Car model presets (visuals + physical tweaks)
@@ -110,13 +110,39 @@ function buildArena() {
   out.rotation.x = -Math.PI / 2; out.position.y = -0.1; scene.add(out);
 
   const BH = 8;
-  const glass = new THREE.MeshBasicMaterial({ color: 0x9fe8ff, transparent: true, opacity: 0.06, side: THREE.DoubleSide, depthWrite: false });
-  const dim = { [BLUE]: new THREE.MeshBasicMaterial({ color: 0x103a7a, side: THREE.DoubleSide }), [ORANGE]: new THREE.MeshBasicMaterial({ color: 0x7a3a0c, side: THREE.DoubleSide }) };
+  const glass = new THREE.MeshBasicMaterial({ color: 0x8bdcff, transparent: true, opacity: 0.13, side: THREE.DoubleSide, depthWrite: false });
+  const dim = {
+    [BLUE]: new THREE.MeshStandardMaterial({ color: 0x172b40, roughness: 0.46, metalness: 0.38, side: THREE.DoubleSide }),
+    [ORANGE]: new THREE.MeshStandardMaterial({ color: 0x25283a, roughness: 0.46, metalness: 0.38, side: THREE.DoubleSide })
+  };
   const bright = { [BLUE]: new THREE.MeshBasicMaterial({ color: BLUE }), [ORANGE]: new THREE.MeshBasicMaterial({ color: ORANGE }) };
+  const wallRibMat = new THREE.MeshStandardMaterial({ color: 0x101b2a, roughness: 0.42, metalness: 0.55 });
+  const wallGridMat = {
+    [BLUE]: new THREE.MeshBasicMaterial({ color: 0x3bbcff, transparent: true, opacity: 0.34 }),
+    [ORANGE]: new THREE.MeshBasicMaterial({ color: 0xff8a1f, transparent: true, opacity: 0.34 })
+  };
   const plane = (w, h, x, y, z, ry, m) => { const o = new THREE.Mesh(new THREE.PlaneGeometry(w, h), m); o.position.set(x, y, z); o.rotation.y = ry; scene.add(o); };
   const wall = (w, x, z, ry, col) => {
-    plane(w, BH, x, BH / 2, z, ry, dim[col]); plane(w, CEIL - BH, x, BH + (CEIL - BH) / 2, z, ry, glass);
-    const o = new THREE.Mesh(new THREE.BoxGeometry(w, 0.7, 0.7), bright[col]); o.position.set(x, BH, z); o.rotation.y = ry; scene.add(o);
+    plane(w, BH, x, BH / 2, z, ry, dim[col]);
+    plane(w, CEIL - BH, x, BH + (CEIL - BH) / 2, z, ry, glass);
+    const o = new THREE.Mesh(new THREE.BoxGeometry(w, 0.7, 0.7), bright[col]);
+    o.position.set(x, BH, z); o.rotation.y = ry; scene.add(o);
+    // Repeating metal ribs and coloured cross-bars give the enclosure a proper arena structure.
+    const sideWall = Math.abs(x) > HW - 1;
+    for (let along = -w / 2 + 7; along < w / 2 - 3; along += 10) {
+      const normal = sideWall ? -Math.sign(x) * 0.22 : -Math.sign(z) * 0.22;
+      const rib = new THREE.Mesh(new THREE.BoxGeometry(0.34, CEIL, 0.52), wallRibMat);
+      rib.position.set(
+        x + Math.cos(ry) * along + Math.sin(ry) * normal,
+        CEIL / 2,
+        z - Math.sin(ry) * along + Math.cos(ry) * normal
+      );
+      rib.rotation.y = ry; scene.add(rib);
+    }
+    for (const y of [15, 23, 31, 39]) {
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(w, 0.12, 0.22), wallGridMat[col]);
+      bar.position.set(x, y, z); bar.rotation.y = ry; scene.add(bar);
+    }
   };
   const cw = CH * 1.4142;
   for (const sz of [-1, 1]) {
@@ -134,7 +160,7 @@ function buildArena() {
     net.position.set(0, GH / 2, sz * (HL + GD / 2)); scene.add(net);
     const pl = new THREE.PointLight(col, 1.2, 60); pl.position.set(0, 6, sz * (HL - 5)); scene.add(pl);
   }
-  const rampMat = new THREE.MeshStandardMaterial({ color: 0x438b43, roughness: 0.88, metalness: 0.02, side: THREE.DoubleSide });
+  const rampMat = rampMeshMaterial = new THREE.MeshStandardMaterial({ color: 0x59b849, roughness: 0.86, metalness: 0.03, side: THREE.DoubleSide });
   const addRampMesh = (axis, sign, alongMin, alongMax) => {
     const acrossSteps = 28, alongSteps = Math.max(8, Math.ceil((alongMax - alongMin) / 5));
     const positions = [], uvs = [], indices = [];
@@ -234,6 +260,7 @@ function applyArenaStyle(style) {
   scene.background.setHex(p.sky); scene.fog.color.setHex(p.fog);
   if (skyMesh) skyMesh.material.color.setHex(style === 'ice' ? 0x8ab9d8 : style === 'neon' ? 0x697bff : style === 'desert' ? 0xffa15e : 0xffffff);
   if (pitchMesh) pitchMesh.material.color.setHex(p.ground);
+  if (rampMeshMaterial) rampMeshMaterial.color.setHex(style === 'ice' ? 0x9fdaef : style === 'neon' ? 0x596db9 : style === 'desert' ? 0xbca06d : 0x59b849);
   scene.traverse(o => { if (o.isLineLoop && o.material && o.material.color) o.material.color.setHex(p.glow); });
 }
 applyArenaStyle('sunset');
@@ -556,8 +583,26 @@ function buildTeams() {
 const pads = [];
 for (const [x, z, big] of [[-72, -96, 1], [72, -96, 1], [-72, 96, 1], [72, 96, 1], [-74, 0, 1], [74, 0, 1], [0, -64], [0, 64], [-36, -40], [36, -40], [-36, 40], [36, 40], [0, 0],
   [-48, -70], [48, -70], [-48, 70], [48, 70], [-20, -90], [20, -90], [-20, 90], [20, 90], [-60, -20], [60, -20], [-60, 20], [60, 20]]) {
-  const m = new THREE.Mesh(new THREE.CylinderGeometry(big ? 2.8 : 1.8, big ? 2.8 : 1.8, 0.15, 24), new THREE.MeshBasicMaterial({ color: big ? 0xffd35a : 0x37f2c0, transparent: true }));
-  m.position.set(x, 0.08, z); scene.add(m); pads.push({ x, z, big: !!big, t: 0, mesh: m });
+  const ramp = arenaRampAt(x, z);
+  const surfaceY = ramp.height;
+  const group = new THREE.Group();
+  group.position.set(x, surfaceY, z);
+  group.rotation.set(-Math.atan(ramp.dz), 0, Math.atan(ramp.dx));
+  const material = new THREE.MeshBasicMaterial({ color: big ? 0xffc64d : 0x37f2c0, transparent: true, opacity: 0.9 });
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(big ? 2.55 : 1.48, big ? 2.55 : 1.48, 0.18, 32), material);
+  m.position.y = 0.09; group.add(m);
+  const ring = new THREE.Mesh(
+    new THREE.TorusGeometry(big ? 2.35 : 1.32, big ? 0.16 : 0.09, 8, 36),
+    new THREE.MeshBasicMaterial({ color: big ? 0xffe27a : 0x8affdb, transparent: true, opacity: 0.95 })
+  );
+  ring.rotation.x = Math.PI / 2; ring.position.y = 0.2; group.add(ring);
+  const core = new THREE.Mesh(
+    new THREE.CircleGeometry(big ? 1.8 : 0.82, 24),
+    new THREE.MeshBasicMaterial({ color: big ? 0xffdf65 : 0x62ffe0, transparent: true, opacity: 0.5, side: THREE.DoubleSide })
+  );
+  core.rotation.x = -Math.PI / 2; core.position.y = 0.19; group.add(core);
+  scene.add(group);
+  pads.push({ x, z, big: !!big, t: 0, mesh: m, ring, core, group, surfaceY, ramp });
 }
 const FORM = [[0, 0.55], [-26, 0.8], [26, 0.8]];
 function kickoff() {
@@ -1020,9 +1065,25 @@ function stepCar(c, ct, dt) {
     else c.roll = wrap(c.roll);
   }
   for (const p of pads) {
-    p.t = Math.max(0, p.t - dt);
-    if (p.t <= 0 && c.y < 1.6 && c.boost < 100 && Math.hypot(c.x - p.x, c.z - p.z) < (p.big ? 3.2 : 2.2)) {
-      c.boost = Math.min(100, c.boost + (p.big ? 100 : 30)); p.t = p.big ? 10 : 4;
+    // Cooldown is global to the pad, not accelerated by the number of cars in a match.
+    if (cars[0] === c) p.t = Math.max(0, p.t - dt);
+    const horizontalDistance = Math.hypot(c.x - p.x, c.z - p.z);
+    const verticalDistance = Math.abs(c.y - (p.surfaceY + 0.55));
+    const pickupRadius = p.big ? 4.0 : 2.7;
+    const verticalReach = p.big ? 3.4 : 2.0;
+    if (p.t <= 0 && c.boost < 100 &&
+        horizontalDistance < pickupRadius && verticalDistance < verticalReach) {
+      const amount = p.big ? 100 : 30;
+      const before = c.boost;
+      c.boost = Math.min(100, c.boost + amount);
+      if (c.boost > before) {
+        p.t = p.big ? 10 : 4;
+        if (!c.ai) showGameEvent(p.big ? 'FULL BOOST +100' : 'BOOST +30', p.big ? '#ffca64' : '#37f2c0');
+        for (let n = 0; n < (p.big ? 28 : 12); n++) {
+          const a = Math.random() * Math.PI * 2, burst = 3 + Math.random() * 9;
+          emit(p.x, p.surfaceY + 0.35, p.z, Math.cos(a) * burst, 3 + Math.random() * 6, Math.sin(a) * burst, 0.35 + Math.random() * 0.3, p.big ? 1 : 0.35, p.big ? 0.75 : 1, p.big ? 0.2 : 0.8);
+        }
+      }
     }
   }
 }
@@ -1527,7 +1588,13 @@ function render(dt) {
   const sp = Math.hypot(ball.vx, ball.vz);
   if (sp > 0.05) { axis.set(ball.vz, 0, -ball.vx).normalize(); ballMesh.rotateOnWorldAxis(axis, sp * dt / BR); }
   if (state === 'play' && Math.hypot(sp, ball.vy) > 26) emit(ball.x, ball.y, ball.z, (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2, 0.4, 0.3, 0.9, 0.8);
-  for (const p of pads) p.mesh.material.opacity = p.t > 0 ? 0.12 : 0.9;
+  for (const p of pads) {
+    const active = p.t <= 0;
+    p.mesh.material.opacity = active ? 0.9 : 0.12;
+    p.ring.material.opacity = active ? 0.95 : 0.08;
+    p.core.material.opacity = active ? 0.5 : 0.05;
+    p.group.visible = active || p.t > 0;
+  }
   stepParts(dt); drawMini(); sfx.update(cars[0], state === 'play');
   const splitActive = localTwoPlayer && state !== 'menu' && state !== 'over';
   document.body.classList.toggle('split-screen', splitActive);
