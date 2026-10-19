@@ -390,7 +390,7 @@ const SKILL = [
 function mkCar(team, k, ai, modelName) {
   const model = modelName || CAR_MODELS[(k) % CAR_MODELS.length].name;
   const col = new THREE.Color(!ai && k === 0 ? (team ? player2Paint : playerPaint) : (team ? ORANGE : BLUE)).offsetHSL(0, 0, -0.09 * k);
-  const car = { team, k, x: 0, y: 0.55, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, pitch: 0, ai, aiCd: 0, boost: 34, jumps: 0, jt: 0, flip: 0, fx: 0, fz: 0, fl: 0, ground: true };
+  const car = { team, k, x: 0, y: 0.55, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, pitch: 0, ai, aiCd: 0, boost: 34, jumps: 0, jt: 0, flip: 0, fx: 0, fz: 0, fl: 0, ground: true, demoTimer: 0, demoCooldown: 0 };
   car.mesh = carMesh(col, model);
   car.model = model;
   car.displayName = ai ? (team ? 'ORANGE BOT ' : 'BLUE BOT ') + (k + 1) : playerName;
@@ -444,8 +444,9 @@ function start() {
   const sel2 = document.querySelector('.car-opts-p2 button.on'); if (sel2 && sel2.dataset.car2) player2CarModel = sel2.dataset.car2;
   const paint2El = $('paint2'); if (paint2El) player2Paint = paint2El.value || '#ff8a1f';
   const explosionEl = $('explosion'); if (explosionEl) goalExplosionStyle = explosionEl.value;
+  document.body.classList.remove('victory-screen');
   buildTeams(); score = [0, 0]; clock = MATCH; ot = false; pads.forEach(p => p.t = 0);
-  playerStats = cars.map(() => ({ goals: 0, assists: 0, shots: 0, saves: 0, clears: 0, shotsOnGoal: 0 }));
+  playerStats = cars.map(() => ({ goals: 0, assists: 0, shots: 0, saves: 0, clears: 0, shotsOnGoal: 0, demos: 0 }));
   const victory = $('victory'); if (victory) { victory.style.display = 'none'; victory.dataset.shown = ''; }
   kickoff(); state = 'kick'; cd = 3; $('menu').style.display = 'none'; $('msg').textContent = '';
   const pHUD = $('player'); if (pHUD) pHUD.textContent = playerName;
@@ -686,6 +687,19 @@ function aiCtl(c, dt) {
 
 // ---------- physics ----------
 function stepCar(c, ct, dt) {
+  c.demoCooldown = Math.max(0, (c.demoCooldown || 0) - dt);
+  if (c.demoTimer > 0) {
+    c.demoTimer = Math.max(0, c.demoTimer - dt);
+    c.vx = c.vy = c.vz = 0; c.y = 0.55; c.pitch = 0; c.fl = 0;
+    if (c.demoTimer <= 0) {
+      c.x = 0; c.z = c.team ? HL - 14 : -HL + 14; c.yaw = c.team ? Math.PI : 0;
+      c.boost = 34; c.jumps = 0; c.jt = 0; c.ground = true;
+      c.mesh.root.visible = true;
+    } else {
+      c.mesh.root.visible = false;
+    }
+    return;
+  }
   c.jt += dt; if (c.flip > 0) c.flip -= dt;
   const sy = Math.sin(c.yaw), cy = Math.cos(c.yaw);
   const ground = c.y <= 0.56; c.ground = ground;
@@ -743,10 +757,35 @@ function stepCar(c, ct, dt) {
     }
   }
 }
+function tryDemolish(attacker, victim) {
+  if (attacker.team === victim.team || attacker.demoCooldown > 0 || attacker.demoTimer > 0 || victim.demoTimer > 0 || !attacker.fl) return false;
+  const speed = Math.hypot(attacker.vx, attacker.vz);
+  const forwardSpeed = attacker.vx * Math.sin(attacker.yaw) + attacker.vz * Math.cos(attacker.yaw);
+  if (speed < 38 || forwardSpeed < 27) return false;
+  const stat = playerStats[cars.indexOf(attacker)];
+  if (stat) stat.demos = (stat.demos || 0) + 1;
+  attacker.demoCooldown = 1.35;
+  victim.demoTimer = 3;
+  victim.vx = victim.vy = victim.vz = 0; victim.fl = 0; victim.pitch = 0; victim.flip = 0;
+  victim.mesh.root.visible = false;
+  const color = victim.team ? [1, 0.46, 0.1] : [0.12, 0.72, 1];
+  for (let n = 0; n < 36; n++) {
+    const a = Math.random() * Math.PI * 2, e = Math.random() * Math.PI;
+    const speedBurst = 7 + Math.random() * 18;
+    emit(victim.x, victim.y + 0.8, victim.z,
+      Math.cos(a) * speedBurst, Math.sin(e) * speedBurst + 3, Math.sin(a) * speedBurst,
+      0.55 + Math.random() * 0.35, color[0], color[1], color[2]);
+  }
+  showGameEvent('DEMOLITION!', '#ffca64');
+  return true;
+}
 function bump() {
   for (let i = 0; i < cars.length; i++) for (let j = i + 1; j < cars.length; j++) {
-    const a = cars[i], b = cars[j], dx = b.x - a.x, dz = b.z - a.z, d = Math.hypot(dx, dz);
+    const a = cars[i], b = cars[j];
+    if (a.demoTimer > 0 || b.demoTimer > 0) continue;
+    const dx = b.x - a.x, dz = b.z - a.z, d = Math.hypot(dx, dz);
     if (d < 2.8 && d > 1e-3 && Math.abs(a.y - b.y) < 1.2) {
+      if (tryDemolish(a, b) || tryDemolish(b, a)) continue;
       const nx = dx / d, nz = dz / d, p = (2.8 - d) / 2;
       a.x -= nx * p; a.z -= nz * p; b.x += nx * p; b.z += nz * p;
       const rv = (a.vx - b.vx) * nx + (a.vz - b.vz) * nz;
@@ -992,30 +1031,30 @@ function showVictoryScreen() {
   const winningTeam = score[0] === score[1] ? null : score[1] > score[0];
   const winningRows = winningTeam === null ? [] : rows.filter(row => !!row.car.team === winningTeam);
   const winnerCar = winningRows.slice().sort((a, b) => (b.stats.goals || 0) - (a.stats.goals || 0))[0];
-  // Put the winning team into a proper on-pitch celebration lineup and frame it with the main camera.
+  // Place the winners in a level, straight lineup and bring the celebration camera in close.
   if (winnerCar) {
-    const lineup = winningRows.length ? winningRows : [winnerCar];
-    lineup.forEach((row, i) => {
+    winningRows.forEach((row, i) => {
       const car = row.car;
-      car.x = (i - (lineup.length - 1) / 2) * 7;
-      car.z = winningTeam ? -10 : 10;
-      car.y = 0.6;
+      car.x = (i - (winningRows.length - 1) / 2) * 5.2;
+      car.z = winningTeam ? -15 : 15;
+      car.y = 0.55; car.pitch = 0;
       car.yaw = winningTeam ? Math.PI : 0;
-      car.vx = car.vy = car.vz = 0;
+      car.vx = car.vy = car.vz = 0; car.fl = 0;
       car.mesh.root.visible = true;
     });
     rows.filter(row => !!row.car.team !== winningTeam).forEach(row => { row.car.mesh.root.visible = false; });
     ballMesh.visible = false;
-    camera.position.set(0, 12, winningTeam ? -35 : 35);
-    camera.lookAt(0, 2, winningTeam ? -8 : 8);
-    camera.fov = 42;
+    camera.position.set(0, 8, winningTeam ? -30 : 30);
+    camera.lookAt(0, 3.6, winningTeam ? -15 : 15);
+    camera.fov = 50;
     camera.updateProjectionMatrix();
+    document.body.classList.add('victory-screen');
   }
   const displayRows = winnerCar ? winningRows : [];
   $('victoryCars').innerHTML = displayRows.map(({car,idx}) =>
     '<div class="victory-car-card '+(car.team ? 'orange-team' : 'blue-team')+'"><div class="victory-car-name">'+escapeStats(car.displayName || ('PLAYER '+(idx+1)))+'</div><div class="victory-car-model">'+escapeStats(String(car.model || 'Octane').toUpperCase())+'</div></div>'
   ).join('') || '<div class="victory-draw-label">DRAW</div>';
-  $('statsBody').innerHTML = rows.map(({car,stats,idx}) => '<tr><td><span class="team-dot" style="background:'+(car.team?'#ff8a1f':'#2fb8ff')+'"></span>'+escapeStats(car.displayName || ('PLAYER '+(idx+1)))+' <small class="stat-car-model">'+escapeStats(String(car.model || 'Octane').toUpperCase())+'</td><td>'+stats.goals+'</td><td>'+stats.assists+'</td><td>'+stats.shots+'</td><td>'+stats.saves+'</td><td>'+stats.clears+'</td></tr>').join('');
+  $('statsBody').innerHTML = rows.map(({car,stats,idx}) => '<tr><td><span class="team-dot" style="background:'+(car.team?'#ff8a1f':'#2fb8ff')+'"></span>'+escapeStats(car.displayName || ('PLAYER '+(idx+1)))+' <small class="stat-car-model">'+escapeStats(String(car.model || 'Octane').toUpperCase())+'</td><td>'+stats.goals+'</td><td>'+stats.assists+'</td><td>'+stats.shots+'</td><td>'+stats.saves+'</td><td>'+stats.clears+'</td><td>'+(stats.demos || 0)+'</td></tr>').join('');
   const carsView = $('victoryCars'), statsView = $('victoryStats');
   if (carsView) carsView.style.display = 'grid';
   if (statsView) statsView.style.display = 'none';
@@ -1064,7 +1103,7 @@ function renderVictoryCarPreviews(rows) {
   }
 }
 function escapeStats(value) { return String(value).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
-$('victoryPlayAgain').addEventListener('click', () => { const p=$('victory'); p.style.display='none'; p.dataset.shown=''; $('menu').style.display='grid'; state='menu'; $('mt').textContent='ROCKET ARENA 3D'; $('go').textContent='Choose your setup, then press PLAY'; });
+$('victoryPlayAgain').addEventListener('click', () => { const p=$('victory'); p.style.display='none'; p.dataset.shown=''; document.body.classList.remove('victory-screen'); $('menu').style.display='grid'; state='menu'; $('mt').textContent='ROCKET ARENA 3D'; $('go').textContent='Choose your setup, then press PLAY'; });
 // ---------- camera + render ----------
 const cam = { x: 0, y: 6, z: -60, lx: 0, ly: 2, lz: 0 };
 const cam2 = { x: 0, y: 6, z: 60, lx: 0, ly: 2, lz: 0 };
@@ -1128,13 +1167,15 @@ function render(dt) {
     camera.position.set(0, 62, 190); camera.lookAt(0, 4, 0); camera.fov = 62; camera.updateProjectionMatrix();
     cars.forEach(c => { c.mesh.root.visible = false; }); ballMesh.visible = false;
   } else if (state === 'over') {
-    // Keep the celebration camera fixed on the winning cars; their lineup is set in showVictoryScreen().
+    // Hold a close, centred camera on the straight winning lineup.
+    const winTeam = score[0] === score[1] ? null : score[1] > score[0];
+    cars.forEach(c => { c.mesh.root.visible = winTeam !== null && !!c.team === winTeam && c.demoTimer <= 0; });
     ballMesh.visible = false;
-    camera.position.set(0, 12, score[1] > score[0] ? -35 : 35);
-    camera.lookAt(0, 2, score[1] > score[0] ? -8 : 8);
-    camera.fov = 42; camera.updateProjectionMatrix();
+    camera.position.set(0, 8, winTeam ? -30 : 30);
+    camera.lookAt(0, 3.6, winTeam ? -15 : 15);
+    camera.fov = 50; camera.updateProjectionMatrix();
   } else {
-    cars.forEach(c => { c.mesh.root.visible = true; }); ballMesh.visible = true;
+    cars.forEach(c => { c.mesh.root.visible = c.demoTimer <= 0; }); ballMesh.visible = true;
     updateCam(dt, state === 'replay' ? replayCameraCarIndex : 0);
     if (splitActive) updateCam(dt, state === 'replay' ? replayCameraCarIndex : mode, camera2, cam2);
   }
