@@ -888,7 +888,7 @@ function stepCar(c, ct, dt) {
   }
   const rampNow = arenaRampAt(c.x, c.z);
   const rampSupportY = rampNow.height + 0.55;
-  if (rampNow.height > 0.03 && ((c.wallRide && !ct.jump) || (c.y <= rampSupportY + 0.22 && c.vy <= 0.5))) {
+  if (rampNow.height > 0.03 && ((c.wallRide && !ct.jump) || c.y < rampSupportY - 0.05 || (c.y <= rampSupportY + 0.22 && c.vy <= 0.5))) {
     c.y = rampSupportY; c.vy = 0; c.wallRide = true;
     if (rampNow.side) {
       const rollTarget = Math.atan(rampNow.dx);
@@ -1048,7 +1048,7 @@ function stepBall(dt) {
   const ramp = arenaRampAt(ball.x, ball.z);
   const rampSurfaceY = ramp.height + BR;
   const rampVelocityY = ball.vx * ramp.dx + ball.vz * ramp.dz;
-  if (ramp.height > 0.025 && ((ball.y <= rampSurfaceY + 0.18 && ball.vy <= rampVelocityY + 2) || (ball.onRamp && ball.y <= rampSurfaceY + 3))) {
+  if (ramp.height > 0.025 && (ball.y < rampSurfaceY - 0.05 || (ball.y <= rampSurfaceY + 0.18 && ball.vy <= rampVelocityY + 2) || (ball.onRamp && ball.y <= rampSurfaceY + 3))) {
     ball.y = rampSurfaceY;
     ball.vy = rampVelocityY;
     ball.onRamp = true;
@@ -1061,7 +1061,7 @@ function showGameEvent(label, color = '#fff') {
   el.textContent = label; el.style.color = color; el.classList.remove('event-pop'); void el.offsetWidth; el.classList.add('event-pop');
 }
 function goal(team) {
-  // Ball physics use metre-like units per second; convert speed to km/h at the goal line.
+  // Ball physics use metre-like units per second; convert speed to mph at the goal line.
   goalSpeedMph = Math.round(Math.hypot(ball.vx, ball.vy, ball.vz) * 2.236936);
   score[team]++;
   const scorerIndex = lastTouch ? cars.indexOf(lastTouch) : -1;
