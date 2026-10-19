@@ -529,7 +529,7 @@ const SKILL = [
 function mkCar(team, k, ai, modelName) {
   const model = modelName || CAR_MODELS[(k) % CAR_MODELS.length].name;
   const col = new THREE.Color(!ai && k === 0 ? (team ? player2Paint : playerPaint) : (team ? ORANGE : BLUE)).offsetHSL(0, 0, -0.09 * k);
-  const car = { team, k, x: 0, y: 0.55, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, pitch: 0, roll: 0, wallRide: false, ai, aiCd: 0, boost: 34, jumps: 0, jt: 0, flip: 0, fx: 0, fz: 0, fl: 0, ground: true, demoTimer: 0, demoCooldown: 0 };
+  const car = { team, k, x: 0, y: 0.55, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, pitch: 0, roll: 0, wallRide: false, ai, aiCd: 0, boost: 34, jumps: 0, jt: 0, flip: 0, fx: 0, fz: 0, fl: 0, ground: true, demoTimer: 0, demoCooldown: 0, boostImpactTimer: 0 };
   car.mesh = carMesh(col, model);
   car.model = model;
   car.displayName = ai ? (team ? 'ORANGE BOT ' : 'BLUE BOT ') + (k + 1) : playerName;
@@ -896,7 +896,8 @@ function stepCar(c, ct, dt) {
     c.vx = c.vy = c.vz = 0; c.y = 0.55; c.pitch = 0; c.fl = 0;
     if (c.demoTimer <= 0) {
       c.x = 0; c.z = c.team ? HL - 14 : -HL + 14; c.yaw = c.team ? Math.PI : 0;
-      c.boost = 34; c.jumps = 0; c.jt = 0; c.ground = true;
+      c.pitch = 0; c.roll = 0; c.wallRide = false;
+      c.boost = 34; c.jumps = 0; c.jt = 0; c.ground = true; c.boostImpactTimer = 0;
       c.mesh.root.visible = true;
     } else {
       c.mesh.root.visible = false;
@@ -916,6 +917,9 @@ function stepCar(c, ct, dt) {
   const sy = Math.sin(c.yaw), cy = Math.cos(c.yaw);
   const ground = c.y <= 0.56 || c.wallRide; c.ground = ground;
   const bo = !!ct.boost && c.boost > 0;
+  // Keep a very short grace window so a clean boost collision still counts if boost
+  // ends on the exact simulation frame the cars make contact.
+  c.boostImpactTimer = bo ? 0.18 : Math.max(0, (c.boostImpactTimer || 0) - dt);
   if (bo) { c.boost = Math.max(0, c.boost - PHYSICS_TUNING.BOOST_DRAIN_PER_SECOND * dt); emitBoost(c); }
   c.fl = bo ? 1 : 0;
   if (ground) {
@@ -1022,24 +1026,34 @@ function stepCar(c, ct, dt) {
     }
   }
 }
-function tryDemolish(attacker, victim) {
-  if (attacker.team === victim.team || attacker.demoCooldown > 0 || attacker.demoTimer > 0 || victim.demoTimer > 0 || !attacker.fl) return false;
+function tryDemolish(attacker, victim, dirX, dirZ) {
+  if (attacker.team === victim.team ||
+      attacker.demoCooldown > 0 || attacker.demoTimer > 0 || victim.demoTimer > 0 ||
+      (attacker.boostImpactTimer || 0) <= 0) return false;
   const speed = Math.hypot(attacker.vx, attacker.vz);
-  const forwardSpeed = attacker.vx * Math.sin(attacker.yaw) + attacker.vz * Math.cos(attacker.yaw);
-  if (speed < 38 || forwardSpeed < 27) return false;
+  const noseX = Math.sin(attacker.yaw), noseZ = Math.cos(attacker.yaw);
+  const forwardSpeed = attacker.vx * noseX + attacker.vz * noseZ;
+  const facingImpact = noseX * dirX + noseZ * dirZ;
+  const relativeClosingSpeed = (attacker.vx - victim.vx) * dirX + (attacker.vz - victim.vz) * dirZ;
+  // Demolish only when a boosted opponent is genuinely charging into the impact.
+  if (speed < 40 || forwardSpeed < 30 || facingImpact < 0.68 || relativeClosingSpeed < 28) return false;
+
   const stat = playerStats[cars.indexOf(attacker)];
   if (stat) stat.demos = (stat.demos || 0) + 1;
   attacker.demoCooldown = 1.35;
+  attacker.boostImpactTimer = 0;
   victim.demoTimer = 3;
-  victim.vx = victim.vy = victim.vz = 0; victim.fl = 0; victim.pitch = 0; victim.flip = 0;
+  victim.vx = victim.vy = victim.vz = 0;
+  victim.fl = 0; victim.pitch = 0; victim.roll = 0; victim.flip = 0; victim.wallRide = false;
+  victim.boostImpactTimer = 0;
   victim.mesh.root.visible = false;
   const color = victim.team ? [1, 0.46, 0.1] : [0.12, 0.72, 1];
-  for (let n = 0; n < 36; n++) {
+  for (let n = 0; n < 54; n++) {
     const a = Math.random() * Math.PI * 2, e = Math.random() * Math.PI;
-    const speedBurst = 7 + Math.random() * 18;
+    const speedBurst = 9 + Math.random() * 23;
     emit(victim.x, victim.y + 0.8, victim.z,
-      Math.cos(a) * speedBurst, Math.sin(e) * speedBurst + 3, Math.sin(a) * speedBurst,
-      0.55 + Math.random() * 0.35, color[0], color[1], color[2]);
+      Math.cos(a) * speedBurst, Math.sin(e) * speedBurst + 4, Math.sin(a) * speedBurst,
+      0.6 + Math.random() * 0.4, color[0], color[1], color[2]);
   }
   showGameEvent('DEMOLITION!', '#ffca64');
   return true;
@@ -1049,12 +1063,36 @@ function bump() {
     const a = cars[i], b = cars[j];
     if (a.demoTimer > 0 || b.demoTimer > 0) continue;
     const dx = b.x - a.x, dz = b.z - a.z, d = Math.hypot(dx, dz);
-    if (d < 2.8 && d > 1e-3 && Math.abs(a.y - b.y) < 1.2) {
-      if (tryDemolish(a, b) || tryDemolish(b, a)) continue;
-      const nx = dx / d, nz = dz / d, p = (2.8 - d) / 2;
-      a.x -= nx * p; a.z -= nz * p; b.x += nx * p; b.z += nz * p;
-      const rv = (a.vx - b.vx) * nx + (a.vz - b.vz) * nz;
-      if (rv > 0) { a.vx -= nx * rv * 0.6; a.vz -= nz * rv * 0.6; b.vx += nx * rv * 0.6; b.vz += nz * rv * 0.6; }
+    if (d >= 3.15 || d < 1e-3 || Math.abs(a.y - b.y) >= 1.5) continue;
+
+    const nx = dx / d, nz = dz / d;
+    // Separate overlapping bumpers every frame to stop cars snagging together.
+    const penetration = 3.15 - d;
+    const aShare = (b.mass || 4) / ((a.mass || 4) + (b.mass || 4));
+    const bShare = 1 - aShare;
+    a.x -= nx * penetration * aShare; a.z -= nz * penetration * aShare;
+    b.x += nx * penetration * bShare; b.z += nz * penetration * bShare;
+
+    // Try a boost demolition in either direction before doing a regular bump.
+    if (tryDemolish(a, b, nx, nz) || tryDemolish(b, a, -nx, -nz)) continue;
+
+    // A positive closing speed means the cars are actually driving into each other.
+    const closingSpeed = (a.vx - b.vx) * nx + (a.vz - b.vz) * nz;
+    const pairKey = 'bump:' + Math.min(i, j) + ':' + Math.max(i, j);
+    if (closingSpeed > 1.5 && (eventCooldown[pairKey] || 0) <= t) {
+      eventCooldown[pairKey] = t + 0.22;
+      const impulse = Math.min(25, 4 + closingSpeed * 0.78);
+      // Knock both cars apart, with a small vertical jolt for a heavy hit.
+      a.vx -= nx * impulse * bShare; a.vz -= nz * impulse * bShare;
+      b.vx += nx * impulse * aShare; b.vz += nz * impulse * aShare;
+      if (closingSpeed > 13) {
+        const pop = Math.min(3.5, closingSpeed * 0.055);
+        if (a.y > 0.7 || a.wallRide) a.vy += pop * 0.5;
+        if (b.y > 0.7 || b.wallRide) b.vy += pop * 0.5;
+        showGameEvent('BIG BUMP!', '#ffca64');
+      } else {
+        showGameEvent('BUMP!', '#d9eaff');
+      }
     }
   }
 }
