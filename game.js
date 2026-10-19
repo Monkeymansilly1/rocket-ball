@@ -428,6 +428,7 @@ let replayHistory = [];
 let replayFrames = [];
 let replayIndex = 0;
 let goalScorerText = 'PLAYER';
+let goalSpeedKph = 0;
 let replayCameraCarIndex = 0;
 const REPLAY_HISTORY_LIMIT = 301;
 function saveReplayFrame() {
@@ -490,6 +491,8 @@ function kickoff() {
   eventCooldown = {};
   const msgEl = $('msg'); if (msgEl) msgEl.classList.remove('replay-title');
   const goalByEl = $('goalBy'); if (goalByEl) goalByEl.textContent = '';
+  const goalSpeedEl = $('goalSpeed'); if (goalSpeedEl) goalSpeedEl.textContent = '';
+  goalSpeedKph = 0;
   replayHistory = [];
   replayFrames = [];
   replayIndex = 0;
@@ -968,6 +971,8 @@ function showGameEvent(label, color = '#fff') {
   el.textContent = label; el.style.color = color; el.classList.remove('event-pop'); void el.offsetWidth; el.classList.add('event-pop');
 }
 function goal(team) {
+  // Ball physics use metre-like units per second; convert speed to km/h at the goal line.
+  goalSpeedKph = Math.round(Math.hypot(ball.vx, ball.vy, ball.vz) * 3.6);
   score[team]++;
   const scorerIndex = lastTouch ? cars.indexOf(lastTouch) : -1;
   if (scorerIndex >= 0 && playerStats[scorerIndex]) playerStats[scorerIndex].goals++;
@@ -984,6 +989,10 @@ function goal(team) {
   // Show the scorer first, before switching to the replay title.
   const scorerName = lastTouch ? (lastTouch === cars[0] ? playerName : lastTouch.displayName) : null;
   goalScorerText = scorerName || (team ? 'ORANGE' : 'BLUE');
+  const goalByEl = $('goalBy');
+  if (goalByEl) goalByEl.textContent = 'Goal by ' + goalScorerText + '!!!';
+  const goalSpeedEl = $('goalSpeed');
+  if (goalSpeedEl) goalSpeedEl.textContent = 'SHOT SPEED · ' + goalSpeedKph + ' KM/H';
   // Only trust lastTouch when it belongs to the team that was awarded the goal.
   // Otherwise follow the first car on the scoring team, never default to P1.
   replayCameraCarIndex = lastTouch && lastTouch.team === team
@@ -1062,6 +1071,7 @@ function update(dt) {
         }
         const m = $('msg'); if (m) { m.textContent = 'GOAL REPLAY'; m.style.color = '#fff'; m.classList.add('replay-title'); }
         const goalByEl = $('goalBy'); if (goalByEl) goalByEl.textContent = 'Goal by ' + goalScorerText + '!!!';
+        const goalSpeedEl = $('goalSpeed'); if (goalSpeedEl) goalSpeedEl.textContent = 'SHOT SPEED · ' + goalSpeedKph + ' KM/H';
       } else {
         $('msg').textContent = '';
         if (ot) state = 'over';
