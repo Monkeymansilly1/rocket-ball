@@ -238,7 +238,7 @@ body.victory-screen #victoryPlayAgain { position:fixed; left:50%; bottom:18px; t
 .stat-player-label .stat-car-model { white-space:normal; }
 
 /* Keep the actual 3D car in the middle of the stadium, with stats below it. */
-body.victory-screen #victoryCars { top:24%; }
+body.victory-screen #victoryCars { top:24%; width:min(900px,92vw); grid-template-columns:repeat(auto-fit,minmax(200px,260px)); justify-content:center; align-items:start; }
 body.victory-screen #victoryStats { bottom:78px; max-height:18vh; }
 body.victory-screen .victory-car-card { background:rgba(3,10,20,.42); }
 @media(max-width:600px) {
