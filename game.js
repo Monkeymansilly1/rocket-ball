@@ -957,7 +957,9 @@ function stepCar(c, ct, dt) {
     } else c.roll += (0 - c.roll) * clamp(8 * dt, 0, 1);
   } else {
     c.wallRide = false;
-    c.roll += (0 - c.roll) * clamp(7 * dt, 0, 1);
+    // Preserve player-controlled air-roll instead of auto-leveling the car every frame.
+    if (c.y <= 0.56) c.roll += (0 - c.roll) * clamp(7 * dt, 0, 1);
+    else c.roll = wrap(c.roll);
   }
   for (const p of pads) {
     p.t = Math.max(0, p.t - dt);
