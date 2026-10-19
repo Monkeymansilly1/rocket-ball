@@ -1024,7 +1024,7 @@ function update(dt) {
 function showVictoryScreen() {
   const panel = $('victory'); if (!panel || panel.dataset.shown === 'yes') return;
   panel.dataset.shown = 'yes'; panel.style.display = 'grid';
-  const winner = score[0] > score[1] ? playerName.toUpperCase() + ' WINS' : score[1] > score[0] ? 'ORANGE WINS' : 'DRAW';
+  const winner = score[0] > score[1] ? playerName.toUpperCase() : score[1] > score[0] ? 'ORANGE' : 'DRAW';
   $('victoryTitle').textContent = winner;
   $('victoryScore').textContent = score[0] + '  —  ' + score[1];
   const rows = cars.map((car, idx) => ({car, stats: playerStats[idx] || {}, idx}));
