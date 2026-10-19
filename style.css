@@ -202,9 +202,9 @@ body.victory-screen #victoryCars { position:absolute; top:29%; left:50%; transfo
 body.victory-screen .victory-car-card { padding:10px 8px; background:rgba(3,10,20,.56); border:1px solid #ffffff35; border-radius:9px; box-shadow:0 4px 18px #0005; }
 body.victory-screen .victory-car-name { font-size:clamp(12px,1.6vw,18px); text-shadow:0 2px 6px #000; }
 body.victory-screen .victory-car-model { color:#e0edf7; text-shadow:0 2px 6px #000; }
-body.victory-screen #victoryStats { position:fixed; left:50%; bottom:84px; transform:translateX(-50%); width:min(980px,94vw); max-height:26vh; overflow:auto; margin:0; background:rgba(3,10,20,.76); border:1px solid #ffffff36; border-radius:10px; box-shadow:0 8px 25px #0007; }
-body.victory-screen .stats-table { font-size:clamp(10px,1.3vw,15px); }
-body.victory-screen .stats-table th { padding:8px 7px; }
+body.victory-screen #victoryStats { position:fixed; left:50%; bottom:84px; transform:translateX(-50%); width:min(980px,94vw); max-height:20vh; overflow:auto; margin:0; background:rgba(3,10,20,.76); border:1px solid #ffffff36; border-radius:10px; box-shadow:0 8px 25px #0007; }
+body.victory-screen .stats-table { font-size:clamp(10px,1.15vw,14px); }
+body.victory-screen .stats-table th { padding:5px 6px; }
 body.victory-screen .stats-table td { padding:8px 7px; }
 body.victory-screen #victoryPlayAgain { position:fixed; left:50%; bottom:18px; transform:translateX(-50%); margin:0; white-space:nowrap; }
 @media(max-width:600px) {
