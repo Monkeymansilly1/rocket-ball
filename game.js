@@ -859,7 +859,7 @@ function stepCar(c, ct, dt) {
     c.y = startingRamp.height + 0.55;
     if (c.vy < 0) c.vy = 0;
     if (startingRamp.side) c.roll += (Math.atan(startingRamp.dx) - c.roll) * clamp(12 * dt, 0, 1);
-  } else {
+  } else if (c.y <= 0.56) {
     c.roll += (0 - c.roll) * clamp(7 * dt, 0, 1);
   }
   const sy = Math.sin(c.yaw), cy = Math.cos(c.yaw);
@@ -922,9 +922,12 @@ function stepCar(c, ct, dt) {
     }
   }
   if (c.ai) c.boost = Math.min(100, c.boost + 8 * dt);
+  const absoluteLimit = ground && !bo && !ct.jump
+    ? PHYSICS_TUNING.GROUND_MAX_SPEED
+    : PHYSICS_TUNING.MAX_SPEED;
   const carSpeed = Math.hypot(c.vx, c.vy, c.vz);
-  if (carSpeed > PHYSICS_TUNING.MAX_SPEED) {
-    const scale = PHYSICS_TUNING.MAX_SPEED / carSpeed;
+  if (carSpeed > absoluteLimit) {
+    const scale = absoluteLimit / carSpeed;
     c.vx *= scale; c.vy *= scale; c.vz *= scale;
   }
   c.x += c.vx * dt; c.y += c.vy * dt; c.z += c.vz * dt;
