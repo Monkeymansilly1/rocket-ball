@@ -1049,8 +1049,13 @@ function stepBall(dt) {
   const rampSurfaceY = ramp.height + BR;
   const rampVelocityY = ball.vx * ramp.dx + ball.vz * ramp.dz;
   if (ramp.height > 0.025 && (ball.y < rampSurfaceY - 0.05 || (ball.y <= rampSurfaceY + 0.18 && ball.vy <= rampVelocityY + 2) || (ball.onRamp && ball.y <= rampSurfaceY + 3))) {
+    // Project velocity onto the ramp tangent so gravity slows uphill movement naturally.
+    const normalVelocity = ball.vy - rampVelocityY;
+    const normalLengthSq = 1 + ramp.dx * ramp.dx + ramp.dz * ramp.dz;
+    ball.vx += normalVelocity * ramp.dx / normalLengthSq;
+    ball.vz += normalVelocity * ramp.dz / normalLengthSq;
+    ball.vy -= normalVelocity / normalLengthSq;
     ball.y = rampSurfaceY;
-    ball.vy = rampVelocityY;
     ball.onRamp = true;
   } else {
     ball.onRamp = false;
