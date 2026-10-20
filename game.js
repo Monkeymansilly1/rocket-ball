@@ -25,13 +25,13 @@ const PHYSICS_TUNING = {
 const MATCH = 180, BLUE = 0x2fb8ff, ORANGE = 0xff8a1f;
 const WALL_RAMP_WIDTH = 22, WALL_RAMP_HEIGHT = 9.5;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-const rampEase = t => t * t; // gentle entry with a useful slope near the wall
+const rampEase = t => t * t * (3 - 2 * t); // smooth start/end avoids jolts; vertical-wall mode takes over at the edge
 function rampProfile(distance, outerEdge) {
   const start = outerEdge - WALL_RAMP_WIDTH;
   const span = WALL_RAMP_WIDTH - 0.5;
   const t = clamp((distance - start) / span, 0, 1);
   if (distance <= start) return { height: 0, slope: 0 };
-  return { height: WALL_RAMP_HEIGHT * rampEase(t), slope: WALL_RAMP_HEIGHT * 2 * t / span };
+  return { height: WALL_RAMP_HEIGHT * rampEase(t), slope: WALL_RAMP_HEIGHT * 6 * t * (1 - t) / span };
 }
 function arenaRampAt(x, z) {
   const ax = Math.abs(x), az = Math.abs(z);
