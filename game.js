@@ -23,7 +23,7 @@ const PHYSICS_TUNING = {
   BALL_FLIP_HIT_BONUS: 8, BALL_BOOST_HIT_BONUS: 5, BALL_UPWARD_POP: 5.5
 };
 const MATCH = 180, BLUE = 0x2fb8ff, ORANGE = 0xff8a1f;
-const WALL_RAMP_WIDTH = 22, WALL_RAMP_HEIGHT = 9.5;
+const WALL_RAMP_WIDTH = 24, WALL_RAMP_HEIGHT = 9.5;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const rampEase = t => t * t * (3 - 2 * t); // smooth start/end avoids jolts; vertical-wall mode takes over at the edge
 function rampProfile(distance, outerEdge) {
@@ -137,6 +137,11 @@ function buildArena() {
         z - Math.sin(ry) * along + Math.cos(ry) * normal
       );
       rib.rotation.y = ry; scene.add(rib);
+    }
+    // Lower retaining-wall rails break up the solid panels and make the arena enclosure read as a structure.
+    for (const y of [2, 4, 6]) {
+      const beam = new THREE.Mesh(new THREE.BoxGeometry(w, 0.14, 0.3), wallRibMat);
+      beam.position.set(x, y, z); beam.rotation.y = ry; scene.add(beam);
     }
     for (const y of [15, 23, 31, 39]) {
       const bar = new THREE.Mesh(new THREE.BoxGeometry(w, 0.12, 0.22), wallGridMat[col]);
@@ -1111,7 +1116,7 @@ function stepCar(c, ct, dt) {
     const noseOut = Math.sin(c.yaw) * sx;
     if (c.wallVerticalAxis === 'x') {
       c.vx = 0;
-    } else if (c.wallRide && edgeRamp.height > WALL_RAMP_HEIGHT * 0.62 && noseOut > 0.42 && outwardSpeed > 5) {
+    } else if (!ct.jump && !c.wallVerticalAxis && c.wallRide && edgeRamp.height > WALL_RAMP_HEIGHT * 0.62 && noseOut > 0.42 && outwardSpeed > 5) {
       c.wallVerticalAxis = 'x'; c.wallVerticalSign = sx;
       c.y = Math.max(c.y, edgeRamp.height + 0.55);
       c.vy = Math.max(c.vy, Math.max(7, outwardSpeed * 0.62));
@@ -1126,7 +1131,7 @@ function stepCar(c, ct, dt) {
     const noseOut = Math.cos(c.yaw) * sz;
     if (c.wallVerticalAxis === 'z') {
       c.vz = 0;
-    } else if (c.wallRide && Math.abs(c.x) > GW + 2 && edgeRamp.height > WALL_RAMP_HEIGHT * 0.62 && noseOut > 0.42 && outwardSpeed > 5) {
+    } else if (!ct.jump && !c.wallVerticalAxis && c.wallRide && Math.abs(c.x) > GW + 2 && edgeRamp.height > WALL_RAMP_HEIGHT * 0.62 && noseOut > 0.42 && outwardSpeed > 5) {
       c.wallVerticalAxis = 'z'; c.wallVerticalSign = sz;
       c.y = Math.max(c.y, edgeRamp.height + 0.55);
       c.vy = Math.max(c.vy, Math.max(7, outwardSpeed * 0.62));
