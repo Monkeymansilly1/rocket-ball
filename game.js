@@ -23,31 +23,30 @@ const PHYSICS_TUNING = {
   BALL_FLIP_HIT_BONUS: 8, BALL_BOOST_HIT_BONUS: 5, BALL_UPWARD_POP: 5.5
 };
 const MATCH = 180, BLUE = 0x2fb8ff, ORANGE = 0xff8a1f;
-const WALL_RAMP_WIDTH = 14, WALL_RAMP_HEIGHT = 8.4;
+const WALL_RAMP_WIDTH = 22, WALL_RAMP_HEIGHT = 9.5;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-const rampEase = t => t * t * (3 - 2 * t);
+const rampEase = t => t * t; // gentle entry with a useful slope near the wall
 function rampProfile(distance, outerEdge) {
   const start = outerEdge - WALL_RAMP_WIDTH;
   const span = WALL_RAMP_WIDTH - 0.5;
   const t = clamp((distance - start) / span, 0, 1);
   if (distance <= start) return { height: 0, slope: 0 };
-  const height = WALL_RAMP_HEIGHT * rampEase(t);
-  const slope = WALL_RAMP_HEIGHT * 6 * t * (1 - t) / span;
-  return { height, slope };
+  return { height: WALL_RAMP_HEIGHT * rampEase(t), slope: WALL_RAMP_HEIGHT * 2 * t / span };
 }
 function arenaRampAt(x, z) {
-  let best = { height: 0, dx: 0, dz: 0, side: false };
   const ax = Math.abs(x), az = Math.abs(z);
-  const side = rampProfile(ax, HW - 0.5);
-  if (side.height > best.height && ax > HW - WALL_RAMP_WIDTH) {
-    best = { height: side.height, dx: Math.sign(x) * side.slope, dz: 0, side: true };
-  }
-  // The end ramps sit either side of each goal mouth, leaving the goal opening clear.
-  if (ax > GW + 2 && ax <= HW - WALL_RAMP_WIDTH && az > HL - WALL_RAMP_WIDTH) {
-    const end = rampProfile(az, HL - 0.5);
-    if (end.height > best.height) best = { height: end.height, dx: 0, dz: Math.sign(z) * end.slope, side: false };
-  }
-  return best;
+  const side = ax > HW - WALL_RAMP_WIDTH ? rampProfile(ax, HW - 0.5) : { height: 0, slope: 0 };
+  // Keep the goal mouth open; end ramps and side ramps merge continuously in all four corners.
+  const end = ax > GW + 2 && az > HL - WALL_RAMP_WIDTH
+    ? rampProfile(az, HL - 0.5) : { height: 0, slope: 0 };
+  const a = side.height, b = end.height;
+  if (a <= 0 && b <= 0) return { height: 0, dx: 0, dz: 0, side: false };
+  // Smooth maximum: matches each straight ramp at its seam, but rounds the corner between them.
+  const height = Math.pow(a * a * a * a + b * b * b * b, 0.25);
+  const den = Math.max(1e-6, height * height * height);
+  const dx = Math.sign(x) * side.slope * a * a * a / den;
+  const dz = Math.sign(z) * end.slope * b * b * b / den;
+  return { height, dx, dz, side: a >= b };
 }
 let pitchMesh = null, skyMesh = null, rampMeshMaterial = null;
 const wrap = a => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
@@ -169,12 +168,17 @@ function buildArena() {
       const along = alongMin + (alongMax - alongMin) * v;
       for (let i = 0; i <= acrossSteps; i++) {
         const t = i / acrossSteps;
-        const rise = WALL_RAMP_HEIGHT * rampEase(t);
+        let px, pz, rise;
         if (axis === 'x') {
-          positions.push(sign * (HW - WALL_RAMP_WIDTH + t * (WALL_RAMP_WIDTH - 0.5)), rise + 0.035, along);
+          px = sign * (HW - WALL_RAMP_WIDTH + t * (WALL_RAMP_WIDTH - 0.5));
+          pz = along;
+          rise = rampProfile(Math.abs(px), HW - 0.5).height;
         } else {
-          positions.push(along, rise + 0.035, sign * (HL - WALL_RAMP_WIDTH + t * (WALL_RAMP_WIDTH - 0.5)));
+          px = along;
+          pz = sign * (HL - WALL_RAMP_WIDTH + t * (WALL_RAMP_WIDTH - 0.5));
+          rise = rampProfile(Math.abs(pz), HL - 0.5).height;
         }
+        positions.push(px, rise + 0.035, pz);
         uvs.push(t, v);
       }
     }
@@ -190,10 +194,34 @@ function buildArena() {
     mesh.receiveShadow = true; mesh.castShadow = true; scene.add(mesh);
   };
   for (const sign of [-1, 1]) {
-    addRampMesh('x', sign, -HL + CH, HL - CH);
+    // Straight wall ramps stop exactly where the corner patches begin.
+    addRampMesh('x', sign, -HL + WALL_RAMP_WIDTH, HL - WALL_RAMP_WIDTH);
     addRampMesh('z', sign, -(HW - WALL_RAMP_WIDTH), -(GW + 2));
     addRampMesh('z', sign, GW + 2, HW - WALL_RAMP_WIDTH);
   }
+  const addCornerRamp = (sx, sz) => {
+    const steps = 24, positions = [], indices = [];
+    for (let j = 0; j <= steps; j++) {
+      const tz = j / steps;
+      const az = HL - WALL_RAMP_WIDTH + tz * (WALL_RAMP_WIDTH - 0.5);
+      for (let i = 0; i <= steps; i++) {
+        const tx = i / steps;
+        const ax = HW - WALL_RAMP_WIDTH + tx * (WALL_RAMP_WIDTH - 0.5);
+        const x = sx * ax, z = sz * az;
+        positions.push(x, arenaRampAt(x, z).height + 0.035, z);
+      }
+    }
+    for (let j = 0; j < steps; j++) for (let i = 0; i < steps; i++) {
+      const a = j * (steps + 1) + i, b = a + steps + 1;
+      indices.push(a, b, a + 1, b, b + 1, a + 1);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geo.setIndex(indices); geo.computeVertexNormals();
+    const mesh = new THREE.Mesh(geo, rampMat);
+    mesh.receiveShadow = true; mesh.castShadow = true; scene.add(mesh);
+  };
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) addCornerRamp(sx, sz);
   const oct = [[HW - CH, HL], [HW, HL - CH], [HW, -(HL - CH)], [HW - CH, -HL], [-(HW - CH), -HL], [-HW, -(HL - CH)], [-HW, HL - CH], [-(HW - CH), HL]];
   const loop = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(oct.map(p => new THREE.Vector3(p[0], CEIL, p[1]))), new THREE.LineBasicMaterial({ color: 0x37f2c0, transparent: true, opacity: 0.6 }));
   scene.add(loop);
@@ -556,7 +584,7 @@ const SKILL = [
 function mkCar(team, k, ai, modelName) {
   const model = modelName || CAR_MODELS[(k) % CAR_MODELS.length].name;
   const col = new THREE.Color(!ai && k === 0 ? (team ? player2Paint : playerPaint) : (team ? ORANGE : BLUE)).offsetHSL(0, 0, -0.09 * k);
-  const car = { team, k, x: 0, y: 0.55, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, pitch: 0, roll: 0, wallRide: false, ai, aiCd: 0, boost: 34, jumps: 0, jt: 0, flip: 0, fx: 0, fz: 0, fl: 0, ground: true, demoTimer: 0, demoCooldown: 0, boostImpactTimer: 0 };
+  const car = { team, k, x: 0, y: 0.55, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, pitch: 0, roll: 0, wallRide: false, wallVerticalAxis: null, wallVerticalSign: 0, ai, aiCd: 0, boost: 34, jumps: 0, jt: 0, flip: 0, fx: 0, fz: 0, fl: 0, ground: true, demoTimer: 0, demoCooldown: 0, boostImpactTimer: 0 };
   car.mesh = carMesh(col, model);
   car.model = model;
   car.displayName = ai ? (team ? 'ORANGE BOT ' : 'BLUE BOT ') + (k + 1) : playerName;
@@ -619,7 +647,7 @@ function kickoff() {
   lastTouch = null;
   for (const c of cars) {
     const f = FORM[c.k], s = c.team ? 1 : -1;
-    Object.assign(c, { x: f[0] * (c.team ? -1 : 1), y: 0.55, z: s * f[1] * HL, vx: 0, vy: 0, vz: 0, yaw: c.team ? Math.PI : 0, pitch: 0, roll: 0, wallRide: false, boost: 34, jumps: 0, jt: 0, flip: 0, fl: 0, ground: true, aiCd: 0, wait: SKILL[diff].wait });
+    Object.assign(c, { x: f[0] * (c.team ? -1 : 1), y: 0.55, z: s * f[1] * HL, vx: 0, vy: 0, vz: 0, yaw: c.team ? Math.PI : 0, pitch: 0, roll: 0, wallRide: false, wallVerticalAxis: null, wallVerticalSign: 0, boost: 34, jumps: 0, jt: 0, flip: 0, fl: 0, ground: true, aiCd: 0, wait: SKILL[diff].wait });
   }
 }
 function start() {
