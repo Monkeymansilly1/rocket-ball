@@ -79,8 +79,33 @@
     <div class="opts"><span>Match</span><button data-mode="1">1v1</button><button data-mode="2">2v2</button><button data-mode="3">3v3</button></div>
     <div class="opts"><span>Bots</span><button data-diff="0">Easy</button><button data-diff="1">Medium</button><button data-diff="2">Hard</button></div>
     <details id="controlsSettings" class="controls-settings">
-      <summary>🎮 CONTROLS &amp; CONTROLLER SETTINGS</summary>
+      <summary>⚙ SETTINGS · AUDIO, ACCESSIBILITY &amp; CONTROLS</summary>
       <div class="controls-inner">
+        <section class="general-settings" aria-label="General settings">
+          <h3>Audio</h3>
+          <div class="setting-row">
+            <label for="settingVolume">Game volume</label>
+            <input id="settingVolume" type="range" min="0" max="100" step="1" value="75">
+            <output id="settingVolumeValue" for="settingVolume">75%</output>
+          </div>
+          <h3>Accessibility</h3>
+          <div class="setting-row">
+            <label for="settingColourVision">Colour-blind settings</label>
+            <select id="settingColourVision">
+              <option value="normal">Standard colours</option>
+              <option value="blue-amber">Blue / amber (colour-blind friendly)</option>
+              <option value="high-contrast">High contrast</option>
+            </select>
+          </div>
+          <p class="setting-help">Changes team colours and score indicators for clearer separation. Your custom car paint can stay as you chose it.</p>
+          <h3>Controller</h3>
+          <div class="setting-row">
+            <label for="settingDeadZone">Stick dead zone</label>
+            <input id="settingDeadZone" type="range" min="0.05" max="0.40" step="0.01" value="0.16">
+            <output id="settingDeadZoneValue" for="settingDeadZone">16%</output>
+          </div>
+          <p class="setting-help">Lower values make steering react to smaller stick movements. Increase it if the car steers by itself.</p>
+        </section>
         <div class="controls-toolbar">
           <label for="controlsPlayer">Configure</label>
           <select id="controlsPlayer"><option value="p1">Player 1</option><option value="p2">Player 2</option></select>
