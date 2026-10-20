@@ -969,7 +969,7 @@ function stepCar(c, ct, dt) {
     c.vx = c.vy = c.vz = 0; c.y = 0.55; c.pitch = 0; c.fl = 0;
     if (c.demoTimer <= 0) {
       c.x = 0; c.z = c.team ? HL - 14 : -HL + 14; c.yaw = c.team ? Math.PI : 0;
-      c.pitch = 0; c.roll = 0; c.wallRide = false;
+      c.pitch = 0; c.roll = 0; c.wallRide = false; c.wallVerticalAxis = null; c.wallVerticalSign = 0;
       c.boost = 34; c.jumps = 0; c.jt = 0; c.ground = true; c.boostImpactTimer = 0;
       c.mesh.root.visible = true;
     } else {
@@ -978,16 +978,29 @@ function stepCar(c, ct, dt) {
     return;
   }
   c.jt += dt; if (c.flip > 0) c.flip -= dt;
-  const startingRamp = arenaRampAt(c.x, c.z);
-  c.wallRide = startingRamp.height > 0.03 && c.y <= startingRamp.height + 0.8 && c.vy <= 0.5;
-  if (c.wallRide) {
-    c.y = startingRamp.height + 0.55;
-    if (c.vy < 0) c.vy = 0;
-    if (startingRamp.side) c.roll += (Math.atan(startingRamp.dx) - c.roll) * clamp(12 * dt, 0, 1);
-  } else if (c.y <= 0.56) {
-    c.roll += (0 - c.roll) * clamp(7 * dt, 0, 1);
-  }
   const sy = Math.sin(c.yaw), cy = Math.cos(c.yaw);
+  const startingRamp = arenaRampAt(c.x, c.z);
+  if (c.wallVerticalAxis) {
+    c.wallRide = true;
+    if (c.wallVerticalAxis === 'x') c.x = c.wallVerticalSign * (HW - 1.3);
+    else c.z = c.wallVerticalSign * (HL - 1.9);
+    c.pitch += wrap(Math.PI / 2 - c.pitch) * clamp(9 * dt, 0, 1);
+    c.roll = 0;
+  } else {
+    c.wallRide = startingRamp.height > 0.03 &&
+      c.y <= startingRamp.height + 1.2 && c.vy <= 0.5;
+    if (c.wallRide) {
+      const targetY = startingRamp.height + 0.55;
+      if (c.y < targetY) c.y = targetY;
+      if (c.vy < 0) c.vy = 0;
+      const slopeAlongNose = startingRamp.dx * sy + startingRamp.dz * cy;
+      const pitchTarget = Math.atan(slopeAlongNose);
+      c.pitch += wrap(pitchTarget - c.pitch) * clamp(9 * dt, 0, 1);
+      c.roll += (0 - c.roll) * clamp(9 * dt, 0, 1);
+    } else if (c.y <= 0.56) {
+      c.roll += (0 - c.roll) * clamp(7 * dt, 0, 1);
+    }
+  }
   const ground = c.y <= 0.56 || c.wallRide; c.ground = ground;
   const bo = !!ct.boost && c.boost > 0;
   // Keep a very short grace window so a clean boost collision still counts if boost
@@ -995,8 +1008,30 @@ function stepCar(c, ct, dt) {
   c.boostImpactTimer = bo ? 0.18 : Math.max(0, (c.boostImpactTimer || 0) - dt);
   if (bo) { c.boost = Math.max(0, c.boost - PHYSICS_TUNING.BOOST_DRAIN_PER_SECOND * dt); emitBoost(c); }
   c.fl = bo ? 1 : 0;
-  if (ground) {
-    c.jumps = 0; c.jt = 0; c.hold = 0; c.pitch *= Math.max(0, 1 - 10 * dt);
+  if (c.wallVerticalAxis) {
+    // On the vertical wall, throttle drives along the wall's vertical axis.
+    // Steering moves laterally across the wall so the player can aim along it.
+    c.jumps = 0; c.jt = 0; c.hold = 0;
+    const wallAccel = PHYSICS_TUNING.GROUND_ACCELERATION *
+      (physicsStyle === 'arcade' ? 1.15 : physicsStyle === 'heavy' ? 0.8 : 1);
+    c.vy += (ct.throttle * wallAccel - PHYSICS_TUNING.GRAVITY_FORCE * 0.55) * dt;
+    c.vy = clamp(c.vy, -20, PHYSICS_TUNING.MAX_SPEED);
+    if (c.wallVerticalAxis === 'x') {
+      c.x = c.wallVerticalSign * (HW - 1.3); c.vx = 0;
+      c.vz = clamp((c.vz + ct.steer * 16 * dt) * Math.max(0, 1 - 3.5 * dt), -24, 24);
+    } else {
+      c.z = c.wallVerticalSign * (HL - 1.9); c.vz = 0;
+      c.vx = clamp((c.vx - ct.steer * 16 * dt) * Math.max(0, 1 - 3.5 * dt), -24, 24);
+    }
+    c.pitch += wrap(Math.PI / 2 - c.pitch) * clamp(9 * dt, 0, 1);
+    c.roll = 0;
+  } else if (ground) {
+    c.jumps = 0; c.jt = 0; c.hold = 0;
+    if (c.wallRide) {
+      const currentRamp = arenaRampAt(c.x, c.z);
+      const pitchTarget = Math.atan(currentRamp.dx * sy + currentRamp.dz * cy);
+      c.pitch += wrap(pitchTarget - c.pitch) * clamp(9 * dt, 0, 1);
+    } else c.pitch *= Math.max(0, 1 - 10 * dt);
     let vf = c.vx * sy + c.vz * cy, vs = c.vx * cy - c.vz * sy;
     const hb = ct.hand ? 1 : 0;
     const physicsAccel = physicsStyle === 'arcade' ? 1.3 : physicsStyle === 'heavy' ? 0.82 : 1;
@@ -1036,7 +1071,15 @@ function stepCar(c, ct, dt) {
     c.vz += Math.cos(c.yaw) * cp * PHYSICS_TUNING.BOOST_FORCE * dt;
   }
   if (ct.jump) {
-    if (ground) {
+    if (c.wallVerticalAxis) {
+      const wallAxis = c.wallVerticalAxis, wallSign = c.wallVerticalSign;
+      c.wallVerticalAxis = null; c.wallVerticalSign = 0; c.wallRide = false;
+      c.vy = Math.max(c.vy, PHYSICS_TUNING.JUMP_IMPULSE);
+      if (wallAxis === 'x') c.vx = wallSign * 9;
+      else c.vz = wallSign * 9;
+      c.pitch = 0; c.jumps = 1; c.jt = 0;
+      c.hold = PHYSICS_TUNING.JUMP_HOLD_DURATION; c.y += 0.05;
+    } else if (ground) {
       c.vy = PHYSICS_TUNING.JUMP_IMPULSE; c.jumps = 1; c.jt = 0;
       c.hold = PHYSICS_TUNING.JUMP_HOLD_DURATION; c.y += 0.05;
     } else if (c.jumps === 1 && c.jt < PHYSICS_TUNING.DOUBLE_JUMP_WINDOW) {
@@ -1064,14 +1107,32 @@ function stepCar(c, ct, dt) {
   if (Math.abs(c.x) > HW - 1.3) {
     const sx = Math.sign(c.x); c.x = sx * (HW - 1.3);
     const edgeRamp = arenaRampAt(c.x, c.z);
-    if (edgeRamp.height > 0.3 && c.y <= edgeRamp.height + 1.5) c.vx = 0;
-    else c.vx *= -0.2;
+    const outwardSpeed = c.vx * sx;
+    const noseOut = Math.sin(c.yaw) * sx;
+    if (c.wallVerticalAxis === 'x') {
+      c.vx = 0;
+    } else if (c.wallRide && edgeRamp.height > WALL_RAMP_HEIGHT * 0.62 && noseOut > 0.42 && outwardSpeed > 5) {
+      c.wallVerticalAxis = 'x'; c.wallVerticalSign = sx;
+      c.y = Math.max(c.y, edgeRamp.height + 0.55);
+      c.vy = Math.max(c.vy, Math.max(7, outwardSpeed * 0.62));
+      c.vx = 0; c.pitch = Math.atan(edgeRamp.dx * Math.sin(c.yaw) + edgeRamp.dz * Math.cos(c.yaw)); c.roll = 0;
+      c.wallRide = true;
+    } else c.vx *= -0.2;
   }
   if (Math.abs(c.z) > HL - 1.9) {
     const sz = Math.sign(c.z); c.z = sz * (HL - 1.9);
     const edgeRamp = arenaRampAt(c.x, c.z);
-    if (edgeRamp.height > 0.3 && Math.abs(c.x) > GW + 2 && c.y <= edgeRamp.height + 1.5) c.vz = 0;
-    else c.vz *= -0.2;
+    const outwardSpeed = c.vz * sz;
+    const noseOut = Math.cos(c.yaw) * sz;
+    if (c.wallVerticalAxis === 'z') {
+      c.vz = 0;
+    } else if (c.wallRide && Math.abs(c.x) > GW + 2 && edgeRamp.height > WALL_RAMP_HEIGHT * 0.62 && noseOut > 0.42 && outwardSpeed > 5) {
+      c.wallVerticalAxis = 'z'; c.wallVerticalSign = sz;
+      c.y = Math.max(c.y, edgeRamp.height + 0.55);
+      c.vy = Math.max(c.vy, Math.max(7, outwardSpeed * 0.62));
+      c.vz = 0; c.pitch = Math.atan(edgeRamp.dx * Math.sin(c.yaw) + edgeRamp.dz * Math.cos(c.yaw)); c.roll = 0;
+      c.wallRide = true;
+    } else c.vz *= -0.2;
   }
   const ov = Math.abs(c.x) + Math.abs(c.z) - (HW + HL - CH - 2.5); // rounded corners
   if (ov > 0) {
@@ -1080,15 +1141,27 @@ function stepCar(c, ct, dt) {
   }
   const rampNow = arenaRampAt(c.x, c.z);
   const rampSupportY = rampNow.height + 0.55;
-  if (rampNow.height > 0.03 && ((c.wallRide && !ct.jump) || c.y < rampSupportY - 0.05 || (c.y <= rampSupportY + 0.22 && c.vy <= 0.5))) {
+  if (c.wallVerticalAxis) {
+    c.wallRide = true; c.roll = 0;
+    // If the car runs out of upward momentum, settle back onto the curved ramp.
+    if (c.y <= rampSupportY + 0.45 && c.vy < 0) {
+      c.wallVerticalAxis = null; c.wallVerticalSign = 0;
+      c.y = rampSupportY; c.vy = 0; c.wallRide = true;
+      c.pitch = Math.atan(rampNow.dx * Math.sin(c.yaw) + rampNow.dz * Math.cos(c.yaw));
+    } else if (c.y >= CEIL - 1.5 || c.vy < -8) {
+      c.wallVerticalAxis = null; c.wallVerticalSign = 0;
+      c.wallRide = false; c.pitch = 0; c.vy = Math.min(c.vy, 0);
+    } else {
+      c.pitch += wrap(Math.PI / 2 - c.pitch) * clamp(9 * dt, 0, 1);
+    }
+  } else if (rampNow.height > 0.03 && ((c.wallRide && !ct.jump) || c.y < rampSupportY - 0.05 || (c.y <= rampSupportY + 0.22 && c.vy <= 0.5))) {
     c.y = rampSupportY; c.vy = 0; c.wallRide = true;
-    if (rampNow.side) {
-      const rollTarget = Math.atan(rampNow.dx);
-      c.roll += (rollTarget - c.roll) * clamp(12 * dt, 0, 1);
-    } else c.roll += (0 - c.roll) * clamp(8 * dt, 0, 1);
+    const slopeAlongNose = rampNow.dx * Math.sin(c.yaw) + rampNow.dz * Math.cos(c.yaw);
+    const pitchTarget = Math.atan(slopeAlongNose);
+    c.pitch += wrap(pitchTarget - c.pitch) * clamp(10 * dt, 0, 1);
+    c.roll += (0 - c.roll) * clamp(10 * dt, 0, 1);
   } else {
     c.wallRide = false;
-    // Preserve player-controlled air-roll instead of auto-leveling the car every frame.
     if (c.y <= 0.56) c.roll += (0 - c.roll) * clamp(7 * dt, 0, 1);
     else c.roll = wrap(c.roll);
   }
