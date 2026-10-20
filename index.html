@@ -78,8 +78,15 @@
     <div class="opts"><span>Physics</span><select id="physics"><option value="standard">Standard</option><option value="arcade">Arcade (snappy)</option><option value="floaty">Floaty aerials</option><option value="heavy">Heavy car</option></select><label class="toggle-label"><input id="localTwo" type="checkbox"> Local 2-player</label></div>
     <div class="opts"><span>Match</span><button data-mode="1">1v1</button><button data-mode="2">2v2</button><button data-mode="3">3v3</button></div>
     <div class="opts"><span>Bots</span><button data-diff="0">Easy</button><button data-diff="1">Medium</button><button data-diff="2">Hard</button></div>
+
+    <p>Keyboard defaults — P1: <b>W A S D</b>, jump <b>Space</b>, boost <b>Left Shift</b>, drift <b>E</b>, air roll <b>Q/E</b>. Change any binding above.</p>
+    <p>Controller defaults — steer with the <b>left stick</b>, accelerate <b>RT/R2</b>, reverse <b>LT/L2</b>, jump <b>A/✕</b>, boost <b>X/□</b>, drift <b>LB/L1</b>. Enable Local 2-player to use a second controller. Camera <b>C</b> · Mute <b>M</b> · Pause <b>P</b></p>
+    <p>In the air, steer and tilt to line up aerials. Press jump again with a direction to flip.</p>
+    <button id="playBtn" class="play-btn" type="button">▶ PLAY</button>
+    <p class="go" id="go">Choose your setup, then press PLAY</p>
+  </div>
     <details id="controlsSettings" class="controls-settings">
-      <summary>⚙ SETTINGS · AUDIO, ACCESSIBILITY &amp; CONTROLS</summary>
+      <summary>⚙ SETTINGS</summary>
       <div class="controls-inner">
         <section class="general-settings" aria-label="General settings">
           <h3>Audio</h3>
@@ -125,12 +132,6 @@
         <div class="control-bind-row"><strong>Air roll right</strong><button type="button" data-bind-key="rollRight">E</button><button type="button" data-bind-pad="rollRight">Button 6 (RB / R1)</button></div>
       </div>
     </details>
-    <p>Keyboard defaults — P1: <b>W A S D</b>, jump <b>Space</b>, boost <b>Left Shift</b>, drift <b>E</b>, air roll <b>Q/E</b>. Change any binding above.</p>
-    <p>Controller defaults — steer with the <b>left stick</b>, accelerate <b>RT/R2</b>, reverse <b>LT/L2</b>, jump <b>A/✕</b>, boost <b>X/□</b>, drift <b>LB/L1</b>. Enable Local 2-player to use a second controller. Camera <b>C</b> · Mute <b>M</b> · Pause <b>P</b></p>
-    <p>In the air, steer and tilt to line up aerials. Press jump again with a direction to flip.</p>
-    <button id="playBtn" class="play-btn" type="button">▶ PLAY</button>
-    <p class="go" id="go">Choose your setup, then press PLAY</p>
-  </div>
   <canvas id="mini" width="120" height="156"></canvas>
 </div>
 <!-- Three.js r149 from a CDN; falls back to lib/three.min.js if offline -->
