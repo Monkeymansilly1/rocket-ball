@@ -886,10 +886,8 @@ addEventListener('keydown', e => {
     }
     e.preventDefault(); e.stopPropagation(); return;
   }
-  if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code) ||
-      e.code === controlBindings.p1.keyboard.jump || e.code === controlBindings.p2.keyboard.jump ||
-      e.code === controlBindings.p1.keyboard.forward || e.code === controlBindings.p1.keyboard.reverse ||
-      e.code === controlBindings.p2.keyboard.forward || e.code === controlBindings.p2.keyboard.reverse) e.preventDefault();
+  const remappedKey = ['p1','p2'].some(who => Object.values(controlBindings[who].keyboard).includes(e.code));
+  if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code) || remappedKey) e.preventDefault();
   if (!keys[e.code] && e.code === controlBindings.p1.keyboard.jump) jumpQ = true;
   if (!keys[e.code] && e.code === controlBindings.p2.keyboard.jump && state === 'play' && localTwoPlayer) jumpQ2 = true;
   if (!keys[e.code] && e.code === 'KeyC') { ballCam = !ballCam; $('cam').textContent = ballCam ? 'Ball cam (C)' : 'Chase cam (C)'; }
@@ -978,15 +976,6 @@ function handleMenuChoice(e) {
 }
 $('menu').addEventListener('pointerdown', handleMenuChoice);
 $('menu').addEventListener('click', handleMenuChoice);
-function playerCtl() {
-  const j = jumpQ; jumpQ = false;
-  return {
-    throttle: (keys.KeyW ? 1 : 0) - (keys.KeyS ? 1 : 0),
-    steer: (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0),
-    roll: (keys.KeyE ? 1 : 0) - (keys.KeyQ ? 1 : 0),
-    jump: j, jumpHeld: !!keys.Space, hand: !!keys.KeyE, boost: !!keys.ShiftLeft
-  };
-}
 function playerActions(who) {
   const binding = controlBindings[who].keyboard;
   const pad = controllerForPlayer(who);
