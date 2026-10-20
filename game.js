@@ -32,8 +32,8 @@ let BLUE = 0x2fb8ff, ORANGE = 0xff8a1f;
 let gameVolume = 0.75, colourVisionMode = 'normal', controllerDeadZone = 0.16;
 try {
   const savedSettings = JSON.parse(localStorage.getItem('rocketArenaSettingsV1') || '{}');
-  if (Number.isFinite(savedSettings.volume)) gameVolume = clamp(savedSettings.volume, 0, 1);
-  if (Number.isFinite(savedSettings.deadZone)) controllerDeadZone = clamp(savedSettings.deadZone, 0.05, 0.4);
+  if (Number.isFinite(savedSettings.volume)) gameVolume = Math.max(0, Math.min(1, savedSettings.volume));
+  if (Number.isFinite(savedSettings.deadZone)) controllerDeadZone = Math.max(0.05, Math.min(0.4, savedSettings.deadZone));
   if (Object.prototype.hasOwnProperty.call(TEAM_COLOR_PRESETS, savedSettings.colourVisionMode)) colourVisionMode = savedSettings.colourVisionMode;
 } catch (_) {}
 BLUE = TEAM_COLOR_PRESETS[colourVisionMode].blue;
@@ -135,7 +135,8 @@ function buildArena() {
     [BLUE]: new THREE.MeshBasicMaterial({ color: 0x3bbcff, transparent: true, opacity: 0.34 }),
     [ORANGE]: new THREE.MeshBasicMaterial({ color: 0xff8a1f, transparent: true, opacity: 0.34 })
   };
-  dim[BLUE].userData.teamSide = 'blue'; dim[ORANGE].userData.teamSide = 'orange';
+  dim[BLUE].userData.teamSide = 'blue'; dim[BLUE].userData.teamRole = 'dim';
+  dim[ORANGE].userData.teamSide = 'orange'; dim[ORANGE].userData.teamRole = 'dim';
   bright[BLUE].userData.teamSide = 'blue'; bright[ORANGE].userData.teamSide = 'orange';
   wallGridMat[BLUE].userData.teamSide = 'blue'; wallGridMat[ORANGE].userData.teamSide = 'orange';
   const plane = (w, h, x, y, z, ry, m) => { const o = new THREE.Mesh(new THREE.PlaneGeometry(w, h), m); o.position.set(x, y, z); o.rotation.y = ry; scene.add(o); };
@@ -990,7 +991,11 @@ function applyColourVisionMode(modeName, rebuild = true, persist = true) {
     const materials = object.material ? (Array.isArray(object.material) ? object.material : [object.material]) : [];
     for (const material of materials) {
       const side = material.userData && material.userData.teamSide;
-      if (side && material.color) material.color.setHex(side === 'blue' ? BLUE : ORANGE);
+      if (side && material.color) {
+        const colour = new THREE.Color(side === 'blue' ? BLUE : ORANGE);
+        if (material.userData.teamRole === 'dim') colour.multiplyScalar(0.3);
+        material.color.copy(colour);
+      }
     }
   });
   if (!playerPaintCustom) playerPaint = hexCss(BLUE);
