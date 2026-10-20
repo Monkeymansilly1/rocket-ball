@@ -567,7 +567,7 @@ let replayCameraCarIndex = 0;
 const REPLAY_HISTORY_LIMIT = 301;
 function saveReplayFrame() {
   replayHistory.push({
-    cars: cars.map(c => ({ x:c.x, y:c.y, z:c.z, vx:c.vx, vy:c.vy, vz:c.vz, yaw:c.yaw, pitch:c.pitch, roll:c.roll, wallRide:c.wallRide, flip:c.flip, fx:c.fx, fz:c.fz, fl:c.fl })),
+    cars: cars.map(c => ({ x:c.x, y:c.y, z:c.z, vx:c.vx, vy:c.vy, vz:c.vz, yaw:c.yaw, pitch:c.pitch, roll:c.roll, wallRide:c.wallRide, wallVerticalAxis:c.wallVerticalAxis, wallVerticalSign:c.wallVerticalSign, flip:c.flip, fx:c.fx, fz:c.fz, fl:c.fl })),
     ball: { x:ball.x, y:ball.y, z:ball.z, vx:ball.vx, vy:ball.vy, vz:ball.vz, onRamp:ball.onRamp }
   });
   if (replayHistory.length > REPLAY_HISTORY_LIMIT) replayHistory.shift();
