@@ -736,11 +736,162 @@ function drawMini() {
 }
 
 // ---------- input ----------
-const keys = {}; let jumpQ = false;
+const CONTROL_ACTIONS = ['forward', 'reverse', 'left', 'right', 'jump', 'boost', 'hand', 'rollLeft', 'rollRight'];
+const DEFAULT_CONTROL_BINDINGS = {
+  p1: {
+    keyboard: { forward:'KeyW', reverse:'KeyS', left:'KeyA', right:'KeyD', jump:'Space', boost:'ShiftLeft', hand:'KeyE', rollLeft:'KeyQ', rollRight:'KeyE' },
+    pad: { forward:7, reverse:6, left:null, right:null, jump:0, boost:2, hand:4, rollLeft:4, rollRight:5 }
+  },
+  p2: {
+    keyboard: { forward:'ArrowUp', reverse:'ArrowDown', left:'ArrowLeft', right:'ArrowRight', jump:'Enter', boost:'ShiftRight', hand:'Slash', rollLeft:'Numpad1', rollRight:'Numpad3' },
+    pad: { forward:7, reverse:6, left:null, right:null, jump:0, boost:2, hand:4, rollLeft:4, rollRight:5 }
+  }
+};
+const controlBindings = JSON.parse(JSON.stringify(DEFAULT_CONTROL_BINDINGS));
+try {
+  const saved = JSON.parse(localStorage.getItem('rocketArenaControlsV1') || '{}');
+  for (const who of ['p1','p2']) for (const action of CONTROL_ACTIONS) {
+    const key = saved[who] && saved[who].keyboard && saved[who].keyboard[action];
+    const pad = saved[who] && saved[who].pad && saved[who].pad[action];
+    if (typeof key === 'string' && key) controlBindings[who].keyboard[action] = key;
+    if (pad === null || (Number.isInteger(pad) && pad >= 0 && pad < 32)) controlBindings[who].pad[action] = pad;
+  }
+} catch (_) {}
+const keys = {};
+let jumpQ = false, jumpQ2 = false;
+const padJumpQueued = { p1:false, p2:false };
+let pendingKeyCapture = null, pendingPadCapture = null;
+let connectedGamepads = [], previousPadButtons = Object.create(null);
+function saveControlBindings() {
+  try { localStorage.setItem('rocketArenaControlsV1', JSON.stringify(controlBindings)); }
+  catch (_) {}
+}
+function activeControlPlayer() {
+  return $('controlsPlayer') && $('controlsPlayer').value === 'p2' ? 'p2' : 'p1';
+}
+function keyLabel(code) {
+  const fixed = { Space:'Space', Enter:'Enter', ShiftLeft:'Left Shift', ShiftRight:'Right Shift', ControlLeft:'Left Ctrl', ControlRight:'Right Ctrl', AltLeft:'Left Alt', AltRight:'Right Alt', ArrowUp:'↑', ArrowDown:'↓', ArrowLeft:'←', ArrowRight:'→', Slash:'/', Backslash:'\\', Numpad1:'Num 1', Numpad3:'Num 3', Escape:'Esc', Tab:'Tab' };
+  if (fixed[code]) return fixed[code];
+  if (/^Key[A-Z]$/.test(code)) return code.slice(3);
+  if (/^Digit[0-9]$/.test(code)) return code.slice(5);
+  return code || 'Unbound';
+}
+function padButtonLabel(index) {
+  const labels = { 0:'Button 1 (A / ✕)', 1:'Button 2 (B / ○)', 2:'Button 3 (X / □)', 3:'Button 4 (Y / △)', 4:'Button 5 (LB / L1)', 5:'Button 6 (RB / R1)', 6:'LT / L2', 7:'RT / R2', 8:'Button 9', 9:'Button 10', 10:'Button 11', 11:'Button 12' };
+  return index === null || index === undefined ? 'Left stick' : (labels[index] || ('Button ' + (index + 1)));
+}
+function renderControlBindings() {
+  const who = activeControlPlayer(), binding = controlBindings[who];
+  document.querySelectorAll('[data-bind-key]').forEach(button => {
+    const action = button.dataset.bindKey;
+    button.textContent = pendingKeyCapture === action ? 'Press a key…' : keyLabel(binding.keyboard[action]);
+    button.classList.toggle('capture-active', pendingKeyCapture === action);
+  });
+  document.querySelectorAll('[data-bind-pad]').forEach(button => {
+    const action = button.dataset.bindPad;
+    const defaults = { forward:'RT / R2', reverse:'LT / L2', left:'Left stick ←', right:'Left stick →' };
+    button.textContent = pendingPadCapture === action ? 'Press a button…' :
+      (binding.pad[action] === null || binding.pad[action] === undefined ? (defaults[action] || 'Not set') : padButtonLabel(binding.pad[action]));
+    button.classList.toggle('capture-active', pendingPadCapture === action);
+  });
+}
+function setControllerStatus(message) {
+  const node = $('controllerStatus');
+  if (node) node.textContent = message;
+}
+function beginKeyCapture(action) {
+  pendingPadCapture = null; pendingKeyCapture = action;
+  setControllerStatus('Press the keyboard key for ' + action + ' (Esc cancels).');
+  renderControlBindings();
+}
+function beginPadCapture(action) {
+  pendingKeyCapture = null; pendingPadCapture = action;
+  setControllerStatus('Press a button or trigger on the controller you want to assign.');
+  renderControlBindings();
+}
+function controllerForPlayer(who) {
+  if (who === 'p2') return localTwoPlayer && connectedGamepads.length > 1 ? connectedGamepads[1] : null;
+  return connectedGamepads[0] || null;
+}
+function buttonValue(pad, action, who) {
+  if (!pad) return 0;
+  const index = controlBindings[who].pad[action];
+  if (!Number.isInteger(index)) return 0;
+  const button = pad.buttons && pad.buttons[index];
+  return button ? Math.max(button.value || 0, button.pressed ? 1 : 0) : 0;
+}
+function pollControllers() {
+  connectedGamepads = navigator.getGamepads
+    ? Array.from(navigator.getGamepads() || []).filter(pad => pad && pad.connected !== false).sort((a,b) => a.index - b.index)
+    : [];
+  const current = Object.create(null);
+  let captured = false;
+  for (const pad of connectedGamepads) {
+    for (let i = 0; i < (pad.buttons || []).length; i++) {
+      const button = pad.buttons[i];
+      const pressed = !!button && Math.max(button.value || 0, button.pressed ? 1 : 0) > 0.55;
+      const id = pad.index + ':' + i;
+      current[id] = pressed;
+      if (pressed && !previousPadButtons[id] && pendingPadCapture) {
+        const who = activeControlPlayer(), action = pendingPadCapture;
+        controlBindings[who].pad[action] = i;
+        pendingPadCapture = null; captured = true;
+        saveControlBindings(); renderControlBindings();
+        setControllerStatus('Assigned ' + padButtonLabel(i) + ' to ' + action + '.');
+      }
+    }
+  }
+  if (!captured && !pendingPadCapture) {
+    const first = connectedGamepads[0];
+    if (first) {
+      const jumpIndex = controlBindings.p1.pad.jump;
+      if (Number.isInteger(jumpIndex) && current[first.index + ':' + jumpIndex] && !previousPadButtons[first.index + ':' + jumpIndex]) padJumpQueued.p1 = true;
+    }
+    const second = localTwoPlayer && connectedGamepads.length > 1 ? connectedGamepads[1] : null;
+    if (second) {
+      const jumpIndex = controlBindings.p2.pad.jump;
+      if (Number.isInteger(jumpIndex) && current[second.index + ':' + jumpIndex] && !previousPadButtons[second.index + ':' + jumpIndex]) padJumpQueued.p2 = true;
+    }
+  }
+  previousPadButtons = current;
+  if (pendingKeyCapture || pendingPadCapture) return;
+  if (connectedGamepads.length) {
+    const names = connectedGamepads.map(pad => pad.id || ('Controller ' + (pad.index + 1)));
+    setControllerStatus('Connected: ' + names.join(' · ') + (localTwoPlayer && connectedGamepads.length > 1 ? ' — both players can use a controller.' : connectedGamepads.length > 1 ? ' — enable Local 2-player for controller 2.' : ''));
+  } else {
+    setControllerStatus('No controller detected. Connect one and press any button; use USB or Bluetooth.');
+  }
+}
+document.querySelectorAll('[data-bind-key]').forEach(button => button.addEventListener('click', () => beginKeyCapture(button.dataset.bindKey)));
+document.querySelectorAll('[data-bind-pad]').forEach(button => button.addEventListener('click', () => beginPadCapture(button.dataset.bindPad)));
+if ($('controlsPlayer')) $('controlsPlayer').addEventListener('change', () => { pendingKeyCapture = pendingPadCapture = null; renderControlBindings(); });
+if ($('resetControls')) $('resetControls').addEventListener('click', () => {
+  const who = activeControlPlayer();
+  controlBindings[who] = JSON.parse(JSON.stringify(DEFAULT_CONTROL_BINDINGS[who]));
+  pendingKeyCapture = pendingPadCapture = null; saveControlBindings(); renderControlBindings();
+  setControllerStatus(who === 'p1' ? 'Player 1 controls reset to defaults.' : 'Player 2 controls reset to defaults.');
+});
+renderControlBindings();
+
 addEventListener('keydown', e => {
-  if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code) || (e.code === 'Enter' && state === 'play')) e.preventDefault();
-  if (!keys[e.code] && e.code === 'Space') jumpQ = true;
-  if (!keys[e.code] && e.code === 'Enter' && state === 'play' && localTwoPlayer) jumpQ2 = true;
+  if (pendingKeyCapture) {
+    const action = pendingKeyCapture;
+    if (e.code === 'Escape') {
+      pendingKeyCapture = null; renderControlBindings(); setControllerStatus('Keyboard binding cancelled.');
+    } else {
+      const who = activeControlPlayer();
+      controlBindings[who].keyboard[action] = e.code;
+      pendingKeyCapture = null; saveControlBindings(); renderControlBindings();
+      setControllerStatus('Assigned ' + keyLabel(e.code) + ' to ' + action + '.');
+    }
+    e.preventDefault(); e.stopPropagation(); return;
+  }
+  if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code) ||
+      e.code === controlBindings.p1.keyboard.jump || e.code === controlBindings.p2.keyboard.jump ||
+      e.code === controlBindings.p1.keyboard.forward || e.code === controlBindings.p1.keyboard.reverse ||
+      e.code === controlBindings.p2.keyboard.forward || e.code === controlBindings.p2.keyboard.reverse) e.preventDefault();
+  if (!keys[e.code] && e.code === controlBindings.p1.keyboard.jump) jumpQ = true;
+  if (!keys[e.code] && e.code === controlBindings.p2.keyboard.jump && state === 'play' && localTwoPlayer) jumpQ2 = true;
   if (!keys[e.code] && e.code === 'KeyC') { ballCam = !ballCam; $('cam').textContent = ballCam ? 'Ball cam (C)' : 'Chase cam (C)'; }
   if (e.code === 'Enter' && (state === 'menu' || state === 'over') && document.activeElement !== $('name')) start();
   if (state === 'menu' || state === 'over') {
@@ -836,15 +987,44 @@ function playerCtl() {
     jump: j, jumpHeld: !!keys.Space, hand: !!keys.KeyE, boost: !!keys.ShiftLeft
   };
 }
-let jumpQ2 = false;
-function player2Ctl() {
-  const j = jumpQ2; jumpQ2 = false;
+function playerActions(who) {
+  const binding = controlBindings[who].keyboard;
+  const pad = controllerForPlayer(who);
+  const keyForward = keys[binding.forward] ? 1 : 0;
+  const keyReverse = keys[binding.reverse] ? 1 : 0;
+  const keyLeft = keys[binding.left] ? 1 : 0;
+  const keyRight = keys[binding.right] ? 1 : 0;
+  const padForward = buttonValue(pad, 'forward', who);
+  const padReverse = buttonValue(pad, 'reverse', who);
+  const padLeft = buttonValue(pad, 'left', who);
+  const padRight = buttonValue(pad, 'right', who);
+  let axisX = 0;
+  if (pad && pad.axes && Number.isFinite(pad.axes[0])) {
+    const raw = pad.axes[0], dead = 0.16;
+    axisX = Math.abs(raw) < dead ? 0 : Math.sign(raw) * (Math.abs(raw) - dead) / (1 - dead);
+  }
+  const jumpButton = buttonValue(pad, 'jump', who) > 0.55;
   return {
-    throttle: (keys.ArrowUp ? 1 : 0) - (keys.ArrowDown ? 1 : 0),
-    steer: (keys.ArrowRight ? 1 : 0) - (keys.ArrowLeft ? 1 : 0),
-    roll: (keys.Numpad3 ? 1 : 0) - (keys.Numpad1 ? 1 : 0),
-    jump: j, jumpHeld: !!keys.Enter, hand: !!keys.Slash, boost: !!keys.ShiftRight
+    throttle: Math.max(-1, Math.min(1, keyForward - keyReverse + padForward - padReverse)),
+    steer: Math.max(-1, Math.min(1, keyRight - keyLeft + axisX + padRight - padLeft)),
+    roll: (keys[binding.rollRight] ? 1 : 0) - (keys[binding.rollLeft] ? 1 : 0) +
+      (buttonValue(pad, 'rollRight', who) > 0.55 ? 1 : 0) -
+      (buttonValue(pad, 'rollLeft', who) > 0.55 ? 1 : 0),
+    jumpHeld: !!keys[binding.jump] || jumpButton,
+    jump: false,
+    hand: !!keys[binding.hand] || buttonValue(pad, 'hand', who) > 0.55,
+    boost: !!keys[binding.boost] || buttonValue(pad, 'boost', who) > 0.55
   };
+}
+function playerCtl() {
+  const j = jumpQ || padJumpQueued.p1; jumpQ = false; padJumpQueued.p1 = false;
+  const actions = playerActions('p1'); actions.jump = j;
+  return actions;
+}
+function player2Ctl() {
+  const j = jumpQ2 || padJumpQueued.p2; jumpQ2 = false; padJumpQueued.p2 = false;
+  const actions = playerActions('p2'); actions.jump = j;
+  return actions;
 }
 const pred = []; // where the ball will be every 0.1s for the next 4 seconds
 function predict() {
@@ -1755,6 +1935,7 @@ window.rocketArena = {
 let last = performance.now();
 (function loop(now) {
   const dt = Math.min(1 / 30, (now - last) / 1000); last = now;
+  pollControllers();
   if (!paused) update(dt);
   render(dt);
   requestAnimationFrame(loop);
