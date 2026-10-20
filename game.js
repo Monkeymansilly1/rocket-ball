@@ -845,12 +845,12 @@ function pollControllers() {
     const first = connectedGamepads[0];
     if (first) {
       const jumpIndex = controlBindings.p1.pad.jump;
-      if (Number.isInteger(jumpIndex) && current[first.index + ':' + jumpIndex] && !previousPadButtons[first.index + ':' + jumpIndex]) padJumpQueued.p1 = true;
+      if (state === 'play' && !paused && Number.isInteger(jumpIndex) && current[first.index + ':' + jumpIndex] && !previousPadButtons[first.index + ':' + jumpIndex]) padJumpQueued.p1 = true;
     }
     const second = localTwoPlayer && connectedGamepads.length > 1 ? connectedGamepads[1] : null;
     if (second) {
       const jumpIndex = controlBindings.p2.pad.jump;
-      if (Number.isInteger(jumpIndex) && current[second.index + ':' + jumpIndex] && !previousPadButtons[second.index + ':' + jumpIndex]) padJumpQueued.p2 = true;
+      if (state === 'play' && !paused && Number.isInteger(jumpIndex) && current[second.index + ':' + jumpIndex] && !previousPadButtons[second.index + ':' + jumpIndex]) padJumpQueued.p2 = true;
     }
   }
   previousPadButtons = current;
