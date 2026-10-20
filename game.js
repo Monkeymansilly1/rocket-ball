@@ -22,7 +22,22 @@ const PHYSICS_TUNING = {
   BALL_HIT_MULTIPLIER: 1.35, BALL_HIT_FORWARD_FORCE: 6, BALL_FORWARD_SPEED_FACTOR: 0.34,
   BALL_FLIP_HIT_BONUS: 8, BALL_BOOST_HIT_BONUS: 5, BALL_UPWARD_POP: 5.5
 };
-const MATCH = 180, BLUE = 0x2fb8ff, ORANGE = 0xff8a1f;
+const MATCH = 180;
+const TEAM_COLOR_PRESETS = {
+  normal: { blue: 0x2fb8ff, orange: 0xff8a1f },
+  'blue-amber': { blue: 0x0072b2, orange: 0xe69f00 },
+  'high-contrast': { blue: 0x00a6ff, orange: 0xff3b30 }
+};
+let BLUE = 0x2fb8ff, ORANGE = 0xff8a1f;
+let gameVolume = 0.75, colourVisionMode = 'normal', controllerDeadZone = 0.16;
+try {
+  const savedSettings = JSON.parse(localStorage.getItem('rocketArenaSettingsV1') || '{}');
+  if (Number.isFinite(savedSettings.volume)) gameVolume = clamp(savedSettings.volume, 0, 1);
+  if (Number.isFinite(savedSettings.deadZone)) controllerDeadZone = clamp(savedSettings.deadZone, 0.05, 0.4);
+  if (Object.prototype.hasOwnProperty.call(TEAM_COLOR_PRESETS, savedSettings.colourVisionMode)) colourVisionMode = savedSettings.colourVisionMode;
+} catch (_) {}
+BLUE = TEAM_COLOR_PRESETS[colourVisionMode].blue;
+ORANGE = TEAM_COLOR_PRESETS[colourVisionMode].orange;
 const WALL_RAMP_WIDTH = 24, WALL_RAMP_HEIGHT = 9.5;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const rampEase = t => t * t * (3 - 2 * t); // smooth start/end avoids jolts; vertical-wall mode takes over at the edge
@@ -120,6 +135,9 @@ function buildArena() {
     [BLUE]: new THREE.MeshBasicMaterial({ color: 0x3bbcff, transparent: true, opacity: 0.34 }),
     [ORANGE]: new THREE.MeshBasicMaterial({ color: 0xff8a1f, transparent: true, opacity: 0.34 })
   };
+  dim[BLUE].userData.teamSide = 'blue'; dim[ORANGE].userData.teamSide = 'orange';
+  bright[BLUE].userData.teamSide = 'blue'; bright[ORANGE].userData.teamSide = 'orange';
+  wallGridMat[BLUE].userData.teamSide = 'blue'; wallGridMat[ORANGE].userData.teamSide = 'orange';
   const plane = (w, h, x, y, z, ry, m) => { const o = new THREE.Mesh(new THREE.PlaneGeometry(w, h), m); o.position.set(x, y, z); o.rotation.y = ry; scene.add(o); };
   const wall = (w, x, z, ry, col) => {
     plane(w, BH, x, BH / 2, z, ry, dim[col]);
@@ -162,7 +180,9 @@ function buildArena() {
     post(-GW, GH / 2, 0.9, GH); post(GW, GH / 2, 0.9, GH); post(0, GH, 2 * GW + 0.9, 0.9);
     const net = new THREE.Mesh(new THREE.BoxGeometry(2 * GW, GH, GD, 12, 5, 5), new THREE.MeshBasicMaterial({ color: col, wireframe: true, transparent: true, opacity: 0.3 }));
     net.position.set(0, GH / 2, sz * (HL + GD / 2)); scene.add(net);
-    const pl = new THREE.PointLight(col, 1.2, 60); pl.position.set(0, 6, sz * (HL - 5)); scene.add(pl);
+    const pl = new THREE.PointLight(col, 1.2, 60);
+    pl.userData.teamSide = sz < 0 ? 'blue' : 'orange';
+    pl.position.set(0, 6, sz * (HL - 5)); scene.add(pl);
   }
   const rampMat = rampMeshMaterial = new THREE.MeshStandardMaterial({ color: 0x59b849, roughness: 0.86, metalness: 0.03, side: THREE.DoubleSide });
   const addRampMesh = (axis, sign, alongMin, alongMax) => {
@@ -547,9 +567,9 @@ function initProfilePictureControls() {
   }
 }
 let playerCarModel = 'octane';
-let playerPaint = '#2fb8ff';
+let playerPaint = '#2fb8ff', playerPaintCustom = false;
 let player2CarModel = 'dominus';
-let player2Paint = '#ff8a1f';
+let player2Paint = '#ff8a1f', player2PaintCustom = false;
 let physicsStyle = 'standard';
 let localTwoPlayer = false;
 let goalExplosionStyle = 'classic';
@@ -707,16 +727,22 @@ function sparks(vn) {
 const sfx = {
   init() {
     if (this.ac) return; const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
-    const a = this.ac = new AC(); this.o = a.createOscillator(); this.o.type = 'sawtooth'; this.og = a.createGain(); this.og.gain.value = 0;
-    this.o.connect(this.og).connect(a.destination); this.o.start();
+    const a = this.ac = new AC();
+    this.master = a.createGain(); this.master.gain.value = gameVolume; this.master.connect(a.destination);
+    this.o = a.createOscillator(); this.o.type = 'sawtooth'; this.og = a.createGain(); this.og.gain.value = 0;
+    this.o.connect(this.og).connect(this.master); this.o.start();
     const nb = a.createBuffer(1, a.sampleRate, a.sampleRate), d = nb.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
     const src = a.createBufferSource(); src.buffer = nb; src.loop = true; const f = a.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 800;
-    this.bg = a.createGain(); this.bg.gain.value = 0; src.connect(f).connect(this.bg).connect(a.destination); src.start();
+    this.bg = a.createGain(); this.bg.gain.value = 0; src.connect(f).connect(this.bg).connect(this.master); src.start();
+  },
+  setVolume(value) {
+    gameVolume = clamp(Number(value) || 0, 0, 1);
+    if (this.master && this.ac) this.master.gain.setTargetAtTime(gameVolume, this.ac.currentTime, 0.025);
   },
   tone(f, d, type, v) {
-    if (!this.ac || muted) return; const a = this.ac, o = a.createOscillator(), g = a.createGain(); o.type = type; o.frequency.value = f;
+    if (!this.ac || muted || gameVolume <= 0) return; const a = this.ac, o = a.createOscillator(), g = a.createGain(); o.type = type; o.frequency.value = f;
     g.gain.setValueAtTime(v, a.currentTime); g.gain.exponentialRampToValueAtTime(0.001, a.currentTime + d);
-    o.connect(g).connect(a.destination); o.start(); o.stop(a.currentTime + d);
+    o.connect(g).connect(this.master || a.destination); o.start(); o.stop(a.currentTime + d);
   },
   update(c, on) {
     if (!this.ac) return; this.o.frequency.value = 55 + Math.hypot(c.vx, c.vz) * 3.2;
@@ -818,7 +844,9 @@ function buttonValue(pad, action, who) {
   const index = controlBindings[who].pad[action];
   if (!Number.isInteger(index)) return 0;
   const button = pad.buttons && pad.buttons[index];
-  return button ? Math.max(button.value || 0, button.pressed ? 1 : 0) : 0;
+  if (!button) return 0;
+  const raw = Math.max(button.value || 0, button.pressed ? 1 : 0);
+  return raw <= controllerDeadZone ? 0 : (raw - controllerDeadZone) / (1 - controllerDeadZone);
 }
 function pollControllers() {
   connectedGamepads = navigator.getGamepads
@@ -935,9 +963,9 @@ function updateGaragePreview() {
   if (label) label.textContent = (chosen.label || chosen.name || playerCarModel).toUpperCase() + ' · ' + (playerPaint || '#2fb8ff').toUpperCase();
 }
 const paintInput = $('paint');
-if (paintInput) paintInput.addEventListener('input', () => { playerPaint = paintInput.value || '#2fb8ff'; updateGaragePreview(); if (state === 'menu' || state === 'over') { buildTeams(); kickoff(); } });
+if (paintInput) paintInput.addEventListener('input', () => { playerPaint = paintInput.value || '#2fb8ff'; playerPaintCustom = true; updateGaragePreview(); if (state === 'menu' || state === 'over') { buildTeams(); kickoff(); } });
 const paint2Input = $('paint2');
-if (paint2Input) paint2Input.addEventListener('input', () => { player2Paint = paint2Input.value || '#ff8a1f'; if (state === 'menu' || state === 'over') { buildTeams(); kickoff(); } });
+if (paint2Input) paint2Input.addEventListener('input', () => { player2Paint = paint2Input.value || '#ff8a1f'; player2PaintCustom = true; if (state === 'menu' || state === 'over') { buildTeams(); kickoff(); } });
 updateGaragePreview();
 const stadiumInput = $('stadium');
 if (stadiumInput) stadiumInput.addEventListener('change', () => applyArenaStyle(stadiumInput.value));
@@ -989,7 +1017,7 @@ function playerActions(who) {
   const padRight = buttonValue(pad, 'right', who);
   let axisX = 0;
   if (pad && pad.axes && Number.isFinite(pad.axes[0])) {
-    const raw = pad.axes[0], dead = 0.16;
+    const raw = pad.axes[0], dead = controllerDeadZone;
     axisX = Math.abs(raw) < dead ? 0 : Math.sign(raw) * (Math.abs(raw) - dead) / (1 - dead);
   }
   const jumpButton = buttonValue(pad, 'jump', who) > 0.55;
