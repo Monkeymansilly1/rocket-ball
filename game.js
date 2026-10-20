@@ -967,6 +967,72 @@ if (paintInput) paintInput.addEventListener('input', () => { playerPaint = paint
 const paint2Input = $('paint2');
 if (paint2Input) paint2Input.addEventListener('input', () => { player2Paint = paint2Input.value || '#ff8a1f'; player2PaintCustom = true; if (state === 'menu' || state === 'over') { buildTeams(); kickoff(); } });
 updateGaragePreview();
+
+function hexCss(hex) { return '#' + Number(hex).toString(16).padStart(6, '0'); }
+function saveGeneralSettings() {
+  try {
+    localStorage.setItem('rocketArenaSettingsV1', JSON.stringify({
+      volume: gameVolume, colourVisionMode, deadZone: controllerDeadZone
+    }));
+  } catch (_) {}
+}
+function applyColourVisionMode(modeName, rebuild = true, persist = true) {
+  const mode = Object.prototype.hasOwnProperty.call(TEAM_COLOR_PRESETS, modeName) ? modeName : 'normal';
+  const palette = TEAM_COLOR_PRESETS[mode];
+  colourVisionMode = mode; BLUE = palette.blue; ORANGE = palette.orange;
+  document.body.dataset.colourVision = mode;
+  document.documentElement.style.setProperty('--team-blue', hexCss(BLUE));
+  document.documentElement.style.setProperty('--team-orange', hexCss(ORANGE));
+  scene.traverse(object => {
+    if (object.isLight && object.userData && object.userData.teamSide) {
+      object.color.setHex(object.userData.teamSide === 'blue' ? BLUE : ORANGE);
+    }
+    const materials = object.material ? (Array.isArray(object.material) ? object.material : [object.material]) : [];
+    for (const material of materials) {
+      const side = material.userData && material.userData.teamSide;
+      if (side && material.color) material.color.setHex(side === 'blue' ? BLUE : ORANGE);
+    }
+  });
+  if (!playerPaintCustom) playerPaint = hexCss(BLUE);
+  if (!player2PaintCustom) player2Paint = hexCss(ORANGE);
+  const p1PaintControl = $('paint'), p2PaintControl = $('paint2');
+  if (p1PaintControl && !playerPaintCustom) p1PaintControl.value = playerPaint;
+  if (p2PaintControl && !player2PaintCustom) p2PaintControl.value = player2Paint;
+  const colourSelect = $('settingColourVision');
+  if (colourSelect) colourSelect.value = mode;
+  updateGaragePreview();
+  if (persist) saveGeneralSettings();
+  if (rebuild && (state === 'menu' || state === 'over')) { buildTeams(); kickoff(); }
+}
+const volumeSetting = $('settingVolume');
+const volumeSettingValue = $('settingVolumeValue');
+if (volumeSetting) {
+  volumeSetting.value = String(Math.round(gameVolume * 100));
+  if (volumeSettingValue) volumeSettingValue.value = volumeSetting.value + '%';
+  volumeSetting.addEventListener('input', () => {
+    gameVolume = Number(volumeSetting.value) / 100;
+    if (volumeSettingValue) volumeSettingValue.value = volumeSetting.value + '%';
+    sfx.setVolume(gameVolume); saveGeneralSettings();
+  });
+}
+const colourVisionSetting = $('settingColourVision');
+if (colourVisionSetting) {
+  colourVisionSetting.value = colourVisionMode;
+  colourVisionSetting.addEventListener('change', () => applyColourVisionMode(colourVisionSetting.value, true, true));
+}
+const deadZoneSetting = $('settingDeadZone');
+const deadZoneSettingValue = $('settingDeadZoneValue');
+if (deadZoneSetting) {
+  deadZoneSetting.value = String(controllerDeadZone);
+  if (deadZoneSettingValue) deadZoneSettingValue.value = Math.round(controllerDeadZone * 100) + '%';
+  deadZoneSetting.addEventListener('input', () => {
+    controllerDeadZone = clamp(Number(deadZoneSetting.value) || 0.16, 0.05, 0.4);
+    if (deadZoneSettingValue) deadZoneSettingValue.value = Math.round(controllerDeadZone * 100) + '%';
+    saveGeneralSettings();
+  });
+}
+applyColourVisionMode(colourVisionMode, false, false);
+sfx.setVolume(gameVolume);
 const stadiumInput = $('stadium');
 if (stadiumInput) stadiumInput.addEventListener('change', () => applyArenaStyle(stadiumInput.value));
 const physicsInput = $('physics');
@@ -1787,7 +1853,7 @@ function showVictoryScreen() {
   $('victoryCars').innerHTML = displayRows.map(({car,idx}) =>
     '<div class="victory-car-card '+(car.team ? 'orange-team' : 'blue-team')+'"><div class="victory-player-identity">'+profileAvatarHTML(car,idx)+'<div><div class="victory-car-name">'+escapeStats(car.displayName || ('PLAYER '+(idx+1)))+'</div><div class="victory-car-model">'+escapeStats(String(car.model || 'Octane').toUpperCase())+'</div></div></div></div>'
   ).join('') || '<div class="victory-draw-label">DRAW</div>';
-  $('statsBody').innerHTML = rows.map(({car,stats,idx}) => '<tr><td><div class="stat-player-cell"><span class="team-dot" style="background:'+(car.team?'#ff8a1f':'#2fb8ff')+'"></span>'+profileAvatarHTML(car,idx)+'<span class="stat-player-label"><strong>'+escapeStats(car.displayName || ('PLAYER '+(idx+1)))+'</strong><small class="stat-car-model">'+escapeStats(String(car.model || 'Octane').toUpperCase())+'</small></span></div></td><td>'+stats.goals+'</td><td>'+stats.assists+'</td><td>'+stats.shots+'</td><td>'+stats.saves+'</td><td>'+stats.clears+'</td><td>'+(stats.demos || 0)+'</td></tr>').join('');
+  $('statsBody').innerHTML = rows.map(({car,stats,idx}) => '<tr><td><div class="stat-player-cell"><span class="team-dot" style="background:'+hexCss(car.team?ORANGE:BLUE)+'"></span>'+profileAvatarHTML(car,idx)+'<span class="stat-player-label"><strong>'+escapeStats(car.displayName || ('PLAYER '+(idx+1)))+'</strong><small class="stat-car-model">'+escapeStats(String(car.model || 'Octane').toUpperCase())+'</small></span></div></td><td>'+stats.goals+'</td><td>'+stats.assists+'</td><td>'+stats.shots+'</td><td>'+stats.saves+'</td><td>'+stats.clears+'</td><td>'+(stats.demos || 0)+'</td></tr>').join('');
   const carsView = $('victoryCars'), statsView = $('victoryStats');
   if (carsView) carsView.style.display = 'grid';
   if (statsView) statsView.style.display = 'none';
