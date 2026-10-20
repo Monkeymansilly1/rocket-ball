@@ -78,6 +78,28 @@
     <div class="opts"><span>Physics</span><select id="physics"><option value="standard">Standard</option><option value="arcade">Arcade (snappy)</option><option value="floaty">Floaty aerials</option><option value="heavy">Heavy car</option></select><label class="toggle-label"><input id="localTwo" type="checkbox"> Local 2-player</label></div>
     <div class="opts"><span>Match</span><button data-mode="1">1v1</button><button data-mode="2">2v2</button><button data-mode="3">3v3</button></div>
     <div class="opts"><span>Bots</span><button data-diff="0">Easy</button><button data-diff="1">Medium</button><button data-diff="2">Hard</button></div>
+    <details id="controlsSettings" class="controls-settings">
+      <summary>🎮 CONTROLS &amp; CONTROLLER SETTINGS</summary>
+      <div class="controls-inner">
+        <div class="controls-toolbar">
+          <label for="controlsPlayer">Configure</label>
+          <select id="controlsPlayer"><option value="p1">Player 1</option><option value="p2">Player 2</option></select>
+          <button id="resetControls" type="button">Reset defaults</button>
+        </div>
+        <div id="controllerStatus" role="status" aria-live="polite">Searching for controller…</div>
+        <p class="controls-tip">Connect a controller before starting. Keyboard and controller can both be used. Click a binding, then press the key or controller button you want.</p>
+        <div class="control-bind-head"><span>Action</span><span>Keyboard</span><span>Controller</span></div>
+        <div class="control-bind-row"><strong>Accelerate</strong><button type="button" data-bind-key="forward">W</button><button type="button" data-bind-pad="forward">Left stick ↑</button></div>
+        <div class="control-bind-row"><strong>Reverse</strong><button type="button" data-bind-key="reverse">S</button><button type="button" data-bind-pad="reverse">Left stick ↓</button></div>
+        <div class="control-bind-row"><strong>Steer left</strong><button type="button" data-bind-key="left">A</button><button type="button" data-bind-pad="left">Left stick ←</button></div>
+        <div class="control-bind-row"><strong>Steer right</strong><button type="button" data-bind-key="right">D</button><button type="button" data-bind-pad="right">Left stick →</button></div>
+        <div class="control-bind-row"><strong>Jump / Dodge</strong><button type="button" data-bind-key="jump">Space</button><button type="button" data-bind-pad="jump">Button 1 (A / ✕)</button></div>
+        <div class="control-bind-row"><strong>Boost</strong><button type="button" data-bind-key="boost">Left Shift</button><button type="button" data-bind-pad="boost">Button 3 (X / □)</button></div>
+        <div class="control-bind-row"><strong>Drift / Air roll</strong><button type="button" data-bind-key="hand">E</button><button type="button" data-bind-pad="hand">Button 5 (LB / L1)</button></div>
+        <div class="control-bind-row"><strong>Air roll left</strong><button type="button" data-bind-key="rollLeft">Q</button><button type="button" data-bind-pad="rollLeft">Button 5 (LB / L1)</button></div>
+        <div class="control-bind-row"><strong>Air roll right</strong><button type="button" data-bind-key="rollRight">E</button><button type="button" data-bind-pad="rollRight">Button 6 (RB / R1)</button></div>
+      </div>
+    </details>
     <p>Player 1: <b>W A S D</b>, jump <b>Space</b>, boost <b>Left Shift</b>, drift <b>E</b>. In the air: pitch <b>W/S</b>, yaw <b>A/D</b>, roll <b>Q/E</b>.</p>
     <p>Player 2 (local): <b>Arrow keys</b>, jump <b>Enter</b>, boost <b>Right Shift</b>, drift <b>/</b>. Air roll: <b>Numpad 1/3</b>. Camera <b>C</b> · Mute <b>M</b> · Pause <b>P</b></p>
     <p>In the air, steer and tilt to line up aerials. Press jump again with a direction to flip.</p>
