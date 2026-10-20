@@ -355,3 +355,72 @@ body[data-colour-vision="high-contrast"] #p2Tag { text-shadow:0 0 3px #000,0 0 8
   .setting-row label { font-size:12px; }
   .setting-row select { padding:7px 5px !important; }
 }
+
+
+/* Make Settings an always-visible, top-level garage control instead of a buried menu row. */
+#controlsSettings {
+  position:fixed !important;
+  top:16px !important;
+  right:18px !important;
+  left:auto !important;
+  bottom:auto !important;
+  z-index:1000 !important;
+  width:auto !important;
+  max-width:calc(100vw - 24px);
+  margin:0 !important;
+  overflow:visible !important;
+  border:0 !important;
+  border-radius:10px !important;
+  background:transparent !important;
+  box-shadow:none !important;
+  pointer-events:auto !important;
+}
+#controlsSettings > summary {
+  display:flex !important;
+  align-items:center;
+  justify-content:center;
+  min-height:44px;
+  padding:0 20px !important;
+  border:1px solid rgba(55,242,192,.8) !important;
+  border-radius:10px !important;
+  color:#071a24 !important;
+  background:linear-gradient(110deg,#37f2c0,#2fb8ff) !important;
+  box-shadow:0 8px 28px rgba(0,0,0,.48),0 0 18px rgba(55,242,192,.22);
+  font-size:14px !important;
+  font-weight:1000 !important;
+  letter-spacing:.12em !important;
+  white-space:nowrap;
+  cursor:pointer;
+}
+#controlsSettings > summary:hover { filter:brightness(1.08); transform:translateY(-1px); }
+#controlsSettings[open] {
+  inset:50% auto auto 50% !important;
+  transform:translate(-50%,-50%) !important;
+  width:min(900px,calc(100vw - 24px)) !important;
+  max-width:calc(100vw - 24px) !important;
+  max-height:calc(100vh - 24px) !important;
+  overflow:hidden !important;
+  background:rgba(4,12,24,.98) !important;
+  border:1px solid rgba(55,242,192,.68) !important;
+  border-radius:14px !important;
+  box-shadow:0 30px 100px rgba(0,0,0,.8),0 0 0 100vmax rgba(0,0,0,.62) !important;
+}
+#controlsSettings[open] > summary {
+  border-radius:13px 13px 0 0 !important;
+  box-shadow:none;
+  transform:none;
+}
+#controlsSettings[open] .controls-inner {
+  max-height:calc(100vh - 88px) !important;
+  overflow-y:auto !important;
+  overscroll-behavior:contain;
+  padding:14px !important;
+}
+#controlsSettings[open] .controls-tip,
+#controlsSettings[open] .setting-help { text-align:left; }
+@media(max-width:650px) {
+  #controlsSettings { top:8px !important; right:8px !important; }
+  #controlsSettings > summary { min-height:38px; padding:0 12px !important; font-size:12px !important; }
+  #controlsSettings[open] { inset:50% auto auto 50% !important; width:calc(100vw - 14px) !important; max-width:calc(100vw - 14px) !important; }
+  #controlsSettings[open] .controls-inner { max-height:calc(100vh - 72px) !important; padding:9px !important; }
+}
