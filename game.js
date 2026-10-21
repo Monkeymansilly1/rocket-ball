@@ -809,7 +809,44 @@ function padButtonLabel(index) {
 }
 function renderControlBindings() {
   const who = activeControlPlayer(), binding = controlBindings[who];
-  document.querySelectorAll('[data-bind-key]').forEach(button => {
+  
+/* Corner HUD controls inspired by modern car-soccer interfaces. */
+const garageToggle = $('garageToggle');
+if (garageToggle) garageToggle.addEventListener('click', () => {
+  $('menu').style.display = 'grid';
+  $('mt').textContent = 'GARAGE';
+  $('go').textContent = 'Choose your setup, then press PLAY';
+});
+const quickPlayButton = $('quickPlayButton');
+if (quickPlayButton) quickPlayButton.addEventListener('click', () => {
+  if (state === 'menu' || state === 'over') start();
+  else { $('menu').style.display = 'grid'; $('mt').textContent = 'MATCH SETUP'; }
+});
+const viewToggle = $('viewToggle');
+if (viewToggle) viewToggle.addEventListener('click', () => {
+  ballCam = !ballCam;
+  $('cam').textContent = ballCam ? 'Ball cam (C)' : 'Chase cam (C)';
+  viewToggle.innerHTML = (ballCam ? '◉ <span>BALL CAM</span>' : '◉ <span>PLAYER VIEW</span>');
+});
+const cinematicToggle = $('cinematicToggle');
+if (cinematicToggle) cinematicToggle.addEventListener('click', () => {
+  ballCam = !ballCam;
+  $('cam').textContent = ballCam ? 'Cinematic / ball cam' : 'Chase cam';
+  cinematicToggle.classList.toggle('on', ballCam);
+});
+const fullscreenToggle = $('fullscreenToggle');
+if (fullscreenToggle) fullscreenToggle.addEventListener('click', async () => {
+  try {
+    if (!document.fullscreenElement) await document.documentElement.requestFullscreen();
+    else await document.exitFullscreen();
+  } catch (_) {}
+});
+const skipReplayButton = $('skipReplayButton');
+if (skipReplayButton) skipReplayButton.addEventListener('click', () => {
+  if (state === 'replay') replayIndex = Math.max(0, replayFrames.length - 1);
+});
+
+document.querySelectorAll('[data-bind-key]').forEach(button => {
     const action = button.dataset.bindKey;
     button.textContent = pendingKeyCapture === action ? 'Press a key…' : keyLabel(binding.keyboard[action]);
     button.classList.toggle('capture-active', pendingKeyCapture === action);
