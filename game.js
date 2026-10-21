@@ -813,6 +813,7 @@ function renderControlBindings() {
 /* Corner HUD controls inspired by modern car-soccer interfaces. */
 const garageToggle = $('garageToggle');
 if (garageToggle) garageToggle.addEventListener('click', () => {
+  state = 'menu';
   $('menu').style.display = 'grid';
   $('mt').textContent = 'GARAGE';
   $('go').textContent = 'Choose your setup, then press PLAY';
@@ -820,7 +821,7 @@ if (garageToggle) garageToggle.addEventListener('click', () => {
 const quickPlayButton = $('quickPlayButton');
 if (quickPlayButton) quickPlayButton.addEventListener('click', () => {
   if (state === 'menu' || state === 'over') start();
-  else { $('menu').style.display = 'grid'; $('mt').textContent = 'MATCH SETUP'; }
+  else { state = 'menu'; $('menu').style.display = 'grid'; $('mt').textContent = 'MATCH SETUP'; }
 });
 const viewToggle = $('viewToggle');
 if (viewToggle) viewToggle.addEventListener('click', () => {
