@@ -1505,8 +1505,7 @@ function stepCar(c, ct, dt) {
   }
   // Supersonic has hysteresis: enter at 2200 reference units/s, retain to 2100,
   // and keep the state for at most one second after dropping below the entry threshold.
-  const carSpeed = Math.hypot(c.vx, c.vy, c.vz);
-  const referenceSpeed = carSpeed * PHYSICS_TUNING.REFERENCE_SCALE;
+  const referenceSpeed = Math.hypot(c.vx, c.vy, c.vz) * PHYSICS_TUNING.REFERENCE_SCALE;
   if (referenceSpeed >= PHYSICS_TUNING.SUPERSONIC_START_REFERENCE) {
     c.supersonic = true;
     c.supersonicTimer = PHYSICS_TUNING.SUPERSONIC_HOLD_SECONDS;
