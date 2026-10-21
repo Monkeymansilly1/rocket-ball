@@ -424,3 +424,78 @@ body[data-colour-vision="high-contrast"] #p2Tag { text-shadow:0 0 3px #000,0 0 8
   #controlsSettings[open] { inset:50% auto auto 50% !important; width:calc(100vw - 14px) !important; max-width:calc(100vw - 14px) !important; }
   #controlsSettings[open] .controls-inner { max-height:calc(100vh - 72px) !important; padding:9px !important; }
 }
+
+
+/* Car Soccer-inspired match presentation: keep the arena visible and controls anchored to corners. */
+:root { --ui-blue:#123b79; --ui-blue-light:#2d69c4; --ui-orange:#ff9829; --ui-ink:#07182f; }
+#score {
+  top:18px; padding:0; border:2px solid rgba(255,255,255,.72); border-radius:12px;
+  overflow:hidden; box-shadow:0 5px 0 #07152a,0 10px 28px #0007; font-style:normal;
+}
+#score b,#score span { min-width:58px; padding:7px 15px; font-size:30px; }
+#s0 { background:var(--team-blue,#2fb8ff); }
+#s1 { background:var(--team-orange,#ff8a1f); }
+#clock { background:#0a2145; font-size:22px!important; min-width:78px!important; color:#fff; }
+#player { top:78px; background:#102d56d9; border:1px solid #ffffff30; border-radius:20px; padding:5px 14px; }
+#boost {
+  right:28px; bottom:120px; width:154px; height:154px; border-radius:50%;
+  background:radial-gradient(circle at 50% 50%,#153c75 0 57%,#0b2148 58% 72%,#d9e7ff 73% 79%,#14335f 80%);
+  border:5px solid #071b38; box-shadow:0 5px 0 #06152c,0 12px 30px #0006;
+}
+#bf { left:12%; top:12%; width:76%; height:76%; border-radius:50%; background:conic-gradient(#ffca57 0deg, #ff9829 240deg, transparent 241deg); opacity:.95; }
+#bt { top:46px; right:0; left:0; text-align:center; color:#fff; font-size:32px; font-style:normal; }
+#boost::after { content:"BOOST"; position:absolute; left:0; right:0; top:86px; text-align:center; font:900 12px "Trebuchet MS",sans-serif; letter-spacing:.15em; color:#d9e7ff; }
+#cam { left:28px; bottom:28px; padding:10px 15px; border:2px solid #ffffff35; border-radius:8px; color:#fff; background:#103366e8; box-shadow:0 4px 0 #06152c; }
+#goalBy { bottom:7.5%; font-size:clamp(23px,3vw,42px); text-transform:uppercase; letter-spacing:.04em; }
+#goalSpeed { position:absolute; left:0; right:0; bottom:4.2%; text-align:center; color:#dceaff; font:800 16px "Trebuchet MS",sans-serif; text-shadow:0 2px 8px #000; }
+#msg { text-shadow:0 5px 0 #09203c,0 10px 28px #0009; }
+#menu {
+  width:min(590px,calc(100vw - 30px)); left:24px; top:82px; bottom:82px; right:auto; inset:82px auto 82px 24px;
+  display:grid; align-content:start; justify-content:stretch; gap:8px; padding:24px 22px;
+  background:linear-gradient(145deg,rgba(5,20,43,.97),rgba(8,35,70,.92));
+  border:2px solid #6da8ed65; border-radius:16px; border-right:2px solid #6da8ed65;
+  box-shadow:0 18px 70px #0009; backdrop-filter:blur(12px); text-align:left;
+}
+#menu h1 { font-size:clamp(32px,4vw,52px); line-height:1; margin:0 0 6px; text-align:left; letter-spacing:.02em; }
+#menu .opts { justify-content:flex-start; gap:6px; margin:2px 0; }
+#menu .opts span { width:76px; flex-shrink:0; text-align:left; font-size:13px; text-transform:uppercase; letter-spacing:.04em; color:#9fc4f5; }
+#menu .opts button { padding:6px 10px; font-size:15px; border-radius:7px; }
+#menu input,#menu select { font-size:14px; padding:7px 8px; }
+#menu p { font-size:13px; line-height:1.45; }
+#menu .play-btn { justify-self:start; min-width:190px; padding:12px 24px; margin-top:8px; border:2px solid #ffd08b; border-radius:9px; background:var(--ui-orange); color:#091b35; box-shadow:0 5px 0 #8b4b13; font-size:25px; }
+#menu .play-btn:hover { color:#091b35; filter:brightness(1.08); }
+#controlsSettings { top:18px!important; right:20px!important; }
+#controlsSettings > summary { background:var(--ui-blue)!important; color:white!important; border:2px solid #7eaff5!important; box-shadow:0 5px 0 #07152a,0 10px 24px #0006!important; letter-spacing:.04em!important; }
+#referenceToolbar {
+  position:fixed; z-index:12; top:18px; right:205px; display:flex; gap:7px; pointer-events:auto;
+}
+#referenceToolbar button,#skipReplayButton,#quickPlayButton {
+  border:2px solid #8db8f4; border-radius:9px; color:#fff; background:#174785;
+  box-shadow:0 5px 0 #07152a,0 10px 22px #0005; cursor:pointer; font:900 13px "Trebuchet MS",sans-serif;
+}
+#referenceToolbar button { min-height:46px; padding:0 13px; }
+#referenceToolbar button:hover { background:#2865b3; transform:translateY(-1px); }
+#skipReplayButton { position:fixed; z-index:12; right:285px; bottom:28px; min-height:52px; padding:0 17px; pointer-events:auto; }
+#skipReplayButton kbd { margin-left:10px; padding:4px 7px; background:#0a2348; border-radius:4px; font:700 11px "Trebuchet MS",sans-serif; }
+#quickPlayButton { position:fixed; z-index:12; right:28px; bottom:28px; min-width:190px; min-height:70px; padding:10px 20px; border-color:#ffd08b; background:var(--ui-orange); color:#081a33; box-shadow:0 5px 0 #8b4b13,0 10px 24px #0005; font:italic 1000 27px Impact,sans-serif; pointer-events:auto; }
+#quickPlayButton small { display:block; margin-top:2px; font:900 10px "Trebuchet MS",sans-serif; letter-spacing:.06em; }
+#quickPlayButton:hover { filter:brightness(1.08); transform:translateY(-1px); }
+body:has(#menu[style*="display: none"]) #quickPlayButton { display:block; }
+body:has(#menu:not([style*="display: none"])) #quickPlayButton { display:none; }
+body:has(#menu[style*="display: none"]) #garageToggle { display:flex; }
+body:has(#menu:not([style*="display: none"])) #garageToggle { display:none; }
+#garageToggle { display:none; align-items:center; gap:8px; background:var(--ui-orange)!important; border-color:#ffd08b!important; color:#081a33!important; }
+#skipReplayButton { display:none; }
+body:has(#msg.replay-title) #skipReplayButton { display:block; }
+@media(max-width:850px) {
+  #referenceToolbar { top:9px; right:9px; gap:4px; }
+  #referenceToolbar button { min-height:38px; padding:0 8px; font-size:11px; }
+  #referenceToolbar button span { display:none; }
+  #controlsSettings { top:58px!important; right:9px!important; }
+  #boost { width:112px; height:112px; right:14px; bottom:94px; }
+  #bt { top:29px; font-size:24px; }
+  #boost::after { top:64px; font-size:10px; }
+  #menu { left:8px; top:60px; bottom:72px; width:min(500px,calc(100vw - 16px)); padding:14px; }
+  #quickPlayButton { right:12px; bottom:12px; min-width:145px; min-height:56px; font-size:22px; }
+  #skipReplayButton { right:170px; bottom:12px; min-height:46px; padding:0 10px; }
+}
