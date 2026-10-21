@@ -1503,6 +1503,18 @@ function stepCar(c, ct, dt) {
     if (c.y <= 0.56) c.roll += (0 - c.roll) * clamp(7 * dt, 0, 1);
     else c.roll = wrap(c.roll);
   }
+  // Supersonic has hysteresis: enter at 2200 reference units/s, retain to 2100,
+  // and keep the state for at most one second after dropping below the entry threshold.
+  const carSpeed = Math.hypot(c.vx, c.vy, c.vz);
+  const referenceSpeed = carSpeed * PHYSICS_TUNING.REFERENCE_SCALE;
+  if (referenceSpeed >= PHYSICS_TUNING.SUPERSONIC_START_REFERENCE) {
+    c.supersonic = true;
+    c.supersonicTimer = PHYSICS_TUNING.SUPERSONIC_HOLD_SECONDS;
+  } else if (c.supersonic) {
+    c.supersonicTimer = Math.max(0, (c.supersonicTimer || 0) - dt);
+    if (referenceSpeed < PHYSICS_TUNING.SUPERSONIC_DROP_REFERENCE && c.supersonicTimer <= 0) c.supersonic = false;
+  }
+  if (c.mesh && c.mesh.root) c.mesh.root.userData.supersonic = !!c.supersonic;
   for (const p of pads) {
     // Cooldown is global to the pad, not accelerated by the number of cars in a match.
     if (cars[0] === c) p.t = Math.max(0, p.t - dt);
@@ -1512,12 +1524,12 @@ function stepCar(c, ct, dt) {
     const verticalReach = p.big ? 3.4 : 2.0;
     if (p.t <= 0 && c.boost < 100 &&
         horizontalDistance < pickupRadius && verticalDistance < verticalReach) {
-      const amount = p.big ? 100 : 30;
+      const amount = p.big ? PHYSICS_TUNING.LARGE_BOOST_PICKUP : PHYSICS_TUNING.SMALL_BOOST_PICKUP;
       const before = c.boost;
       c.boost = Math.min(100, c.boost + amount);
       if (c.boost > before) {
-        p.t = p.big ? 10 : 4;
-        if (!c.ai) showGameEvent(p.big ? 'FULL BOOST +100' : 'BOOST +30', p.big ? '#ffca64' : '#37f2c0');
+        p.t = p.big ? PHYSICS_TUNING.LARGE_PAD_COOLDOWN : PHYSICS_TUNING.SMALL_PAD_COOLDOWN;
+        if (!c.ai) showGameEvent(p.big ? 'FULL BOOST +100' : 'BOOST +12', p.big ? '#ffca64' : '#37f2c0');
         for (let n = 0; n < (p.big ? 28 : 12); n++) {
           const a = Math.random() * Math.PI * 2, burst = 3 + Math.random() * 9;
           emit(p.x, p.surfaceY + 0.35, p.z, Math.cos(a) * burst, 3 + Math.random() * 6, Math.sin(a) * burst, 0.35 + Math.random() * 0.3, p.big ? 1 : 0.35, p.big ? 0.75 : 1, p.big ? 0.2 : 0.8);
