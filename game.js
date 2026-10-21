@@ -41,12 +41,13 @@ const PHYSICS_TUNING = {
   JUMP_IMPULSE: 11, JUMP_HOLD_FORCE: 28, JUMP_HOLD_DURATION: 0.2,
   DOUBLE_JUMP_IMPULSE: 9.5, DODGE_IMPULSE: 17,
   PITCH_TORQUE_SPEED: 3.4, YAW_TORQUE_SPEED: 2.85, ROLL_TORQUE_SPEED: 4.2,
-  BALL_GRAVITY_FORCE: 13, MAX_BALL_SPEED: 120, BALL_MAX_ANGULAR_SPEED: 6,
-  BALL_RESTITUTION: 0.6, BALL_FLOOR_RESTITUTION: 0.6, BALL_WALL_RESTITUTION: 0.6,
-  BALL_SURFACE_FRICTION: 0.03, BALL_HIT_MULTIPLIER: 1.0,
-  BALL_HIT_FORWARD_FORCE: 0.65 * (4600 / 50), BALL_FORWARD_SPEED_FACTOR: 0.34,
+  // Tuned to the existing arena's actual scale for predictable, playable ball movement.
+  BALL_GRAVITY_FORCE: 24, MAX_BALL_SPEED: 80, BALL_MAX_ANGULAR_SPEED: 6,
+  BALL_RESTITUTION: 0.82, BALL_FLOOR_RESTITUTION: 0.78, BALL_WALL_RESTITUTION: 0.84,
+  BALL_SURFACE_FRICTION: 0.035, BALL_HIT_MULTIPLIER: 1.35,
+  BALL_HIT_FORWARD_FORCE: 6, BALL_FORWARD_SPEED_FACTOR: 0.34,
   BALL_FLIP_HIT_BONUS: 8, BALL_BOOST_HIT_BONUS: 5,
-  BALL_UPWARD_POP: 0.35 * (291.67 / 50), BALL_EXTRA_HIT_MAX_RELATIVE_SPEED: 4600 / 50,
+  BALL_UPWARD_POP: 5.5, BALL_EXTRA_HIT_MAX_RELATIVE_SPEED: 4600 / 50,
   BALL_CAR_MASS_RATIO: 180 / 30
 };
 const MATCH = 180;
@@ -1648,17 +1649,8 @@ function hitBall(c) {
     const relativeHitSpeed = Math.min(Math.hypot(ball.vx - c.vx, ball.vy - c.vy, ball.vz - c.vz), PHYSICS_TUNING.BALL_EXTRA_HIT_MAX_RELATIVE_SPEED);
     const forwardImpulse = (PHYSICS_TUNING.BALL_HIT_FORWARD_FORCE +
       Math.min(forwardSpeed, PHYSICS_TUNING.MAX_SPEED) * PHYSICS_TUNING.BALL_FORWARD_SPEED_FACTOR +
-      (c.flip > 0 ? relativeHitSpeed * 0.65 : 0) +
+      (c.flip > 0 ? Math.min(8, relativeHitSpeed * 0.12) : 0) +
       (c.fl ? PHYSICS_TUNING.BALL_BOOST_HIT_BONUS : 0)) * PHYSICS_TUNING.BALL_HIT_MULTIPLIER;
-    // Off-centre contact adds angular velocity; cap spin at the requested 6 rad/s.
-    ball.wx += (ny * (c.z - ball.z) - nz * (c.y - ball.y)) * impulse * 0.08;
-    ball.wy += (nz * (c.x - ball.x) - nx * (c.z - ball.z)) * impulse * 0.08;
-    ball.wz += (nx * (c.y - ball.y) - ny * (c.x - ball.x)) * impulse * 0.08;
-    const spin = Math.hypot(ball.wx, ball.wy, ball.wz);
-    if (spin > PHYSICS_TUNING.BALL_MAX_ANGULAR_SPEED) {
-      const ss = PHYSICS_TUNING.BALL_MAX_ANGULAR_SPEED / spin;
-      ball.wx *= ss; ball.wy *= ss; ball.wz *= ss;
-    }
     ball.vx += forwardX * forwardImpulse; ball.vy += forwardY * forwardImpulse; ball.vz += forwardZ * forwardImpulse;
     const frontBumperHit = lf > 0.25 && dy > -0.35 && dy < 2.35;
     const undersideHit = ny > 0.3 && dy > 0.1;
@@ -1722,7 +1714,6 @@ function stepBall(dt) {
     ball.y = BR; ball.vy = -ball.vy * PHYSICS_TUNING.BALL_FLOOR_RESTITUTION;
     if (Math.abs(ball.vy) < 1.5) ball.vy = 0;
     const f = Math.max(0, 1 - PHYSICS_TUNING.BALL_FRICTION_REFERENCE * dt); ball.vx *= f; ball.vz *= f;
-    ball.wx *= Math.max(0, 1 - 0.7 * dt); ball.wy *= Math.max(0, 1 - 0.7 * dt); ball.wz *= Math.max(0, 1 - 0.7 * dt);
   }
   if (ball.y > CEIL - BR) { ball.y = CEIL - BR; ball.vy = -Math.abs(ball.vy) * PHYSICS_TUNING.BALL_RESTITUTION; }
   const az = Math.abs(ball.z), sz = Math.sign(ball.z);
@@ -2048,9 +2039,6 @@ function render(dt) {
   ballMesh.position.set(ball.x, ball.y, ball.z);
   const sp = Math.hypot(ball.vx, ball.vz);
   if (sp > 0.05) { axis.set(ball.vz, 0, -ball.vx).normalize(); ballMesh.rotateOnWorldAxis(axis, sp * dt / BR); }
-  if (Math.abs(ball.wx) + Math.abs(ball.wy) + Math.abs(ball.wz) > 0.001) {
-    ballMesh.rotateX(ball.wx * dt); ballMesh.rotateY(ball.wy * dt); ballMesh.rotateZ(ball.wz * dt);
-  }
   if (state === 'play' && Math.hypot(sp, ball.vy) > 26) emit(ball.x, ball.y, ball.z, (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2, 0.4, 0.3, 0.9, 0.8);
   for (const p of pads) {
     const active = p.t <= 0;
