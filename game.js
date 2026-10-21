@@ -8,19 +8,46 @@ if (typeof THREE === 'undefined') {
 // ---------- tuning (units are roughly metres) ----------
 const HW = 80, HL = 104, GW = 15, GH = 10.5, GD = 14, CEIL = 44, CH = 14, BR = 2.4;
 const PHYSICS_TUNING = {
-  // Car movement: metre-like units and velocity per second.
-  GRAVITY_FORCE: 28, MAX_SPEED: 55, GROUND_MAX_SPEED: 40, REVERSE_MAX_SPEED: 26,
-  BOOST_FORCE: 58, BOOST_DRAIN_PER_SECOND: 33, GROUND_ACCELERATION: 46,
+  // Reference constants requested by the project. The playable arena is scaled
+  // down (~50 reference units per game unit), so scaled values are used by the solver.
+  REFERENCE_SCALE: 50,
+  BALL_MASS_REFERENCE: 30, BALL_RADIUS_REFERENCE: 91.25, BALL_VISUAL_RADIUS_REFERENCE: 95,
+  BALL_GRAVITY_REFERENCE: 650, BALL_MAX_SPEED_REFERENCE: 6000, BALL_MAX_ANGULAR_SPEED_REFERENCE: 6,
+  BALL_DRAG_REFERENCE: 0.03, BALL_FRICTION_REFERENCE: 0.35, BALL_RESTITUTION_REFERENCE: 0.6,
+  CAR_MASS_REFERENCE: 180, CAR_MAX_SPEED_REFERENCE: 2300, SUPERSONIC_START_REFERENCE: 2200,
+  SUPERSONIC_DROP_REFERENCE: 2100, SUPERSONIC_HOLD_SECONDS: 1,
+  GROUND_BOOST_ACCEL_REFERENCE: 991.67, AIR_BOOST_ACCEL_REFERENCE: 1058.33,
+  BOOST_CAPACITY: 100, BOOST_DRAIN_PER_SECOND: 33.33, SMALL_BOOST_PICKUP: 12, LARGE_BOOST_PICKUP: 100,
+  SMALL_PAD_COOLDOWN: 4, LARGE_PAD_COOLDOWN: 10,
+  JUMP_ACCEL_REFERENCE: 1458.33, JUMP_IMPULSE_REFERENCE: 291.67,
+  JUMP_HOLD_MIN: 0.025, JUMP_HOLD_MAX: 0.2, DOUBLE_JUMP_WINDOW: 1.25,
+  FORWARD_FLIP_SCALE: 1, SIDE_FLIP_SCALE: 1.9, BACKWARD_FLIP_SCALE: 2.5, FLIP_TORQUE_DURATION: 0.65,
+  AIR_TORQUE_REFERENCE: { pitch: 130, yaw: 95, roll: 400 },
+  AIR_DAMPING_REFERENCE: { pitch: 30, yaw: 20, roll: 50 },
+  CAR_WORLD_FRICTION: 0.3, CAR_WORLD_RESTITUTION: 0.3, CAR_CAR_FRICTION: 0.09, CAR_CAR_RESTITUTION: 0.1,
+  CAR_BALL_FRICTION: 2, CAR_BALL_RESTITUTION: 0, BUMP_COOLDOWN: 0.25, DEMO_RESPAWN: 3,
+  SUSPENSION_STIFFNESS: 500, FRONT_SUSPENSION_FORCE_SCALE: 35.75, REAR_SUSPENSION_FORCE_SCALE: 54.265,
+  SUSPENSION_COMPRESSION_DAMPING: 25, SUSPENSION_RELAXATION_DAMPING: 40, MAX_SUSPENSION_TRAVEL: 12,
+  POWERSLIDE_RISE_RATE: 5, POWERSLIDE_FALL_RATE: 2, THROTTLE_TORQUE: 72000,
+  BRAKE_TORQUE: 2625, AIR_THROTTLE_ACCEL_REFERENCE: 66.67,
+  OCTANE_HITBOX_HALF_EXTENTS: { x:120.507, y:86.699, z:38.659 },
+  OCTANE_HITBOX_CENTRE_OFFSET: { x:13.876, y:0, z:20.755 },
+  ARENA_HALF_EXTENTS_REFERENCE: { x:4096, y:5120 }, ARENA_HEIGHT_REFERENCE: 2048,
+  // Stable scaled values used by the current Three.js arena.
+  GRAVITY_FORCE: 28, MAX_SPEED: 46, GROUND_MAX_SPEED: 40, REVERSE_MAX_SPEED: 26,
+  BOOST_FORCE: 19.83, GROUND_ACCELERATION: 46,
   TURN_RATE_SLOW: 3.4, TURN_RATE_FAST: 1.4, HANDBRAKE_TURN_MULTIPLIER: 1.6,
   NORMAL_LATERAL_FRICTION: 9, POWERSLIDE_FRICTION_MULTIPLIER: 0.18,
   JUMP_IMPULSE: 11, JUMP_HOLD_FORCE: 28, JUMP_HOLD_DURATION: 0.2,
-  DOUBLE_JUMP_WINDOW: 1.25, DOUBLE_JUMP_IMPULSE: 9.5, DODGE_IMPULSE: 17,
+  DOUBLE_JUMP_IMPULSE: 9.5, DODGE_IMPULSE: 17,
   PITCH_TORQUE_SPEED: 3.4, YAW_TORQUE_SPEED: 2.85, ROLL_TORQUE_SPEED: 4.2,
-  // Ball bounce and impact tuning.
-  BALL_GRAVITY_FORCE: 24, MAX_BALL_SPEED: 80, BALL_RESTITUTION: 0.82,
-  BALL_FLOOR_RESTITUTION: 0.78, BALL_WALL_RESTITUTION: 0.84, BALL_SURFACE_FRICTION: 0.035,
-  BALL_HIT_MULTIPLIER: 1.35, BALL_HIT_FORWARD_FORCE: 6, BALL_FORWARD_SPEED_FACTOR: 0.34,
-  BALL_FLIP_HIT_BONUS: 8, BALL_BOOST_HIT_BONUS: 5, BALL_UPWARD_POP: 5.5
+  BALL_GRAVITY_FORCE: 13, MAX_BALL_SPEED: 120, BALL_MAX_ANGULAR_SPEED: 6,
+  BALL_RESTITUTION: 0.6, BALL_FLOOR_RESTITUTION: 0.6, BALL_WALL_RESTITUTION: 0.6,
+  BALL_SURFACE_FRICTION: 0.03, BALL_HIT_MULTIPLIER: 1.0,
+  BALL_HIT_FORWARD_FORCE: 0.65 * (4600 / 50), BALL_FORWARD_SPEED_FACTOR: 0.34,
+  BALL_FLIP_HIT_BONUS: 8, BALL_BOOST_HIT_BONUS: 5,
+  BALL_UPWARD_POP: 0.35 * (291.67 / 50), BALL_EXTRA_HIT_MAX_RELATIVE_SPEED: 4600 / 50,
+  BALL_CAR_MASS_RATIO: 180 / 30
 };
 const MATCH = 180;
 const TEAM_COLOR_PRESETS = {
@@ -498,7 +525,7 @@ ballMesh.castShadow = true; scene.add(ballMesh);
 
 // ---------- state ----------
 let state = 'menu', t = 0, score = [0, 0], clock = MATCH, ot = false, cd = 0, ballCam = false, mode = 2, diff = 1, muted = false;
-const ball = { x: 0, y: BR + 6, z: 0, vx: 0, vy: 0, vz: 0, onRamp: false };
+const ball = { x: 0, y: BR + 6, z: 0, vx: 0, vy: 0, vz: 0, wx: 0, wy: 0, wz: 0, onRamp: false };
 let cars = [];
 // UI and gameplay toggles
 let playerName = 'PLAYER';
@@ -1595,7 +1622,7 @@ function hitBall(c) {
   const vn = (ball.vx - c.vx) * nx + (ball.vy - c.vy) * ny + (ball.vz - c.vz) * nz;
   if (vn < 0) {
     if (vn < -4) sparks(vn);
-    const mass = c.mass || 4;
+    const mass = PHYSICS_TUNING.BALL_CAR_MASS_RATIO;
     const forwardX = Math.sin(c.yaw) * Math.cos(c.pitch), forwardY = Math.sin(c.pitch), forwardZ = Math.cos(c.yaw) * Math.cos(c.pitch);
     const forwardSpeed = Math.max(0, c.vx * forwardX + c.vy * forwardY + c.vz * forwardZ);
     const impulse = -vn * (1 + PHYSICS_TUNING.BALL_RESTITUTION) *
@@ -1607,10 +1634,20 @@ function hitBall(c) {
       const carScale = PHYSICS_TUNING.MAX_SPEED / carSpeedAfterImpact;
       c.vx *= carScale; c.vy *= carScale; c.vz *= carScale;
     }
+    const relativeHitSpeed = Math.min(Math.hypot(ball.vx - c.vx, ball.vy - c.vy, ball.vz - c.vz), PHYSICS_TUNING.BALL_EXTRA_HIT_MAX_RELATIVE_SPEED);
     const forwardImpulse = (PHYSICS_TUNING.BALL_HIT_FORWARD_FORCE +
       Math.min(forwardSpeed, PHYSICS_TUNING.MAX_SPEED) * PHYSICS_TUNING.BALL_FORWARD_SPEED_FACTOR +
-      (c.flip > 0 ? PHYSICS_TUNING.BALL_FLIP_HIT_BONUS : 0) +
+      (c.flip > 0 ? relativeHitSpeed * 0.65 : 0) +
       (c.fl ? PHYSICS_TUNING.BALL_BOOST_HIT_BONUS : 0)) * PHYSICS_TUNING.BALL_HIT_MULTIPLIER;
+    // Off-centre contact adds angular velocity; cap spin at the requested 6 rad/s.
+    ball.wx += (ny * (c.z - ball.z) - nz * (c.y - ball.y)) * impulse * 0.08;
+    ball.wy += (nz * (c.x - ball.x) - nx * (c.z - ball.z)) * impulse * 0.08;
+    ball.wz += (nx * (c.y - ball.y) - ny * (c.x - ball.x)) * impulse * 0.08;
+    const spin = Math.hypot(ball.wx, ball.wy, ball.wz);
+    if (spin > PHYSICS_TUNING.BALL_MAX_ANGULAR_SPEED) {
+      const ss = PHYSICS_TUNING.BALL_MAX_ANGULAR_SPEED / spin;
+      ball.wx *= ss; ball.wy *= ss; ball.wz *= ss;
+    }
     ball.vx += forwardX * forwardImpulse; ball.vy += forwardY * forwardImpulse; ball.vz += forwardZ * forwardImpulse;
     const frontBumperHit = lf > 0.25 && dy > -0.35 && dy < 2.35;
     const undersideHit = ny > 0.3 && dy > 0.1;
@@ -1668,12 +1705,13 @@ function goalExplosion(team) {
 
 function stepBall(dt) {
   ball.vy -= PHYSICS_TUNING.BALL_GRAVITY_FORCE * dt;
-  const dr = 1 - 0.03 * dt; ball.vx *= dr; ball.vz *= dr;
+  const dr = 1 - PHYSICS_TUNING.BALL_DRAG_REFERENCE * dt; ball.vx *= dr; ball.vz *= dr;
   ball.x += ball.vx * dt; ball.y += ball.vy * dt; ball.z += ball.vz * dt;
   if (ball.y < BR) {
     ball.y = BR; ball.vy = -ball.vy * PHYSICS_TUNING.BALL_FLOOR_RESTITUTION;
     if (Math.abs(ball.vy) < 1.5) ball.vy = 0;
-    const f = Math.max(0, 1 - 0.35 * dt); ball.vx *= f; ball.vz *= f;
+    const f = Math.max(0, 1 - PHYSICS_TUNING.BALL_FRICTION_REFERENCE * dt); ball.vx *= f; ball.vz *= f;
+    ball.wx *= Math.max(0, 1 - 0.7 * dt); ball.wy *= Math.max(0, 1 - 0.7 * dt); ball.wz *= Math.max(0, 1 - 0.7 * dt);
   }
   if (ball.y > CEIL - BR) { ball.y = CEIL - BR; ball.vy = -Math.abs(ball.vy) * PHYSICS_TUNING.BALL_RESTITUTION; }
   const az = Math.abs(ball.z), sz = Math.sign(ball.z);
@@ -1999,6 +2037,9 @@ function render(dt) {
   ballMesh.position.set(ball.x, ball.y, ball.z);
   const sp = Math.hypot(ball.vx, ball.vz);
   if (sp > 0.05) { axis.set(ball.vz, 0, -ball.vx).normalize(); ballMesh.rotateOnWorldAxis(axis, sp * dt / BR); }
+  if (Math.abs(ball.wx) + Math.abs(ball.wy) + Math.abs(ball.wz) > 0.001) {
+    ballMesh.rotateX(ball.wx * dt); ballMesh.rotateY(ball.wy * dt); ballMesh.rotateZ(ball.wz * dt);
+  }
   if (state === 'play' && Math.hypot(sp, ball.vy) > 26) emit(ball.x, ball.y, ball.z, (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2, 0.4, 0.3, 0.9, 0.8);
   for (const p of pads) {
     const active = p.t <= 0;
@@ -2060,10 +2101,21 @@ window.rocketArena = {
 };
 let last = performance.now();
 (function loop(now) {
-  const dt = Math.min(1 / 30, (now - last) / 1000); last = now;
+  const frameDt = Math.min(0.05, (now - last) / 1000); last = now;
   pollControllers();
-  if (!paused) update(dt);
-  render(dt);
+  // Fixed 120 Hz physics with a small frame-time clamp for stable contacts.
+  if (typeof window.__rocketPhysicsAccumulator !== 'number') window.__rocketPhysicsAccumulator = 0;
+  if (!paused) {
+    window.__rocketPhysicsAccumulator += frameDt;
+    const fixedDt = 1 / 120;
+    let steps = 0;
+    while (window.__rocketPhysicsAccumulator >= fixedDt && steps < 6) {
+      update(fixedDt);
+      window.__rocketPhysicsAccumulator -= fixedDt;
+      steps++;
+    }
+  } else window.__rocketPhysicsAccumulator = 0;
+  render(frameDt);
   requestAnimationFrame(loop);
 })(last);
 })();
