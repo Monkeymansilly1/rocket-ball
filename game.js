@@ -377,7 +377,7 @@ function makeDetailedOctane(car) {
   if (!octaneSceneTemplate || !car || car.model !== 'octane' || car.mesh.detailed) return;
   const m = car.mesh, model = octaneSceneTemplate.clone(true);
   const col = car.ai ? (car.team ? hexCss(ORANGE) : hexCss(BLUE)) :
-    car.team ? (localTwoPlayer && car === cars[mode] ? player2Paint : hexCss(ORANGE)) : playerPaint;
+    car.team ? (localTwoPlayer && !car.ai ? player2Paint : hexCss(ORANGE)) : playerPaint;
   const paint = new THREE.Color(col);
   const wheelNodes = [];
   model.traverse(object => {
