@@ -1933,7 +1933,7 @@ const AIR_Y = new THREE.Vector3(0,1,0);
 const AIR_Z = new THREE.Vector3(0,0,1);
 function getCarOrientation(c) {
   return c.airQuat || new THREE.Quaternion().setFromEuler(
-    new THREE.Euler(-(c.pitch || 0), c.yaw || 0, c.roll || 0, 'XYZ'));
+    new THREE.Euler(-(c.pitch || 0), c.yaw || 0, c.roll || 0, 'YXZ'));
 }
 function getCarForward(c) {
   return AIR_Z.clone().applyQuaternion(getCarOrientation(c));
@@ -1955,7 +1955,7 @@ function aerialControl(c, ct, dt) {
   c.airQuat.multiply(new THREE.Quaternion().setFromAxisAngle(AIR_Y, omega.yaw * dt));
   c.airQuat.multiply(new THREE.Quaternion().setFromAxisAngle(AIR_Z, omega.roll * dt));
   c.airQuat.normalize();
-  const e = new THREE.Euler().setFromQuaternion(c.airQuat, 'XYZ');
+  const e = new THREE.Euler().setFromQuaternion(c.airQuat, 'YXZ');
   c.pitch = -e.x; c.yaw = e.y; c.roll = e.z;
 }
 function stepCar(c, ct, dt) {
@@ -2333,12 +2333,13 @@ function hitBall(c) {
   // Proper 3D oriented hitbox: yaw + aerial pitch + roll. The old collision
   // ignored pitch and roll, so a car pointing up a wall could visually touch
   // the ball while the collision system thought it had missed it completely.
-  const sy = Math.sin(c.yaw), cy = Math.cos(c.yaw);
-  const sp = Math.sin(c.pitch || 0), cp = Math.cos(c.pitch || 0);
-  const sr = Math.sin(c.roll || 0), cr = Math.cos(c.roll || 0);
-  const rx = cy * cr - sy * sp * sr, ry = cp * sr, rz = -sy * cr - cy * sp * sr;
-  const ux = -cy * sr - sy * sp * cr, uy = cp * cr, uz = sy * sr - cy * sp * cr;
-  const fx = sy * cp, fy = sp, fz = cy * cp;
+  const orientation = getCarOrientation(c);
+  const right = AIR_X.clone().applyQuaternion(orientation);
+  const up = AIR_Y.clone().applyQuaternion(orientation);
+  const nose = AIR_Z.clone().applyQuaternion(orientation);
+  const rx=right.x, ry=right.y, rz=right.z;
+  const ux=up.x, uy=up.y, uz=up.z;
+  const fx=nose.x, fy=nose.y, fz=nose.z;
   const dx = ball.x - c.x, dy = ball.y - c.y, dz = ball.z - c.z;
   const box = c.hitbox || {
     length: c.hit || 1.7, width: (c.hit || 1.7) * 0.6, height: 0.55,
@@ -2377,7 +2378,17 @@ function hitBall(c) {
   ball.y += ny * separation;
   ball.z += nz * separation;
 
-  const rvx = ball.vx - c.vx, rvy = ball.vy - c.vy, rvz = ball.vz - c.vz;
+  // Relative velocity includes the velocity of the car's contact point,
+  // not only its centre. Rolling the nose onto the ball now gives a real
+  // tangential touch instead of a random extra forward force.
+  const arm = new THREE.Vector3(ball.x-nx*BR-c.x, ball.y-ny*BR-c.y, ball.z-nz*BR-c.z);
+  const omega = c.airOmega ? new THREE.Vector3(
+    c.airOmega.pitch, c.airOmega.yaw, c.airOmega.roll).applyQuaternion(orientation)
+    : new THREE.Vector3();
+  const contactSpeed = omega.cross(arm).clampLength(0,12);
+  const rvx = ball.vx - (c.vx + contactSpeed.x);
+  const rvy = ball.vy - (c.vy + contactSpeed.y);
+  const rvz = ball.vz - (c.vz + contactSpeed.z);
   const closing = -(rvx * nx + rvy * ny + rvz * nz);
   if (closing <= 0.18) return;
 
@@ -2405,16 +2416,22 @@ function hitBall(c) {
   // shot power. This prevents the "sticky / accelerating ball" behaviour.
   c.ballHitCooldown = Math.max(0, (c.ballHitCooldown || 0));
   if (c.ballHitCooldown <= 0 && closing > 1.7) {
-    const fx = sy * Math.cos(c.pitch), fy = Math.sin(c.pitch), fz = cy * Math.cos(c.pitch);
     const aligned = clamp(fx * nx + fy * ny + fz * nz, 0, 1);
     const forwardSpeed = Math.max(0, c.vx * fx + c.vy * fy + c.vz * fz);
-    const extra = aligned * Math.min(18,
-      0.16 * closing + 0.08 * forwardSpeed +
-      (c.flip > 0 ? 6.5 : 0) + (c.fl ? 3 : 0));
-    // Set-and-forget forward impulse, not a force constantly applied on overlap.
+    const aerial = !c.ground && !c.wallRide;
+    // Air dribbles require a SERIES of light velocity-matching touches.
+    // Unlike dodges and ground shots, the nose must not inject a huge extra
+    // impulse on each frame of a close aerial carry.
+    const extra = aerial
+      ? aligned * (c.flip > 0 ? Math.min(7, closing*0.18+3) :
+          Math.min(1.35, closing*0.055 + forwardSpeed*0.012))
+      : aligned * Math.min(13, closing*0.12 + forwardSpeed*0.05 +
+          (c.flip > 0 ? 5 : 0) + (c.fl ? 2.2 : 0));
     ball.vx += fx * extra; ball.vy += fy * extra; ball.vz += fz * extra;
-    if (ny > 0.2 && forward > -0.4) ball.vy += Math.min(3, closing * 0.12);
-    c.ballHitCooldown = 0.085;
+    if (ny > 0.2 && forward > -0.4) {
+      ball.vy += Math.min(aerial ? 0.4 : 2.2, closing * (aerial ? 0.035 : 0.1));
+    }
+    c.ballHitCooldown = aerial ? 0.11 : 0.085;
   }
 
   // Tangential contact velocity imparts a bounded amount of ball spin.
@@ -2844,7 +2861,12 @@ const cam2 = { x: 0, y: 6, z: 60, lx: 0, ly: 2, lz: 0 };
 const axis = new THREE.Vector3();
 function updateCam(dt, carIndex = 0, targetCamera = camera, camState = cam) {
   const car = cars[carIndex] || cars[0]; if (!car) return;
-  let backX = -Math.sin(car.yaw), backZ = -Math.cos(car.yaw);
+  // Camera heading follows the 3D car's nose except when it is almost
+  // vertical, where a projected heading has no reliable direction.
+  const front = getCarForward(car);
+  const forwardLength = Math.hypot(front.x, front.z);
+  let backX = forwardLength > 0.23 ? -front.x / forwardLength : -Math.sin(car.yaw);
+  let backZ = forwardLength > 0.23 ? -front.z / forwardLength : -Math.cos(car.yaw);
   if (ballCam) {
     // Camera tracks the ball but stays behind the player's car.
     const awayX = car.x - ball.x, awayZ = car.z - ball.z;
@@ -2915,7 +2937,7 @@ function render(dt) {
     if (c.airQuat && state !== 'menu' && state !== 'over') {
       m.root.quaternion.copy(c.airQuat);
     } else {
-      m.root.rotation.set(-c.pitch, c.yaw, c.roll || 0);
+      m.root.rotation.set(-c.pitch, c.yaw, c.roll || 0, 'YXZ');
     }
     m.flame.visible = !!c.fl; m.flame.scale.set(1, 0.7 + Math.random() * 0.6, 1);
     m.body.rotation.set(0, 0, 0);
