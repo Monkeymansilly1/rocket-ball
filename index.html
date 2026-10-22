@@ -17,8 +17,20 @@
   <button id="skipReplayButton" type="button">SKIP REPLAY <kbd>SPACE</kbd></button>
   <button id="quickPlayButton" type="button">▶ PLAY <small>MATCHES &amp; MODES</small></button>
   <div id="trainingTools" aria-label="Free Play tools" hidden>
-    <strong>⚽ FREE PLAY</strong><span id="trainingGoalCount">GOALS 0</span>
+    <strong>⚽ FREE PLAY</strong>
+    <span id="trainingGoalCount">GOALS 0</span>
+    <span id="trainingShotCount">ATTEMPT 1</span>
+    <label class="training-preset" for="trainingPreset">TRAINING
+      <select id="trainingPreset" aria-label="Choose a training exercise">
+        <option value="dribble">Free Dribble</option>
+        <option value="aerial">Aerial Shots</option>
+        <option value="wall">Wall Shots</option>
+        <option value="save">Goalkeeper Saves</option>
+        <option value="kickoff">Kickoff Practice</option>
+      </select>
+    </label>
     <div class="training-actions">
+      <button id="trainingNextShot" type="button" title="Load the next training shot (H)">NEXT SHOT <kbd>H</kbd></button>
       <button id="trainingResetBall" type="button" title="Reset ball (R)">RESET BALL <kbd>R</kbd></button>
       <button id="trainingPass" type="button" title="Pass the ball to yourself (T)">PASS <kbd>T</kbd></button>
       <button id="trainingLaunch" type="button" title="Launch an aerial ball (Y)">AERIAL <kbd>Y</kbd></button>
