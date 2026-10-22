@@ -1038,7 +1038,7 @@ let replayCameraCarIndex = 0;
 const REPLAY_HISTORY_LIMIT = 301;
 function saveReplayFrame() {
   replayHistory.push({
-    cars: cars.map(c => ({ x:c.x, y:c.y, z:c.z, vx:c.vx, vy:c.vy, vz:c.vz, yaw:c.yaw, pitch:c.pitch, roll:c.roll, wallRide:c.wallRide, wallVerticalAxis:c.wallVerticalAxis, wallVerticalSign:c.wallVerticalSign, aq:c.airQuat ? c.airQuat.toArray() : null, flip:c.flip, fx:c.fx, fz:c.fz, fl:c.fl })),
+    cars: cars.map(c => ({ x:c.x, y:c.y, z:c.z, vx:c.vx, vy:c.vy, vz:c.vz, yaw:c.yaw, pitch:c.pitch, roll:c.roll, wallRide:c.wallRide, wallVerticalAxis:c.wallVerticalAxis, wallVerticalSign:c.wallVerticalSign, aq:c.airQuat ? c.airQuat.toArray() : null, flipAxis:c.flipAxis?c.flipAxis.toArray():null, flip:c.flip, fx:c.fx, fz:c.fz, fl:c.fl })),
     ball: { x:ball.x, y:ball.y, z:ball.z, vx:ball.vx, vy:ball.vy, vz:ball.vz, wx:ball.wx, wy:ball.wy, wz:ball.wz, onRamp:ball.onRamp }
   });
   if (replayHistory.length > REPLAY_HISTORY_LIMIT) replayHistory.shift();
@@ -1050,6 +1050,7 @@ function applyReplayFrame(frame) {
     Object.assign(c, p);
     c.airQuat = p.aq ? new THREE.Quaternion().fromArray(p.aq) : null;
     c.airOmega = null;
+    c.flipAxis=p.flipAxis?new THREE.Vector3().fromArray(p.flipAxis):null;
   });
   Object.assign(ball, frame.ball);
 }
@@ -1148,7 +1149,7 @@ function kickoff() {
   lastTouch = null;
   for (const c of cars) {
     const f = FORM[c.k], s = c.team ? 1 : -1;
-    Object.assign(c, { x: f[0] * (c.team ? -1 : 1), y: 0.55, z: s * f[1] * HL, vx: 0, vy: 0, vz: 0, yaw: c.team ? Math.PI : 0, pitch: 0, roll: 0, airQuat: null, airOmega: null, wallDetachTimer: 0, wallRide: false, wallVerticalAxis: null, wallVerticalSign: 0, boost: 34, jumps: 0, jt: 0, flip: 0, fl: 0, ground: true, aiCd: 0, wait: SKILL[diff].wait });
+    Object.assign(c, { x: f[0] * (c.team ? -1 : 1), y: 0.55, z: s * f[1] * HL, vx: 0, vy: 0, vz: 0, yaw: c.team ? Math.PI : 0, pitch: 0, roll: 0, airQuat: null, airOmega: null, flipAxis:null, wallDetachTimer: 0, wallRide: false, wallVerticalAxis: null, wallVerticalSign: 0, boost: 34, jumps: 0, jt: 0, flip: 0, fl: 0, ground: true, aiCd: 0, wait: SKILL[diff].wait });
   }
 }
 function start(freePlay = false) {
@@ -1210,7 +1211,7 @@ function resetTrainingCar() {
     yaw: 0, pitch: 0, roll: 0, jumps: 0, jt: 0,
     flip: 0, fl: 0, hold: 0, ground: true,
     wallRide: false, wallVerticalAxis: null, wallVerticalSign: 0, wallDetachTimer: 0,
-    airQuat: null, airOmega: null, demoTimer: 0, boost: 100, ballHitCooldown: 0, airTouchCooldown: 0
+    airQuat: null, airOmega: null, flipAxis:null, demoTimer: 0, boost: 100, ballHitCooldown: 0, airTouchCooldown: 0
   });
   car.wallDetachTimer = 0;
   car.mesh.root.visible = true;
@@ -2007,6 +2008,15 @@ function aerialControl(c, ct, dt) {
   }
   // Apply torque on the car's local axes so air roll changes both the camera
   // orientation and the direction of boost/hitbox contact, not only a mesh.
+  // A directional dodge rotates the actual collision body. The previous
+  // implementation only spun the decorative mesh inside a static hitbox.
+  if (c.flip > 0 && c.flipAxis && c.jumps === 2) {
+    c.airQuat.multiply(new THREE.Quaternion().setFromAxisAngle(
+      c.flipAxis, (2*Math.PI/0.55) * dt));
+    omega.pitch *= Math.max(0,1-5*dt);
+    omega.yaw *= Math.max(0,1-5*dt);
+    omega.roll *= Math.max(0,1-5*dt);
+  }
   c.airQuat.multiply(new THREE.Quaternion().setFromAxisAngle(AIR_X, omega.pitch * dt));
   c.airQuat.multiply(new THREE.Quaternion().setFromAxisAngle(AIR_Y, omega.yaw * dt));
   c.airQuat.multiply(new THREE.Quaternion().setFromAxisAngle(AIR_Z, omega.roll * dt));
@@ -2082,7 +2092,8 @@ function stepCar(c, ct, dt) {
     }
     return;
   }
-  c.jt += dt; if (c.flip > 0) c.flip -= dt;
+  c.jt += dt;
+  if (c.flip > 0) { c.flip=Math.max(0,c.flip-dt); if(c.flip===0)c.flipAxis=null; }
   // Brief separation grace after a wall/ramp jump. Otherwise the same ramp
   // snaps the car back onto its surface in the next physics step.
   c.wallDetachTimer = Math.max(0, (c.wallDetachTimer || 0) - dt);
@@ -2121,6 +2132,7 @@ function stepCar(c, ct, dt) {
   if (ground) {
     c.airQuat = null;
     c.airOmega = null;
+    c.flipAxis = null;
   }
   const bo = !!ct.boost && c.boost > 0;
   // Keep a very short grace window so a clean boost collision still counts if boost
@@ -2192,7 +2204,10 @@ function stepCar(c, ct, dt) {
     c.vy -= PHYSICS_TUNING.GRAVITY_FORCE * gravityScale * dt;
     aerialControl(c, ct, dt);
     if (c.hold > 0 && ct.jumpHeld && c.jumps === 1) {
-      c.vy += PHYSICS_TUNING.JUMP_HOLD_FORCE * dt;
+      const roof=AIR_Y.clone().applyQuaternion(getCarOrientation(c));
+      c.vx += roof.x * PHYSICS_TUNING.JUMP_HOLD_FORCE * dt;
+      c.vy += roof.y * PHYSICS_TUNING.JUMP_HOLD_FORCE * dt;
+      c.vz += roof.z * PHYSICS_TUNING.JUMP_HOLD_FORCE * dt;
       c.hold = Math.max(0, c.hold - dt);
     } else c.hold = 0;
     // Rocket League retains a small forward/reverse throttle acceleration in
@@ -2250,11 +2265,25 @@ function stepCar(c, ct, dt) {
     } else if (c.jumps === 1 && c.jt < PHYSICS_TUNING.DOUBLE_JUMP_WINDOW) {
       c.jumps = 2;
       const f = ct.dodge ? ct.dodge[0] : ct.throttle, s = ct.dodge ? ct.dodge[1] : ct.steer;
-      if (f || s) {
-        c.vx += (sy * f - cy * s) * PHYSICS_TUNING.DODGE_IMPULSE;
-        c.vz += (cy * f + sy * s) * PHYSICS_TUNING.DODGE_IMPULSE;
-        c.vy = Math.max(c.vy, 3); c.flip = 0.55; c.fx = f; c.fz = s;
-      } else c.vy = PHYSICS_TUNING.DOUBLE_JUMP_IMPULSE;
+      if (Math.abs(f)+Math.abs(s) > 0.1) {
+        const dir=Math.hypot(f,s);
+        const nose=getCarForward(c);
+        const right=AIR_X.clone().applyQuaternion(getCarOrientation(c));
+        const force=PHYSICS_TUNING.DODGE_IMPULSE/Math.max(1,dir);
+        c.vx += (nose.x*f-right.x*s)*force;
+        c.vy += (nose.y*f-right.y*s)*force;
+        c.vz += (nose.z*f-right.z*s)*force;
+        c.vy = Math.max(c.vy, 2.2);
+        c.flip=0.55;c.fx=f;c.fz=s;
+        c.flipAxis=new THREE.Vector3(f,0,s).normalize();
+        if (!c.airQuat) c.airQuat=getCarOrientation(c).clone();
+      } else {
+        // A neutral second jump adds velocity along the roof, not global up.
+        const roof=AIR_Y.clone().applyQuaternion(getCarOrientation(c));
+        c.vx+=roof.x*PHYSICS_TUNING.DOUBLE_JUMP_IMPULSE;
+        c.vy+=roof.y*PHYSICS_TUNING.DOUBLE_JUMP_IMPULSE;
+        c.vz+=roof.z*PHYSICS_TUNING.DOUBLE_JUMP_IMPULSE;
+      }
     }
   }
   if (c.ai) c.boost = Math.min(100, c.boost + 8 * dt);
@@ -3074,7 +3103,7 @@ function render(dt) {
     }
     m.flame.visible = !!c.fl; m.flame.scale.set(1, 0.7 + Math.random() * 0.6, 1);
     m.body.rotation.set(0, 0, 0);
-    if (c.flip > 0) {
+    if (c.flip > 0 && !c.airQuat) {
       const a = (1 - c.flip / 0.55) * Math.PI * 2;
       if (Math.abs(c.fx) >= Math.abs(c.fz)) m.body.rotation.x = a * Math.sign(c.fx); else m.body.rotation.z = a * Math.sign(c.fz);
     }
