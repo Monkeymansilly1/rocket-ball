@@ -2803,14 +2803,30 @@ function updateCam(dt, carIndex = 0, targetCamera = camera, camState = cam) {
     if (length > 0.6) { backX = awayX / length; backZ = awayZ / length; }
   }
   const k = 1 - Math.exp(-cameraSettings.stiffness * dt);
-  const tx = clamp(car.x + backX * cameraSettings.distance, -HW + 2, HW - 2);
-  const tz = clamp(car.z + backZ * cameraSettings.distance, -HL + 2, HL - 2);
-  const ty = clamp(car.y + cameraSettings.height, 2, CEIL - 1.5);
+  let tx = clamp(car.x + backX * cameraSettings.distance, -HW + 2, HW - 2);
+  let tz = clamp(car.z + backZ * cameraSettings.distance, -HL + 2, HL - 2);
+  let ty = clamp(car.y + cameraSettings.height, 2, CEIL - 1.5);
+  // When riding or jumping off a wall, the regular chase camera can be
+  // squeezed flat against the glass, hiding the ball and the car. Shift the
+  // view inside the arena and look slightly upward during wall-to-air plays.
+  const wallView = !!car.wallVerticalAxis || (car.wallDetachTimer || 0) > 0 ||
+    (car.wallRide && car.y > WALL_RAMP_HEIGHT * 0.72);
+  if (wallView) {
+    const infieldOffset = Math.max(11, cameraSettings.distance * 1.05);
+    if (car.wallVerticalAxis === 'x' || Math.abs(car.x) > HW - 10) {
+      tx = Math.sign(car.x) * (HW - infieldOffset);
+      tz = clamp(car.z - 6.5, -HL + 9, HL - 9);
+    } else if (car.wallVerticalAxis === 'z' || Math.abs(car.z) > HL - 10) {
+      tz = Math.sign(car.z) * (HL - infieldOffset);
+      tx = clamp(car.x - 6.5, -HW + 9, HW - 9);
+    }
+    ty = clamp(car.y + cameraSettings.height + 2.0, 4, CEIL - 1);
+  }
   camState.x += (tx - camState.x) * k;
   camState.y += (ty - camState.y) * k;
   camState.z += (tz - camState.z) * k;
   const lookX = ballCam ? ball.x : car.x - backX * 9;
-  const lookY = ballCam ? ball.y : car.y + 1.0;
+  const lookY = ballCam ? ball.y : car.y + (wallView ? 4.0 : 1.0);
   const lookZ = ballCam ? ball.z : car.z - backZ * 9;
   camState.lx += (lookX - camState.lx) * k;
   camState.ly += (lookY - camState.ly) * k;
