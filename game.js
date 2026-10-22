@@ -625,7 +625,7 @@ let player2Paint = '#ff8a1f', player2PaintCustom = false;
 let physicsStyle = 'standard';
 let localTwoPlayer = false;
 let goalExplosionStyle = 'classic';
-let trainingMode = false, trainingGoals = 0;
+let trainingMode = false, trainingGoals = 0, trainingAttempts = 0;
 let paused = false;
 let lastTouch = null;
 let previousTouch = null;
@@ -735,12 +735,14 @@ function start(freePlay = false) {
   sfx.init(); // read UI choices
   trainingMode = !!freePlay;
   trainingGoals = 0;
+  trainingAttempts = 0;
   paused = false;
   window.__rocketPhysicsAccumulator = 0;
   document.body.classList.toggle('free-play', trainingMode);
   resize();
   if ($('trainingTools')) $('trainingTools').hidden = !trainingMode;
   if ($('trainingGoalCount')) $('trainingGoalCount').textContent = 'GOALS 0';
+  if ($('trainingShotCount')) $('trainingShotCount').textContent = 'ATTEMPT 1';
   const nameEl = $('name'); if (nameEl) playerName = (nameEl.value || 'PLAYER').toString().trim().slice(0,12) || 'PLAYER';
   const name2El = $('name2'); if (name2El) player2Name = (name2El.value || 'PLAYER 2').toString().trim().slice(0,12) || 'PLAYER 2';
   const sel = document.querySelector('.car-opts:not(.car-opts-p2) button.on'); if (sel && sel.dataset.car) playerCarModel = sel.dataset.car;
@@ -759,7 +761,8 @@ function start(freePlay = false) {
   const victory = $('victory'); if (victory) { victory.style.display = 'none'; victory.dataset.shown = ''; }
   kickoff(); state = 'kick'; cd = 3; $('menu').style.display = 'none'; $('msg').textContent = '';
   if (trainingMode) {
-    state = 'play'; cd = 0; resetTrainingCar(); resetTrainingBall();
+    state = 'play'; cd = 0;
+    loadTrainingShot(($('trainingPreset') && $('trainingPreset').value) || 'dribble');
     $('msg').textContent = ''; 
   }
   const pHUD = $('player'); if (pHUD) pHUD.textContent = playerName;
@@ -805,6 +808,57 @@ function launchTrainingBall() {
     wx: 0, wy: 0, wz: 0, onRamp: false
   });
 }
+function updateTrainingCounters() {
+  if ($('trainingGoalCount')) $('trainingGoalCount').textContent = 'GOALS ' + trainingGoals;
+  if ($('trainingShotCount')) $('trainingShotCount').textContent = 'ATTEMPT ' + trainingAttempts;
+}
+function loadTrainingShot(scenario = 'dribble') {
+  if (!trainingMode || !cars[0]) return;
+  resetTrainingCar();
+  resetTrainingBall();
+  const car = cars[0];
+  const variation = (trainingAttempts % 5) - 2;
+  switch (scenario) {
+    case 'aerial':
+      car.z = -58;
+      Object.assign(ball, {
+        x: variation * 2.0, z: -18, y: BR + 12,
+        vx: variation * 1.5, vy: 11, vz: 12
+      });
+      break;
+    case 'wall': {
+      car.x = HW - 27; car.z = -37;
+      car.y = arenaRampAt(car.x, car.z).height + 0.55;
+      car.yaw = 0.6;
+      const x = HW - 9, z = -21 + variation * 2;
+      Object.assign(ball, {
+        x, z, y: BR + arenaRampAt(x, z).height + 0.5,
+        vx: 4, vy: 0, vz: 15
+      });
+      break;
+    }
+    case 'save':
+      car.z = -HL + 19;
+      Object.assign(ball, {
+        x: variation * 2.5, z: -15, y: BR + 2,
+        vx: 0, vy: 4.5, vz: -29
+      });
+      break;
+    case 'kickoff':
+      car.z = -57;
+      ball.y = BR + 6;
+      break;
+    case 'dribble':
+    default:
+      car.z = -32;
+      ball.z = -15 + variation * 0.8;
+      ball.y = BR + 0.2;
+      break;
+  }
+  trainingAttempts++;
+  updateTrainingCounters();
+  showGameEvent('TRAINING · ' + scenario.toUpperCase(), '#8fe5ff');
+}
 function exitTraining() {
   trainingMode = false; paused = false;
   document.body.classList.remove('free-play');
@@ -816,10 +870,12 @@ function exitTraining() {
 for (const [id, action] of [
   ['trainingResetBall', resetTrainingBall], ['trainingPass', passTrainingBall],
   ['trainingLaunch', launchTrainingBall], ['trainingResetCar', resetTrainingCar],
+  ['trainingNextShot', () => loadTrainingShot(($('trainingPreset') && $('trainingPreset').value) || 'dribble')],
   ['trainingExit', exitTraining]
 ]) {
   if ($(id)) $(id).addEventListener('click', action);
 }
+if ($('trainingPreset')) $('trainingPreset').addEventListener('change', () => loadTrainingShot($('trainingPreset').value));
 if ($('freePlayBtn')) $('freePlayBtn').addEventListener('click', e => {
   e.preventDefault(); e.stopPropagation(); start(true);
 });
@@ -1096,6 +1152,7 @@ addEventListener('keydown', e => {
     if (!e.repeat && e.code === 'KeyR') resetTrainingBall();
     if (!e.repeat && e.code === 'KeyT') passTrainingBall();
     if (!e.repeat && e.code === 'KeyY') launchTrainingBall();
+    if (!e.repeat && e.code === 'KeyH') loadTrainingShot(($('trainingPreset') && $('trainingPreset').value) || 'dribble');
     if (!e.repeat && e.code === 'Backspace') { resetTrainingCar(); e.preventDefault(); }
   }
   if (!keys[e.code] && e.code === 'KeyC') { ballCam = !ballCam; $('cam').textContent = ballCam ? 'Ball cam (C)' : 'Chase cam (C)'; }
@@ -2029,7 +2086,7 @@ function showGameEvent(label, color = '#fff') {
 function goal(team) {
   if (trainingMode) {
     trainingGoals++;
-    if ($('trainingGoalCount')) $('trainingGoalCount').textContent = 'GOALS ' + trainingGoals;
+    updateTrainingCounters();
     showGameEvent('FREE PLAY GOAL! · ' + trainingGoals, '#ffca64');
     resetTrainingBall();
     return;
