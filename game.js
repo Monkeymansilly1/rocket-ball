@@ -652,7 +652,7 @@ function mkCar(team, k, ai, modelName) {
   car.displayName = ai ? (team ? 'ORANGE BOT ' : 'BLUE BOT ') + (k + 1) : playerName;
   // model-based properties
   const mdef = CAR_MODELS.find(m => m.name === model);
-  car.hit = mdef.hit; car.mass = mdef.mass * 4; car.cap = mdef.cap; // scale mass multiplier into existing physics constants
+  car.hit = mdef.hit; car.mass = mdef.mass * 4; car.cap = mdef.cap; car.baseCap = mdef.cap; // scale mass multiplier into existing physics constants
   return car;
 }
 function buildTeams() {
@@ -1364,7 +1364,8 @@ function predict() {
 function aiCtl(c, dt) {
   c.aiCd -= dt; c.errT = (c.errT || 0) - dt;
   const sk = SKILL[diff], ct = { throttle: sk.thr, steer: 0, jump: false, jumpHeld: false, boost: false, hand: false };
-  c.cap = sk.cap * (c.cap || 1);
+  // Difficulty cap must not be multiplied into itself every physics tick.
+  c.cap = sk.cap * (c.baseCap || 1);
   if (c.wait > 0) { c.wait -= dt; ct.throttle = 0; return ct; }
   if (c.y < 0.58 && c.jumps === 0) { c.aerial = false; c.flipNext = false; }
   const sp = Math.hypot(c.vx, c.vz), d2 = (o, p) => Math.hypot(p.x - o.x, p.z - o.z);
@@ -1490,24 +1491,31 @@ function stepCar(c, ct, dt) {
       c.pitch += wrap(pitchTarget - c.pitch) * clamp(9 * dt, 0, 1);
     } else c.pitch *= Math.max(0, 1 - 10 * dt);
     let vf = c.vx * sy + c.vz * cy, vs = c.vx * cy - c.vz * sy;
-    const hb = ct.hand ? 1 : 0;
+    c.powerslide = clamp((c.powerslide || 0) +
+      (ct.hand ? PHYSICS_TUNING.POWERSLIDE_RISE_RATE : -PHYSICS_TUNING.POWERSLIDE_FALL_RATE) * dt, 0, 1);
+    const hb = c.powerslide;
     const physicsAccel = physicsStyle === 'arcade' ? 1.3 : physicsStyle === 'heavy' ? 0.82 : 1;
     const acc = PHYSICS_TUNING.GROUND_ACCELERATION * physicsAccel *
       Math.max(0, 1 - Math.abs(vf) / PHYSICS_TUNING.MAX_SPEED);
     if (ct.throttle) vf += ct.throttle * (vf * ct.throttle < 0 ? 70 : acc) * dt;
     else vf *= Math.max(0, 1 - 0.9 * dt);
     const lateralFriction = PHYSICS_TUNING.NORMAL_LATERAL_FRICTION *
-      (hb ? PHYSICS_TUNING.POWERSLIDE_FRICTION_MULTIPLIER : 1);
+      (1 - hb * (1 - PHYSICS_TUNING.POWERSLIDE_FRICTION_MULTIPLIER));
     vs *= Math.max(0, 1 - lateralFriction * dt);
     const forwardCap = (bo ? PHYSICS_TUNING.MAX_SPEED : PHYSICS_TUNING.GROUND_MAX_SPEED) * (c.cap || 1);
     vf = clamp(vf, -PHYSICS_TUNING.REVERSE_MAX_SPEED, Math.min(forwardCap, PHYSICS_TUNING.MAX_SPEED));
     const speedRatio = clamp(Math.abs(vf) / PHYSICS_TUNING.MAX_SPEED, 0, 1);
     const turnRate = PHYSICS_TUNING.TURN_RATE_SLOW -
       (PHYSICS_TUNING.TURN_RATE_SLOW - PHYSICS_TUNING.TURN_RATE_FAST) * speedRatio;
-    const sr = turnRate * (hb ? PHYSICS_TUNING.HANDBRAKE_TURN_MULTIPLIER : 1) *
+    const sr = turnRate * (1 + hb * (PHYSICS_TUNING.HANDBRAKE_TURN_MULTIPLIER - 1)) *
       clamp(Math.abs(vf) / 2.5, 0, 1);
     c.yaw -= ct.steer * sr * (vf >= 0 ? 1 : -1) * dt;
-    c.vx = sy * vf + cy * vs; c.vz = cy * vf - sy * vs; c.vy = 0;
+    c.vx = sy * vf + cy * vs; c.vz = cy * vf - sy * vs;
+    // Ramp traction projects velocity along the slope; no zeroing on every frame.
+    if (c.wallRide) {
+      const grade = arenaRampAt(c.x, c.z);
+      c.vy = c.vx * grade.dx + c.vz * grade.dz;
+    } else c.vy = 0;
   } else {
     const gravityScale = physicsStyle === 'floaty' ? 0.72 : physicsStyle === 'heavy' ? 1.2 : 1;
     c.vy -= PHYSICS_TUNING.GRAVITY_FORCE * gravityScale * dt;
@@ -1603,7 +1611,9 @@ function stepCar(c, ct, dt) {
     // If the car runs out of upward momentum, settle back onto the curved ramp.
     if (c.y <= rampSupportY + 0.45 && c.vy < 0) {
       c.wallVerticalAxis = null; c.wallVerticalSign = 0;
-      c.y = rampSupportY; c.vy = 0; c.wallRide = true;
+      c.y += (rampSupportY - c.y) * clamp(38 * dt, 0, 1);
+    c.vy = c.vx * rampNow.dx + c.vz * rampNow.dz;
+    c.wallRide = true;
       c.pitch = Math.atan(rampNow.dx * Math.sin(c.yaw) + rampNow.dz * Math.cos(c.yaw));
     } else if (c.y >= CEIL - 1.5 || c.vy < -8) {
       c.wallVerticalAxis = null; c.wallVerticalSign = 0;
