@@ -617,7 +617,7 @@ const REPLAY_HISTORY_LIMIT = 301;
 function saveReplayFrame() {
   replayHistory.push({
     cars: cars.map(c => ({ x:c.x, y:c.y, z:c.z, vx:c.vx, vy:c.vy, vz:c.vz, yaw:c.yaw, pitch:c.pitch, roll:c.roll, wallRide:c.wallRide, wallVerticalAxis:c.wallVerticalAxis, wallVerticalSign:c.wallVerticalSign, flip:c.flip, fx:c.fx, fz:c.fz, fl:c.fl })),
-    ball: { x:ball.x, y:ball.y, z:ball.z, vx:ball.vx, vy:ball.vy, vz:ball.vz, onRamp:ball.onRamp }
+    ball: { x:ball.x, y:ball.y, z:ball.z, vx:ball.vx, vy:ball.vy, vz:ball.vz, wx:ball.wx, wy:ball.wy, wz:ball.wz, onRamp:ball.onRamp }
   });
   if (replayHistory.length > REPLAY_HISTORY_LIMIT) replayHistory.shift();
 }
@@ -697,7 +697,7 @@ function kickoff() {
   replayHistory = [];
   replayFrames = [];
   replayIndex = 0;
-  Object.assign(ball, { x: 0, y: BR + 6, z: 0, vx: 0, vy: 0, vz: 0, onRamp: false });
+  Object.assign(ball, { x: 0, y: BR + 6, z: 0, vx: 0, vy: 0, vz: 0, wx: 0, wy: 0, wz: 0, onRamp: false, onGround: false });
   lastTouch = null;
   for (const c of cars) {
     const f = FORM[c.k], s = c.team ? 1 : -1;
@@ -1303,6 +1303,7 @@ function aiCtl(c, dt) {
 // ---------- physics ----------
 function stepCar(c, ct, dt) {
   c.demoCooldown = Math.max(0, (c.demoCooldown || 0) - dt);
+  c.ballHitCooldown = Math.max(0, (c.ballHitCooldown || 0) - dt);
   if (c.demoTimer > 0) {
     c.demoTimer = Math.max(0, c.demoTimer - dt);
     c.vx = c.vy = c.vz = 0; c.y = 0.55; c.pitch = 0; c.fl = 0;
@@ -1608,59 +1609,109 @@ function bump() {
     }
   }
 }
+// Standard sphere-versus-oriented-box contact, with a small scripted shot impulse.
+// Resolve the physical impulse every contact; only boost the shot at a new impact.
 function hitBall(c) {
+  if (c.demoTimer > 0) return;
   const sy = Math.sin(c.yaw), cy = Math.cos(c.yaw);
   const dx = ball.x - c.x, dy = ball.y - c.y, dz = ball.z - c.z;
-  const lf = dx * sy + dz * cy, ll = dx * cy - dz * sy; // along nose, along left side
-  // use model hit radius to vary collision extents
-  const hf = c.hit || 1.7;
-  let nf = lf - clamp(lf, -hf, hf), nl = ll - clamp(ll, -hf * 0.6, hf * 0.6), ny = dy - clamp(dy, -0.55, 0.55);
-  let d = Math.hypot(nf, nl, ny);
-  if (d >= BR) return;
-  // Contact itself determines the most recent touch. Don't leave an old bot
-  // credited just because the latest collision had no inward relative velocity.
+  const forward = dx * sy + dz * cy;
+  const side = dx * cy - dz * sy;
+  const halfLength = c.hit || 1.7, halfWidth = halfLength * 0.6, halfHeight = 0.55;
+  const nearForward = clamp(forward, -halfLength, halfLength);
+  const nearSide = clamp(side, -halfWidth, halfWidth);
+  const nearHeight = clamp(dy, -halfHeight, halfHeight);
+  let nf = forward - nearForward, ns = side - nearSide, nh = dy - nearHeight;
+  let distance = Math.hypot(nf, ns, nh);
+  if (distance >= BR) return;
+
+  // When the ball centre is inside the car hitbox, find the closest face.
+  // The old fallback always sent it straight upwards, causing random launches.
+  if (distance < 1e-6) {
+    const faces = [
+      { gap: halfLength - Math.abs(forward), f: Math.sign(forward) || 1, s: 0, h: 0 },
+      { gap: halfWidth - Math.abs(side), f: 0, s: Math.sign(side) || 1, h: 0 },
+      { gap: halfHeight - Math.abs(dy), f: 0, s: 0, h: Math.sign(dy) || 1 }
+    ].sort((a, b) => a.gap - b.gap);
+    nf = faces[0].f; ns = faces[0].s; nh = faces[0].h;
+    distance = 0;
+  } else {
+    nf /= distance; ns /= distance; nh /= distance;
+  }
+  const nx = sy * nf + cy * ns, ny = nh, nz = cy * nf - sy * ns;
+  const penetration = BR - distance;
+  const separation = Math.min(penetration + 0.001, BR + 0.7);
+  ball.x += nx * separation;
+  ball.y += ny * separation;
+  ball.z += nz * separation;
+
+  const rvx = ball.vx - c.vx, rvy = ball.vy - c.vy, rvz = ball.vz - c.vz;
+  const closing = -(rvx * nx + rvy * ny + rvz * nz);
+  if (closing <= 0.18) return;
+
+  const index = cars.indexOf(c), stat = playerStats[index];
   if (lastTouch !== c) { previousTouch = lastTouch; lastTouch = c; }
-  const stat = playerStats[cars.indexOf(c)];
   const nearOwnGoal = Math.abs(c.z - (c.team ? -HL : HL)) < 28;
-  if (stat && nearOwnGoal && Math.abs(ball.z) > HL - 35 && ball.vz * (c.team ? 1 : -1) > 2 && (eventCooldown['clear'+cars.indexOf(c)] || 0) <= t) {
-    stat.clears++; eventCooldown['clear'+cars.indexOf(c)] = t + 3; showGameEvent('CLEARANCE', '#37f2c0');
+  if (stat && nearOwnGoal && Math.abs(ball.z) > HL - 35 &&
+      ball.vz * (c.team ? 1 : -1) > 2 && (eventCooldown['clear' + index] || 0) <= t) {
+    stat.clears++; eventCooldown['clear' + index] = t + 3; showGameEvent('CLEARANCE', '#37f2c0');
   }
-  if (stat && Math.abs(ball.z) > HL - 24 && Math.abs(ball.x) < GW + 12 && ball.vz * (c.team ? 1 : -1) > 1 && (eventCooldown['save'+cars.indexOf(c)] || 0) <= t) {
-    stat.saves++; eventCooldown['save'+cars.indexOf(c)] = t + 3; showGameEvent('SAVE!', '#37f2c0');
+  if (stat && Math.abs(ball.z) > HL - 24 && Math.abs(ball.x) < GW + 12 &&
+      ball.vz * (c.team ? 1 : -1) > 1 && (eventCooldown['save' + index] || 0) <= t) {
+    stat.saves++; eventCooldown['save' + index] = t + 3; showGameEvent('SAVE!', '#37f2c0');
   }
-  if (d < 1e-4) { nf = nl = 0; ny = 1; d = 0; } else { nf /= d; nl /= d; ny /= d; }
-  const nx = sy * nf + cy * nl, nz = cy * nf - sy * nl;
-  ball.x += nx * (BR - d); ball.y += ny * (BR - d); ball.z += nz * (BR - d);
-  const vn = (ball.vx - c.vx) * nx + (ball.vy - c.vy) * ny + (ball.vz - c.vz) * nz;
-  if (vn < 0) {
-    if (vn < -4) sparks(vn);
-    const mass = PHYSICS_TUNING.BALL_CAR_MASS_RATIO;
-    const forwardX = Math.sin(c.yaw) * Math.cos(c.pitch), forwardY = Math.sin(c.pitch), forwardZ = Math.cos(c.yaw) * Math.cos(c.pitch);
-    const forwardSpeed = Math.max(0, c.vx * forwardX + c.vy * forwardY + c.vz * forwardZ);
-    const impulse = -vn * (1 + PHYSICS_TUNING.BALL_RESTITUTION) *
-      PHYSICS_TUNING.BALL_HIT_MULTIPLIER / (1 + 1 / mass);
-    ball.vx += nx * impulse; ball.vy += ny * impulse; ball.vz += nz * impulse;
-    c.vx -= nx * impulse / mass; c.vy -= ny * impulse / mass; c.vz -= nz * impulse / mass;
-    const carSpeedAfterImpact = Math.hypot(c.vx, c.vy, c.vz);
-    if (carSpeedAfterImpact > PHYSICS_TUNING.MAX_SPEED) {
-      const carScale = PHYSICS_TUNING.MAX_SPEED / carSpeedAfterImpact;
-      c.vx *= carScale; c.vy *= carScale; c.vz *= carScale;
-    }
-    const relativeHitSpeed = Math.min(Math.hypot(ball.vx - c.vx, ball.vy - c.vy, ball.vz - c.vz), PHYSICS_TUNING.BALL_EXTRA_HIT_MAX_RELATIVE_SPEED);
-    const forwardImpulse = (PHYSICS_TUNING.BALL_HIT_FORWARD_FORCE +
-      Math.min(forwardSpeed, PHYSICS_TUNING.MAX_SPEED) * PHYSICS_TUNING.BALL_FORWARD_SPEED_FACTOR +
-      (c.flip > 0 ? Math.min(8, relativeHitSpeed * 0.12) : 0) +
-      (c.fl ? PHYSICS_TUNING.BALL_BOOST_HIT_BONUS : 0)) * PHYSICS_TUNING.BALL_HIT_MULTIPLIER;
-    ball.vx += forwardX * forwardImpulse; ball.vy += forwardY * forwardImpulse; ball.vz += forwardZ * forwardImpulse;
-    const frontBumperHit = lf > 0.25 && dy > -0.35 && dy < 2.35;
-    const undersideHit = ny > 0.3 && dy > 0.1;
-    if (frontBumperHit || undersideHit) ball.vy += PHYSICS_TUNING.BALL_UPWARD_POP;
+  if (closing > 5) sparks(-closing);
+
+  const inverseBallMass = 1 / PHYSICS_TUNING.BALL_MASS_REFERENCE;
+  const inverseCarMass = 1 / PHYSICS_TUNING.CAR_MASS_REFERENCE;
+  const impulse = closing * (1 + PHYSICS_TUNING.CAR_BALL_RESTITUTION) / (inverseBallMass + inverseCarMass);
+  const ballChange = impulse * inverseBallMass, carChange = impulse * inverseCarMass;
+  ball.vx += nx * ballChange; ball.vy += ny * ballChange; ball.vz += nz * ballChange;
+  c.vx -= nx * carChange; c.vy -= ny * carChange; c.vz -= nz * carChange;
+
+  // Only the first substantial impact in a short window receives additional
+  // shot power. This prevents the "sticky / accelerating ball" behaviour.
+  c.ballHitCooldown = Math.max(0, (c.ballHitCooldown || 0));
+  if (c.ballHitCooldown <= 0 && closing > 1.7) {
+    const fx = sy * Math.cos(c.pitch), fy = Math.sin(c.pitch), fz = cy * Math.cos(c.pitch);
+    const aligned = clamp(fx * nx + fy * ny + fz * nz, 0, 1);
+    const forwardSpeed = Math.max(0, c.vx * fx + c.vy * fy + c.vz * fz);
+    const extra = aligned * Math.min(18,
+      0.16 * closing + 0.08 * forwardSpeed +
+      (c.flip > 0 ? 6.5 : 0) + (c.fl ? 3 : 0));
+    // Set-and-forget forward impulse, not a force constantly applied on overlap.
+    ball.vx += fx * extra; ball.vy += fy * extra; ball.vz += fz * extra;
+    if (ny > 0.2 && forward > -0.4) ball.vy += Math.min(3, closing * 0.12);
+    c.ballHitCooldown = 0.085;
   }
-  const s = Math.hypot(ball.vx, ball.vy, ball.vz);
-  if (s > PHYSICS_TUNING.MAX_BALL_SPEED) {
-    const k = PHYSICS_TUNING.MAX_BALL_SPEED / s;
-    ball.vx *= k; ball.vy *= k; ball.vz *= k;
+
+  // Tangential contact velocity imparts a bounded amount of ball spin.
+  const tx = rvx + closing * nx, ty = rvy + closing * ny, tz = rvz + closing * nz;
+  const spinTransfer = 0.012;
+  ball.wx += (ny * tz - nz * ty) * spinTransfer;
+  ball.wy += (nz * tx - nx * tz) * spinTransfer;
+  ball.wz += (nx * ty - ny * tx) * spinTransfer;
+  clampBallMotion();
+}
+function clampBallMotion() {
+  const speed = Math.hypot(ball.vx, ball.vy, ball.vz);
+  if (speed > PHYSICS_TUNING.MAX_BALL_SPEED) {
+    const scale = PHYSICS_TUNING.MAX_BALL_SPEED / speed;
+    ball.vx *= scale; ball.vy *= scale; ball.vz *= scale;
   }
+  const spin = Math.hypot(ball.wx || 0, ball.wy || 0, ball.wz || 0);
+  if (spin > PHYSICS_TUNING.BALL_MAX_ANGULAR_SPEED) {
+    const scale = PHYSICS_TUNING.BALL_MAX_ANGULAR_SPEED / spin;
+    ball.wx *= scale; ball.wy *= scale; ball.wz *= scale;
+  }
+}
+function ballSurfaceImpulse(nx, ny, nz, restitution) {
+  const vn = ball.vx * nx + ball.vy * ny + ball.vz * nz;
+  if (vn >= 0) return;
+  const e = vn < -1.5 ? restitution : 0;
+  ball.vx -= (1 + e) * vn * nx;
+  ball.vy -= (1 + e) * vn * ny;
+  ball.vz -= (1 + e) * vn * nz;
 }
 
 // goal explosion helpers
@@ -1707,71 +1758,104 @@ function goalExplosion(team) {
 }
 
 function stepBall(dt) {
-  ball.vy -= PHYSICS_TUNING.BALL_GRAVITY_FORCE * dt;
-  const dr = 1 - PHYSICS_TUNING.BALL_DRAG_REFERENCE * dt; ball.vx *= dr; ball.vz *= dr;
+  const p = PHYSICS_TUNING;
+  // Integrate velocity before contacts, keeping all motion in world space.
+  ball.vy -= p.BALL_GRAVITY_FORCE * dt;
+  const airDrag = Math.max(0, 1 - p.BALL_DRAG_REFERENCE * dt);
+  ball.vx *= airDrag; ball.vy *= airDrag; ball.vz *= airDrag;
   ball.x += ball.vx * dt; ball.y += ball.vy * dt; ball.z += ball.vz * dt;
-  if (ball.y < BR) {
-    ball.y = BR; ball.vy = -ball.vy * PHYSICS_TUNING.BALL_FLOOR_RESTITUTION;
-    if (Math.abs(ball.vy) < 1.5) ball.vy = 0;
-    const f = Math.max(0, 1 - PHYSICS_TUNING.BALL_FRICTION_REFERENCE * dt); ball.vx *= f; ball.vz *= f;
+
+  if (ball.y > CEIL - BR) {
+    ball.y = CEIL - BR;
+    ballSurfaceImpulse(0, -1, 0, p.BALL_RESTITUTION);
   }
-  if (ball.y > CEIL - BR) { ball.y = CEIL - BR; ball.vy = -Math.abs(ball.vy) * PHYSICS_TUNING.BALL_RESTITUTION; }
-  const az = Math.abs(ball.z), sz = Math.sign(ball.z);
-  if (state === 'play' && az > HL && Math.abs(ball.x) < GW && ball.y < GH) return goal(ball.z > 0 ? 0 : 1);
-  if (az <= HL) { // rounded corners so the ball never sits in a corner
-    const sx = Math.sign(ball.x), ov = Math.abs(ball.x) + az - (HW + HL - CH - BR * 1.4142);
-    if (ov > 0) {
-      const vn = (ball.vx * sx + ball.vz * sz) * 0.7071;
-      ball.x -= sx * ov / 2; ball.z -= sz * ov / 2; if (vn > 0) { ball.vx -= sx * vn * 0.7071 * 1.72; ball.vz -= sz * vn * 0.7071 * 1.72; }
-    }
+  const ax = Math.abs(ball.x), az = Math.abs(ball.z);
+  const sx = Math.sign(ball.x) || 1, sz = Math.sign(ball.z) || 1;
+  if (state === 'play' && az > HL && ax < GW - BR * 0.25 && ball.y < GH - BR * 0.25) {
+    return goal(ball.z > 0 ? 0 : 1);
   }
-  if (Math.abs(ball.x) > HW - BR && az <= HL) {
-    const sx = Math.sign(ball.x), edgeX = sx * (HW - BR), edgeRamp = arenaRampAt(edgeX, ball.z);
-    const ridingRamp = edgeRamp.height > 0.2 && ball.y < edgeRamp.height + BR + 2.5;
-    ball.x = edgeX;
-    if (ridingRamp) ball.vz *= Math.max(0, 1 - PHYSICS_TUNING.BALL_SURFACE_FRICTION * dt);
-    else {
-      ball.vx = -sx * Math.abs(ball.vx) * PHYSICS_TUNING.BALL_WALL_RESTITUTION;
-      const damp = Math.max(0, 1 - PHYSICS_TUNING.BALL_SURFACE_FRICTION * dt);
-      ball.vy *= damp; ball.vz *= damp;
-    }
-  }
-  if (az > HL) { // inside a goal pocket
-    if (Math.abs(ball.x) > GW - BR) { ball.x = Math.sign(ball.x) * (GW - BR); ball.vx = -Math.sign(ball.x) * Math.abs(ball.vx) * 0.5; }
-    if (ball.y > GH - BR) { ball.y = GH - BR; ball.vy = -Math.abs(ball.vy) * 0.5; }
-    if (az > HL + GD - BR) { ball.z = sz * (HL + GD - BR); ball.vz = -sz * Math.abs(ball.vz) * 0.4; }
-  } else if (az > HL - BR && !(Math.abs(ball.x) + BR < GW && ball.y + BR < GH)) {
-    const edgeZ = sz * (HL - BR), edgeRamp = arenaRampAt(ball.x, edgeZ);
-    const ridingRamp = edgeRamp.height > 0.2 && Math.abs(ball.x) > GW + 2 && ball.y < edgeRamp.height + BR + 2.5;
-    ball.z = edgeZ;
-    if (ridingRamp) ball.vx *= Math.max(0, 1 - PHYSICS_TUNING.BALL_SURFACE_FRICTION * dt);
-    else {
-      ball.vz = -sz * Math.abs(ball.vz) * PHYSICS_TUNING.BALL_WALL_RESTITUTION;
-      const damp = Math.max(0, 1 - PHYSICS_TUNING.BALL_SURFACE_FRICTION * dt);
-      ball.vx *= damp; ball.vy *= damp;
-    }
-  }
+
+  // Smooth sphere contact with the same ramp height field used by the cars.
+  // Only hold the ball on a ramp when actually touching it; never snap an
+  // airborne ball down from several units above the slope.
   const ramp = arenaRampAt(ball.x, ball.z);
-  const rampSurfaceY = ramp.height + BR;
-  const rampVelocityY = ball.vx * ramp.dx + ball.vz * ramp.dz;
-  if (ramp.height > 0.025 && (ball.y < rampSurfaceY - 0.05 || (ball.y <= rampSurfaceY + 0.18 && ball.vy <= rampVelocityY + 2) || (ball.onRamp && ball.y <= rampSurfaceY + 3))) {
-    // Project velocity onto the ramp tangent so gravity slows uphill movement naturally.
-    const normalVelocity = ball.vy - rampVelocityY;
-    const normalLengthSq = 1 + ramp.dx * ramp.dx + ramp.dz * ramp.dz;
-    ball.vx += normalVelocity * ramp.dx / normalLengthSq;
-    ball.vz += normalVelocity * ramp.dz / normalLengthSq;
-    ball.vy -= normalVelocity / normalLengthSq;
-    ball.y = rampSurfaceY;
-    ball.onRamp = true;
+  const surface = BR + ramp.height;
+  const normalLength = Math.hypot(-ramp.dx, 1, -ramp.dz);
+  const nx = -ramp.dx / normalLength, ny = 1 / normalLength, nz = -ramp.dz / normalLength;
+  const normalSpeed = ball.vx * nx + ball.vy * ny + ball.vz * nz;
+  const touching = ball.y <= surface + 0.035 && normalSpeed <= 0.2;
+  if (ball.y < surface || (ball.onRamp && touching)) {
+    ball.y = Math.max(ball.y, surface);
+    ballSurfaceImpulse(nx, ny, nz, ramp.height > 0.1 ? 0.18 : p.BALL_FLOOR_RESTITUTION);
+    const groundFriction = Math.max(0, 1 - p.BALL_FRICTION_REFERENCE * dt);
+    ball.vx *= groundFriction;
+    ball.vz *= groundFriction;
+    ball.onRamp = ramp.height > 0.1;
+    ball.onGround = ramp.height <= 0.1;
   } else {
     ball.onRamp = false;
+    ball.onGround = false;
   }
-  const ballSpeed = Math.hypot(ball.vx, ball.vy, ball.vz);
-  if (ballSpeed > PHYSICS_TUNING.MAX_BALL_SPEED) {
-    const factor = PHYSICS_TUNING.MAX_BALL_SPEED / ballSpeed;
-    ball.vx *= factor; ball.vy *= factor; ball.vz *= factor;
+
+  if (az <= HL + BR) {
+    // Rounded diagonal corners. A normal impulse preserves tangential speed.
+    const edge = HW + HL - CH - BR * Math.SQRT2;
+    const over = Math.abs(ball.x) + Math.abs(ball.z) - edge;
+    if (over > 0 && Math.abs(ball.x) > HW - CH - BR && Math.abs(ball.z) > HL - CH - BR) {
+      const correction = over * 0.5;
+      ball.x -= sx * correction;
+      ball.z -= sz * correction;
+      ballSurfaceImpulse(-sx * Math.SQRT1_2, 0, -sz * Math.SQRT1_2, p.BALL_WALL_RESTITUTION);
+    }
   }
+
+  if (Math.abs(ball.x) > HW - BR && az <= HL + BR) {
+    const sign = Math.sign(ball.x);
+    ball.x = sign * (HW - BR);
+    if (!(ball.onRamp && ball.y < surface + BR)) {
+      ballSurfaceImpulse(-sign, 0, 0, p.BALL_WALL_RESTITUTION);
+    }
+  }
+  if (Math.abs(ball.z) > HL) {
+    // Goal interior has its own side / roof / back-wall colliders.
+    if (Math.abs(ball.x) > GW - BR) {
+      const sign = Math.sign(ball.x);
+      ball.x = sign * (GW - BR);
+      ballSurfaceImpulse(-sign, 0, 0, 0.5);
+    }
+    if (ball.y > GH - BR) {
+      ball.y = GH - BR;
+      ballSurfaceImpulse(0, -1, 0, 0.5);
+    }
+    if (Math.abs(ball.z) > HL + GD - BR) {
+      const sign = Math.sign(ball.z);
+      ball.z = sign * (HL + GD - BR);
+      ballSurfaceImpulse(0, 0, -sign, 0.4);
+    }
+  } else if (Math.abs(ball.z) > HL - BR &&
+      !(Math.abs(ball.x) < GW - BR && ball.y < GH - BR)) {
+    const sign = Math.sign(ball.z);
+    ball.z = sign * (HL - BR);
+    if (!(ball.onRamp && ball.y < surface + BR)) {
+      ballSurfaceImpulse(0, 0, -sign, p.BALL_WALL_RESTITUTION);
+    }
+  }
+
+  // Rolling rotation follows ground velocity; airborne spin decays slowly.
+  if (ball.onGround || ball.onRamp) {
+    const targetWx = ball.vz / BR, targetWz = -ball.vx / BR;
+    const blend = Math.min(1, dt * 8);
+    ball.wx += (targetWx - ball.wx) * blend;
+    ball.wz += (targetWz - ball.wz) * blend;
+    ball.wy *= Math.max(0, 1 - 0.35 * dt);
+  } else {
+    ball.wx *= Math.max(0, 1 - 0.12 * dt);
+    ball.wy *= Math.max(0, 1 - 0.12 * dt);
+    ball.wz *= Math.max(0, 1 - 0.12 * dt);
+  }
+  clampBallMotion();
 }
+
 function showGameEvent(label, color = '#fff') {
   const el = $('eventCallout'); if (!el) return;
   el.textContent = label; el.style.color = color; el.classList.remove('event-pop'); void el.offsetWidth; el.classList.add('event-pop');
@@ -2038,7 +2122,11 @@ function render(dt) {
   }
   ballMesh.position.set(ball.x, ball.y, ball.z);
   const sp = Math.hypot(ball.vx, ball.vz);
-  if (sp > 0.05) { axis.set(ball.vz, 0, -ball.vx).normalize(); ballMesh.rotateOnWorldAxis(axis, sp * dt / BR); }
+  const spinMagnitude = Math.hypot(ball.wx || 0, ball.wy || 0, ball.wz || 0);
+  if (spinMagnitude > 0.001) {
+    axis.set(ball.wx, ball.wy, ball.wz).multiplyScalar(1 / spinMagnitude);
+    ballMesh.rotateOnWorldAxis(axis, spinMagnitude * dt);
+  }
   if (state === 'play' && Math.hypot(sp, ball.vy) > 26) emit(ball.x, ball.y, ball.z, (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2, 0.4, 0.3, 0.9, 0.8);
   for (const p of pads) {
     const active = p.t <= 0;
