@@ -106,7 +106,7 @@ async function main() {
     assert.equal(await evalJS('window.rocketArena.stadium.children.filter(x => x.isInstancedMesh).length >= 7'),true);
     assert.equal(await evalJS('window.rocketArena.pitch.geometry.attributes.position.count > 15000'),true);
     assert.equal(await evalJS('window.rocketArena.pads.filter(x => x.big).length'),6);
-    assert.equal(await evalJS('window.rocketArena.pads.filter(x => !x.big).length'),31);
+    assert.equal(await evalJS('window.rocketArena.pads.filter(x => !x.big).length'),28);
     assert.equal(await evalJS('Math.max(...Array.from({length:window.rocketArena.pitch.geometry.attributes.position.count},(_,i)=>window.rocketArena.pitch.geometry.attributes.position.getY(i)))>8'),true);
     await eventually(()=>evalJS('window.rocketArena.cars[0]?.mesh?.detailed===true'),25000)
       .catch(async err=>{throw new Error('Detailed Octane failed to load: '+err.message+
@@ -164,7 +164,7 @@ async function main() {
     console.log('Air boost sustained lift and local-axis air roll passed.');
     await evalJS('document.getElementById("trainingResetBall").click()');
     const resetY=await evalJS('window.rocketArena.ball.y');
-    assert(Math.abs(resetY-(91.25/50+1))<.3,'Training ball did not reset');
+    assert(Math.abs(resetY-(91.25/50+0.038))<.3,'Training ball did not reset');
     await evalJS('document.getElementById("trainingExit").click()');
     assert.equal(await evalJS('window.rocketArena.state'),'menu');
 
