@@ -75,7 +75,7 @@ try {
 } catch (_) {}
 BLUE = TEAM_COLOR_PRESETS[colourVisionMode].blue;
 ORANGE = TEAM_COLOR_PRESETS[colourVisionMode].orange;
-const WALL_RAMP_WIDTH = 24, WALL_RAMP_HEIGHT = 9.5;
+const WALL_RAMP_WIDTH = 6.0, WALL_RAMP_HEIGHT = 256 / 50;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const rampEase = t => t * t * (3 - 2 * t); // smooth start/end avoids jolts; vertical-wall mode takes over at the edge
 function rampProfile(distance, outerEdge) {
@@ -83,7 +83,14 @@ function rampProfile(distance, outerEdge) {
   const span = WALL_RAMP_WIDTH - 0.5;
   const t = clamp((distance - start) / span, 0, 1);
   if (distance <= start) return { height: 0, slope: 0 };
-  return { height: WALL_RAMP_HEIGHT * rampEase(t), slope: WALL_RAMP_HEIGHT * 6 * t * (1 - t) / span };
+  // A quarter-round analogue reaches the wall almost vertically. The old
+  // smoothstep flattened out right at the lip, making balls/car bounce off an
+  // artificial edge and the wall ride snap. Radius ~256 Unreal units.
+  const inner = Math.sqrt(Math.max(0, 1 - t*t));
+  const height = WALL_RAMP_HEIGHT * (1 - inner);
+  const slope = Math.min(12, WALL_RAMP_HEIGHT * t /
+    (span * Math.sqrt(Math.max(1e-4, 1-t*t))));
+  return { height, slope };
 }
 function arenaRampAt(x, z) {
   const ax = Math.abs(x), az = Math.abs(z);
@@ -201,7 +208,7 @@ function buildArena() {
   const texture = new THREE.CanvasTexture(canvas);
   texture.anisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), 8);
   texture.colorSpace = THREE.SRGBColorSpace || texture.colorSpace;
-  const surfaceGeo = new THREE.PlaneGeometry(2*HW,2*HL,112,148);
+  const surfaceGeo = new THREE.PlaneGeometry(2*HW,2*HL,160,208);
   surfaceGeo.rotateX(-Math.PI/2);
   const pos = surfaceGeo.attributes.position;
   for (let i=0;i<pos.count;i++) {
@@ -1061,7 +1068,7 @@ function mkCar(team, k, ai, modelName) {
   car.displayName = ai ? (team ? 'ORANGE BOT ' : 'BLUE BOT ') + (k + 1) : playerName;
   // model-based properties
   const mdef = CAR_MODELS.find(m => m.name === model);
-  car.hit = mdef.hit; car.hitbox = CAR_HITBOXES[model] || CAR_HITBOXES.octane; car.mass = mdef.mass * 4; car.cap = mdef.cap; car.baseCap = mdef.cap;
+  car.hit = mdef.hit; car.hitbox = CAR_HITBOXES[model] || CAR_HITBOXES.octane; car.mass = 4; car.cap = 1; car.baseCap = 1;
   if (model === 'octane' && octaneModelReady) makeDetailedOctane(car); // scale mass multiplier into existing physics constants
   return car;
 }
@@ -1085,16 +1092,22 @@ function buildTeams() {
 // overhead arena map. Each is positioned on the continuous ramp surface.
 const pads = [];
 const bigPads=[
-  [-63,-83,1],[63,-83,1],[-63,83,1],[63,83,1],[-66,0,1],[66,0,1]
+  [-61.44,-81.92,1],[61.44,-81.92,1],
+  [-61.44,81.92,1],[61.44,81.92,1],[-71.68,0,1],[71.68,0,1]
+];
+// RLBot's standard Soccar pad coordinates, scaled 1/50. There are 28 small
+// pads, plus the 6 full boosts above, all flat on the pitch.
+const negativeSmallPads=[
+  [0,-84.8],[-35.84,-83.68],[35.84,-83.68],
+  [-18.8,-66.16],[18.8,-66.16],[0,-56.32],
+  [-71.68,-49.68],[71.68,-49.68],
+  [-35.76,-46.04],[35.76,-46.04],
+  [-40.96,-20.72],[40.96,-20.72],[0,-20.48]
 ];
 const smallPads=[
-  [0,0],[0,-26],[0,26],[0,-54],[0,54],[0,-89],[0,89],
-  [-27,0],[27,0],[-48,0],[48,0],
-  [-29,-24],[29,-24],[-29,24],[29,24],
-  [-39,-53],[39,-53],[-39,53],[39,53],
-  [-56,-34],[56,-34],[-56,34],[56,34],
-  [-23,-76],[23,-76],[-23,76],[23,76],
-  [-43,-86],[43,-86],[-43,86],[43,86]
+  ...negativeSmallPads,
+  ...negativeSmallPads.map(([x,z])=>[x,-z]),
+  [-20.48,0],[20.48,0]
 ];
 for (const [x,z,big] of [...bigPads,...smallPads]) {
   const ramp = arenaRampAt(x, z);
@@ -1118,7 +1131,7 @@ for (const [x,z,big] of [...bigPads,...smallPads]) {
   scene.add(group);
   pads.push({ x, z, big: !!big, t: 0, mesh: m, ring, core, group, surfaceY, ramp });
 }
-const FORM = [[0, 0.55], [-26, 0.8], [26, 0.8]];
+const FORM = [[0, 4608 / 50 / HL], [-40.96, 2560 / 50 / HL], [40.96, 2560 / 50 / HL]];
 function kickoff() {
   previousTouch = null;
   eventCooldown = {};
@@ -1131,7 +1144,7 @@ function kickoff() {
   predictionTimer = 0;
   replayFrames = [];
   replayIndex = 0;
-  Object.assign(ball, { x: 0, y: BR + 6, z: 0, vx: 0, vy: 0, vz: 0, wx: 0, wy: 0, wz: 0, onRamp: false, onGround: false });
+  Object.assign(ball, { x: 0, y: BR + 0.038, z: 0, vx: 0, vy: 0, vz: 0, wx: 0, wy: 0, wz: 0, onRamp: false, onGround: true });
   lastTouch = null;
   for (const c of cars) {
     const f = FORM[c.k], s = c.team ? 1 : -1;
@@ -1184,7 +1197,7 @@ function start(freePlay = false) {
 // without changing normal match rules or spawning opposition bots.
 function resetTrainingBall() {
   Object.assign(ball, {
-    x: 0, y: BR + 1, z: 0, vx: 0, vy: 0, vz: 0,
+    x: 0, y: BR + 0.038, z: 0, vx: 0, vy: 0, vz: 0,
     wx: 0, wy: 0, wz: 0, onRamp: false, onGround: false
   });
   ballMesh.quaternion.identity();
@@ -1278,7 +1291,7 @@ function loadTrainingShot(scenario = 'dribble') {
       break;
     case 'kickoff':
       car.z = -57;
-      ball.y = BR + 6;
+      ball.y = BR + 0.038;
       break;
     case 'dribble':
     default:
@@ -2030,16 +2043,15 @@ function stepGroundForward(v, throttle, boosting, dt) {
   return v + demand * groundThrottleAcceleration(v) * dt;
 }
 function groundSteeringCurvature(speedUnits, powerslide) {
-  const samples = [[0,.0069],[500,.0042],[1000,.0028],[1500,.0017],
-    [1750,.0014],[2300,.0010]];
-  let curvature=samples[samples.length-1][1];
-  for(let i=1;i<samples.length;i++) if(speedUnits <= samples[i][0]) {
-    const a=samples[i-1],b=samples[i];
-    const t=clamp((speedUnits-a[0])/(b[0]-a[0]),0,1);
-    curvature=a[1]+(b[1]-a[1])*t;
-    break;
-  }
-  return curvature * (1 + (powerslide || 0) * 1.15);
+  // Rocket League community-measured, piecewise ground turning curvature.
+  // The wheel angle shrinks steeply with speed and yields ~3s 360° on throttle.
+  const v=clamp(Math.abs(speedUnits),0,2500);
+  const curvature=v<500 ? .006900 - 5.84e-6*v
+    : v<1000 ? .005610 - 3.26e-6*v
+    : v<1500 ? .004300 - 1.95e-6*v
+    : v<1750 ? .003025 - 1.1e-6*v
+    : .001800 - 4e-7*v;
+  return Math.max(.0001,curvature) * (1 + (powerslide || 0) * 1.15);
 }
 function stepCar(c, ct, dt) {
   c.demoCooldown = Math.max(0, (c.demoCooldown || 0) - dt);
