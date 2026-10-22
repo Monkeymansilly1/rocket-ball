@@ -554,3 +554,7 @@ body.free-play #boost #bt { font-size:30px; }
   .training-preset { display:flex; justify-content:center; margin:9px 0 0; }
   #trainingShotCount { margin-left:7px; }
 }
+
+/* Free Play wall-to-air tutorial: concise and only visible for the drill. */
+.wall-training-tip { margin:7px auto 2px; max-width:760px; color:#c9eaff; font:700 12px 'Trebuchet MS',sans-serif; line-height:1.45; }
+.wall-training-tip[hidden] { display:none!important; }
