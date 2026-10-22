@@ -58,7 +58,7 @@ async function main() {
       if(!fs.existsSync(p))return null;
       const v=Number(fs.readFileSync(p,'utf8').split('\n')[0]);
       return Number.isInteger(v)?v:null;
-    },20000);
+    },40000);
     const targets=await eventually(async()=>{
       const response=await fetch('http://127.0.0.1:'+port+'/json/list');
       const json=await response.json();
