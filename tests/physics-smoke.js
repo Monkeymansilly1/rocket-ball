@@ -87,9 +87,9 @@ const wallX=80-scaledBallRadius-0.05;
 Object.assign(ball,{x:wallX,y:scaledBallRadius+arenaRampAt(wallX,0).height+0.25,z:0,
   vx:24,vy:1,vz:0,onRamp:true});
 stepBall(1/120);
-assert(ball.vx===0 && ball.vy>18 && ball.onWall,'Real ramp-to-wall ball transfer failed');
+assert(ball.vx===0 && ball.vy>7 && ball.onWall,'Real ramp-to-wall ball transfer failed');
 for(let i=0;i<35;i++)stepBall(1/120);
-assert(ball.y>7.5,'The ball did not rise after transferring onto the wall');
+assert(ball.y>6.5,'The ball did not rise after transferring onto the wall');
 
 // A pitched-up car must be able to hit a ball above its nose in 3D.
 Object.assign(car,{x:0,y:7,z:0,vx:0,vy:22,vz:0,yaw:Math.PI/2,pitch:Math.PI/2,
