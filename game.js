@@ -2789,8 +2789,8 @@ function goal(team) {
     resetTrainingBall();
     return;
   }
-  // Ball physics use metre-like units per second; convert speed to mph at the goal line.
-  goalSpeedMph = Math.round(Math.hypot(ball.vx, ball.vy, ball.vz) * 2.236936);
+  // 1 playable world unit = 50 Unreal units = 0.5 metre, then m/s → MPH.
+  goalSpeedMph = Math.round(Math.hypot(ball.vx, ball.vy, ball.vz) * 0.5 * 2.236936);
   score[team]++;
   const scorerIndex = lastTouch ? cars.indexOf(lastTouch) : -1;
   if (scorerIndex >= 0 && playerStats[scorerIndex]) playerStats[scorerIndex].goals++;
