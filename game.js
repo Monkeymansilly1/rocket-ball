@@ -131,8 +131,8 @@ const CAR_HITBOXES = {
 const renderer = new THREE.WebGLRenderer({ canvas: $('c'), antialias: true });
 renderer.shadowMap.enabled = true;
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x2a1a38);
-scene.fog = new THREE.Fog(0x3a2342, 220, 900);
+scene.background = new THREE.Color(0x8ac7ec);
+scene.fog = new THREE.Fog(0xbcd9e8, 240, 850);
 const camera = new THREE.PerspectiveCamera(72, 1, 0.5, 2000);
 const camera2 = new THREE.PerspectiveCamera(72, 1, 0.5, 2000);
 function resize() {
@@ -146,9 +146,9 @@ function resize() {
 }
 addEventListener('resize', resize); resize();
 
-scene.add(new THREE.HemisphereLight(0xffe2c4, 0x2a3a5a, 1.05));
-const fill = new THREE.DirectionalLight(0x9db8ff, 0.5); fill.position.set(-40, 50, -60); scene.add(fill);
-const sun = new THREE.DirectionalLight(0xffe0c0, 1.0);
+scene.add(new THREE.HemisphereLight(0xd8efff, 0x315a43, 1.3));
+const fill = new THREE.DirectionalLight(0xb4dcff, 0.75); fill.position.set(-40, 50, -60); scene.add(fill);
+const sun = new THREE.DirectionalLight(0xfff1d9, 1.6);
 sun.position.set(30, 70, 20); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
 Object.assign(sun.shadow.camera, { left: -45, right: 45, top: 45, bottom: -45, near: 10, far: 240 });
 scene.add(sun); scene.add(sun.target);
@@ -651,7 +651,7 @@ function buildStadium() {
 buildStadium();
 function applyArenaStyle(style) {
   const palettes = {
-    sunset: { sky: 0x2a1a38, fog: 0x3a2342, ground: 0xffffff, glow: 0x37f2c0 },
+    sunset: { sky: 0x8ac7ec, fog: 0xbcd9e8, ground: 0xffffff, glow: 0x68d0ff },
     neon: { sky: 0x07142d, fog: 0x101d3b, ground: 0xb7c7ff, glow: 0x8c4dff },
     ice: { sky: 0x9ac8e6, fog: 0x9ac8e6, ground: 0xd6f4ff, glow: 0x7be8ff },
     desert: { sky: 0x47212c, fog: 0x6b3841, ground: 0xffd0a0, glow: 0xffb34f }
@@ -1051,25 +1051,39 @@ function buildTeams() {
     cars.push(c);
   }
 }
+// Six 100-boost pads at the four corners and the two side midpoints.
+// The small 12-boost pads are mirrored across both halves, following the
+// overhead arena map. Each is positioned on the continuous ramp surface.
 const pads = [];
-for (const [x, z, big] of [[-72, -96, 1], [72, -96, 1], [-72, 96, 1], [72, 96, 1], [-74, 0, 1], [74, 0, 1], [0, -64], [0, 64], [-36, -40], [36, -40], [-36, 40], [36, 40], [0, 0],
-  [-48, -70], [48, -70], [-48, 70], [48, 70], [-20, -90], [20, -90], [-20, 90], [20, 90], [-60, -20], [60, -20], [-60, 20], [60, 20]]) {
+const bigPads=[
+  [-63,-83,1],[63,-83,1],[-63,83,1],[63,83,1],[-66,0,1],[66,0,1]
+];
+const smallPads=[
+  [0,0],[0,-26],[0,26],[0,-54],[0,54],[0,-89],[0,89],
+  [-27,0],[27,0],[-48,0],[48,0],
+  [-29,-24],[29,-24],[-29,24],[29,24],
+  [-39,-53],[39,-53],[-39,53],[39,53],
+  [-56,-34],[56,-34],[-56,34],[56,34],
+  [-23,-76],[23,-76],[-23,76],[23,76],
+  [-43,-86],[43,-86],[-43,86],[43,86]
+];
+for (const [x,z,big] of [...bigPads,...smallPads]) {
   const ramp = arenaRampAt(x, z);
   const surfaceY = ramp.height;
   const group = new THREE.Group();
   group.position.set(x, surfaceY, z);
   group.rotation.set(-Math.atan(ramp.dz), 0, Math.atan(ramp.dx));
-  const material = new THREE.MeshBasicMaterial({ color: big ? 0xffc64d : 0x37f2c0, transparent: true, opacity: 0.9 });
+  const material = new THREE.MeshBasicMaterial({ color: big ? 0xffb236 : 0xffd363, transparent: true, opacity: 0.9 });
   const m = new THREE.Mesh(new THREE.CylinderGeometry(big ? 2.55 : 1.48, big ? 2.55 : 1.48, 0.18, 32), material);
   m.position.y = 0.09; group.add(m);
   const ring = new THREE.Mesh(
     new THREE.TorusGeometry(big ? 2.35 : 1.32, big ? 0.16 : 0.09, 8, 36),
-    new THREE.MeshBasicMaterial({ color: big ? 0xffe27a : 0x8affdb, transparent: true, opacity: 0.95 })
+    new THREE.MeshBasicMaterial({ color: big ? 0xffe27a : 0xffdfa4, transparent: true, opacity: 0.95 })
   );
   ring.rotation.x = Math.PI / 2; ring.position.y = 0.2; group.add(ring);
   const core = new THREE.Mesh(
     new THREE.CircleGeometry(big ? 1.8 : 0.82, 24),
-    new THREE.MeshBasicMaterial({ color: big ? 0xffdf65 : 0x62ffe0, transparent: true, opacity: 0.5, side: THREE.DoubleSide })
+    new THREE.MeshBasicMaterial({ color: big ? 0xffcc48 : 0xffd989, transparent: true, opacity: 0.5, side: THREE.DoubleSide })
   );
   core.rotation.x = -Math.PI / 2; core.position.y = 0.19; group.add(core);
   scene.add(group);
