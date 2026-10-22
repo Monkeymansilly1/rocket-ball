@@ -512,32 +512,38 @@ function buildStadium() {
   // Lower arcade follows the grandstand instead of floating in the distance.
   const pillarsPerTier=40;
   const makeArcade=(count,rx,rz,baseY,height,span)=>{
-    const colGeom=new THREE.CylinderGeometry(.82,1.05,height,8);
-    const colMesh=new THREE.InstancedMesh(colGeom,stone,count*2);
+    // Stone columns, 3D arches and lintels are all instanced, rather than
+    // hundreds of separate draw calls. This also helps integrated GPUs.
+    const colMesh=new THREE.InstancedMesh(
+      new THREE.CylinderGeometry(.82,1.05,height,8),stone,count*2);
+    const archMesh=new THREE.InstancedMesh(
+      new THREE.TorusGeometry(span,.88,7,18,Math.PI),ivory,count);
+    const capMesh=new THREE.InstancedMesh(
+      new THREE.BoxGeometry(span*2+2.5,.8,1.6),roofTrim,count);
     const mtx=new THREE.Matrix4();
     for(let i=0;i<count;i++){
       const a=(i+.5)/count*Math.PI*2,center=ringPoint(a,rx,rz,0);
       const tangent=ringPoint(a+.001,rx,rz,0).sub(ringPoint(a-.001,rx,rz,0)).normalize();
       const angle=Math.atan2(-tangent.z,tangent.x);
-      const bay=new THREE.Group();
-      bay.position.set(center.x,0,center.z);bay.rotation.y=angle;
-      for(const sx of [-1,1]){
-        const local=new THREE.Vector3(sx*span,baseY+height/2,0);
-        local.applyAxisAngle(new THREE.Vector3(0,1,0),angle);
-        mtx.makeTranslation(center.x+local.x,local.y,center.z+local.z);
-        colMesh.setMatrixAt(i*2+(sx>0?1:0),mtx);
+      const cs=Math.cos(angle),sn=Math.sin(angle);
+      for(const side of [-1,1]){
+        mtx.makeTranslation(
+          center.x + side*span*cs, baseY+height/2,
+          center.z - side*span*sn);
+        colMesh.setMatrixAt(i*2+(side>0?1:0),mtx);
       }
-      const arch=new THREE.Mesh(
-        new THREE.TorusGeometry(span,.88,7,18,Math.PI),ivory);
-      arch.position.set(0,baseY+height,0);
-      bay.add(arch);
-      // Stone lintel/capstone over the doorway.
-      const cap=new THREE.Mesh(new THREE.BoxGeometry(span*2+2.5,.8,1.6),roofTrim);
-      cap.position.y=baseY+height+span+.65;bay.add(cap);
-      stadium.add(bay);
+      mtx.makeRotationY(angle);
+      mtx.setPosition(center.x,baseY+height,center.z);
+      archMesh.setMatrixAt(i,mtx);
+      mtx.makeRotationY(angle);
+      mtx.setPosition(center.x,baseY+height+span+.65,center.z);
+      capMesh.setMatrixAt(i,mtx);
     }
-    colMesh.instanceMatrix.needsUpdate=true;colMesh.frustumCulled=false;
-    stadium.add(colMesh);
+    for(const mesh of [colMesh,archMesh,capMesh]){
+      mesh.instanceMatrix.needsUpdate=true;
+      mesh.frustumCulled=false;
+      stadium.add(mesh);
+    }
   };
   makeArcade(pillarsPerTier,143,171,36,13,6.35);
   makeRim(145,173,56.2,1.25,stone);
@@ -571,20 +577,33 @@ function buildStadium() {
   stadium.add(new THREE.Mesh(roofGeo,
     new THREE.MeshStandardMaterial({vertexColors:true,side:THREE.DoubleSide,roughness:.85})));
 
-  // Flags between Roman arches and inner concourse arches.
-  for(let i=0;i<32;i++){
-    const a=(i+.5)/32*Math.PI*2,p=ringPoint(a,148,178,0);
-    const flag=new THREE.Group();
-    flag.position.set(p.x,49,p.z);
-    const fabric=new THREE.Mesh(new THREE.PlaneGeometry(3.5,8.2),
-      p.z<0?blueCloth:orangeCloth);
-    fabric.position.y=-4.7;fabric.rotation.y=Math.atan2(p.x,p.z);
-    flag.add(fabric);
-    const crest=new THREE.Mesh(new THREE.CircleGeometry(1.06,6),
-      new THREE.MeshBasicMaterial({color:0xe8f4ff,transparent:true,opacity:.8,side:THREE.DoubleSide}));
-    crest.position.copy(fabric.position);crest.position.y+=1.7;
-    crest.rotation.y=fabric.rotation.y;flag.add(crest);
-    stadium.add(flag);
+  // Flags and emblems also share GPU geometry; each colour is one draw call.
+  const flagGeo=new THREE.PlaneGeometry(3.5,8.2);
+  const crestGeo=new THREE.CircleGeometry(1.06,6);
+  const bannerCount=32;
+  const bannersBlue=new THREE.InstancedMesh(flagGeo,blueCloth,bannerCount);
+  const bannersOrange=new THREE.InstancedMesh(flagGeo,orangeCloth,bannerCount);
+  const crestMat=new THREE.MeshBasicMaterial({
+    color:0xe8f4ff,transparent:true,opacity:.8,side:THREE.DoubleSide});
+  const crests=new THREE.InstancedMesh(crestGeo,crestMat,bannerCount);
+  const flagMtx=new THREE.Matrix4();
+  const flagBlueIndices=[],flagOrangeIndices=[];
+  for(let i=0;i<bannerCount;i++){
+    const a=(i+.5)/bannerCount*Math.PI*2,p=ringPoint(a,148,178,0);
+    const angle=Math.atan2(p.x,p.z);
+    flagMtx.makeRotationY(angle);
+    flagMtx.setPosition(p.x,44.3,p.z);
+    const bucket=p.z<0?flagBlueIndices:flagOrangeIndices;
+    const target=p.z<0?bannersBlue:bannersOrange;
+    target.setMatrixAt(bucket.length,flagMtx);bucket.push(i);
+    flagMtx.makeRotationY(angle);
+    flagMtx.setPosition(p.x,46.0,p.z+.05);
+    crests.setMatrixAt(i,flagMtx);
+  }
+  bannersBlue.count=flagBlueIndices.length;
+  bannersOrange.count=flagOrangeIndices.length;
+  for(const mesh of [bannersBlue,bannersOrange,crests]){
+    mesh.instanceMatrix.needsUpdate=true;mesh.frustumCulled=false;stadium.add(mesh);
   }
 
   // Real double-sided scoreboard panels above the goals, no sponsor ads.
