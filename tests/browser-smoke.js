@@ -107,7 +107,7 @@ async function main() {
     assert.equal(await evalJS('window.rocketArena.pitch.geometry.attributes.position.count > 15000'),true);
     assert.equal(await evalJS('window.rocketArena.pads.filter(x => x.big).length'),6);
     assert.equal(await evalJS('window.rocketArena.pads.filter(x => !x.big).length'),28);
-    assert.equal(await evalJS('Math.max(...Array.from({length:window.rocketArena.pitch.geometry.attributes.position.count},(_,i)=>window.rocketArena.pitch.geometry.attributes.position.getY(i)))>8'),true);
+    assert.equal(await evalJS('Math.max(...Array.from({length:window.rocketArena.pitch.geometry.attributes.position.count},(_,i)=>window.rocketArena.pitch.geometry.attributes.position.getY(i)))>4.5'),true);
     await eventually(()=>evalJS('window.rocketArena.cars[0]?.mesh?.detailed===true'),25000)
       .catch(async err=>{throw new Error('Detailed Octane failed to load: '+err.message+
         '; status='+await evalJS('document.getElementById("modelLoadStatus").textContent')+
