@@ -58,10 +58,12 @@ const TEAM_COLOR_PRESETS = {
 };
 let BLUE = 0x2fb8ff, ORANGE = 0xff8a1f;
 let gameVolume = 0.75, colourVisionMode = 'normal', controllerDeadZone = 0.16;
+let graphicsQuality = 'balanced';
 const cameraSettings = { fov: 77, distance: 12, height: 5, stiffness: 7, shake: true };
 try {
   const savedSettings = JSON.parse(localStorage.getItem('rocketArenaSettingsV1') || '{}');
   if (Number.isFinite(savedSettings.volume)) gameVolume = Math.max(0, Math.min(1, savedSettings.volume));
+  if (['low', 'balanced', 'high'].includes(savedSettings.graphicsQuality)) graphicsQuality = savedSettings.graphicsQuality;
   if (Number.isFinite(savedSettings.deadZone)) controllerDeadZone = Math.max(0.05, Math.min(0.4, savedSettings.deadZone));
   if (savedSettings.camera && typeof savedSettings.camera === 'object') {
     for (const key of ['fov', 'distance', 'height', 'stiffness']) {
@@ -121,9 +123,10 @@ scene.fog = new THREE.Fog(0x3a2342, 220, 900);
 const camera = new THREE.PerspectiveCamera(72, 1, 0.5, 2000);
 const camera2 = new THREE.PerspectiveCamera(72, 1, 0.5, 2000);
 function resize() {
-  renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+  renderer.setPixelRatio(Math.min(devicePixelRatio || 1,
+    graphicsQuality === 'low' ? 1 : graphicsQuality === 'high' ? 2 : 1.5));
   renderer.setSize(innerWidth, innerHeight, false);
-  const split = !!($('localTwo') && $('localTwo').checked);
+  const split = !!($('localTwo') && $('localTwo').checked && !document.body.classList.contains('free-play'));
   const viewWidth = split ? Math.max(1, Math.floor(innerWidth / 2)) : innerWidth;
   camera.aspect = viewWidth / innerHeight; camera.updateProjectionMatrix();
   camera2.aspect = viewWidth / innerHeight; camera2.updateProjectionMatrix();
@@ -616,6 +619,7 @@ let previousTouch = null;
 let playerStats = [];
 let eventCooldown = {};
 let replayHistory = [];
+let replayCaptureTimer = 0;
 let replayFrames = [];
 let replayIndex = 0;
 let goalScorerText = 'PLAYER';
@@ -703,6 +707,8 @@ function kickoff() {
   const goalSpeedEl = $('goalSpeed'); if (goalSpeedEl) goalSpeedEl.textContent = '';
   goalSpeedMph = 0;
   replayHistory = [];
+  replayCaptureTimer = 0;
+  predictionTimer = 0;
   replayFrames = [];
   replayIndex = 0;
   Object.assign(ball, { x: 0, y: BR + 6, z: 0, vx: 0, vy: 0, vz: 0, wx: 0, wy: 0, wz: 0, onRamp: false, onGround: false });
@@ -719,6 +725,7 @@ function start(freePlay = false) {
   paused = false;
   window.__rocketPhysicsAccumulator = 0;
   document.body.classList.toggle('free-play', trainingMode);
+  resize();
   if ($('trainingTools')) $('trainingTools').hidden = !trainingMode;
   if ($('trainingGoalCount')) $('trainingGoalCount').textContent = 'GOALS 0';
   const nameEl = $('name'); if (nameEl) playerName = (nameEl.value || 'PLAYER').toString().trim().slice(0,12) || 'PLAYER';
@@ -788,6 +795,7 @@ function launchTrainingBall() {
 function exitTraining() {
   trainingMode = false; paused = false;
   document.body.classList.remove('free-play');
+  resize();
   if ($('trainingTools')) $('trainingTools').hidden = true;
   state = 'menu'; $('menu').style.display = 'grid';
   $('mt').textContent = 'ROCKET ARENA 3D';
@@ -1131,7 +1139,7 @@ function hexCss(hex) { return '#' + Number(hex).toString(16).padStart(6, '0'); }
 function saveGeneralSettings() {
   try {
     localStorage.setItem('rocketArenaSettingsV1', JSON.stringify({
-      volume: gameVolume, colourVisionMode, deadZone: controllerDeadZone, camera: cameraSettings
+      volume: gameVolume, colourVisionMode, deadZone: controllerDeadZone, camera: cameraSettings, graphicsQuality
     }));
   } catch (_) {}
 }
@@ -1218,6 +1226,18 @@ if (cameraShakeInput) {
     cameraSettings.shake = cameraShakeInput.checked; saveGeneralSettings();
   });
 }
+const graphicsSetting = $('settingGraphics');
+if (graphicsSetting) {
+  graphicsSetting.value = graphicsQuality;
+  graphicsSetting.addEventListener('change', () => {
+    graphicsQuality = ['low', 'balanced', 'high'].includes(graphicsSetting.value) ?
+      graphicsSetting.value : 'balanced';
+    renderer.shadowMap.enabled = graphicsQuality !== 'low';
+    resize();
+    saveGeneralSettings();
+  });
+}
+renderer.shadowMap.enabled = graphicsQuality !== 'low';
 applyColourVisionMode(colourVisionMode, false, false);
 sfx.setVolume(gameVolume);
 const stadiumInput = $('stadium');
@@ -1297,6 +1317,7 @@ function player2Ctl() {
   return actions;
 }
 const pred = []; // where the ball will be every 0.1s for the next 4 seconds
+let predictionTimer = 0;
 function predict() {
   let x = ball.x, y = ball.y, z = ball.z, vx = ball.vx, vy = ball.vy, vz = ball.vz;
   let onRamp = !!ball.onRamp;
@@ -2108,7 +2129,13 @@ function update(dt) {
       return;
     }
   } else return;
-  predict();
+  // AI predictions are cached at 12.5 Hz, avoiding 120 costly long-horizon
+  // predictions per second while the physics loop runs at 120 Hz.
+  predictionTimer -= dt;
+  if (predictionTimer <= 0 || pred.length === 0) {
+    predict();
+    predictionTimer = 0.08;
+  }
   const cts = cars.map((c, i) => {
     if (i === 0) return playerCtl();
     if (localTwoPlayer && i === mode) return player2Ctl();
@@ -2254,7 +2281,15 @@ function updateCam(dt, carIndex = 0, targetCamera = camera, camState = cam) {
   targetCamera.updateProjectionMatrix();
 }
 function render(dt) {
-  if (state === 'play') saveReplayFrame();
+  if (state === 'play' && !trainingMode) {
+    // Sample gameplay at a fixed 30fps instead of one frame per render.
+    // A 301-frame buffer now represents approximately ten seconds.
+    replayCaptureTimer += dt;
+    while (replayCaptureTimer >= 1 / 30) {
+      saveReplayFrame();
+      replayCaptureTimer -= 1 / 30;
+    }
+  }
   if (state === 'replay' && replayFrames.length) applyReplayFrame(replayFrames[Math.min(Math.floor(replayIndex), replayFrames.length - 1)]);
   for (const c of cars) {
     const m = c.mesh;
@@ -2291,7 +2326,7 @@ function render(dt) {
     p.group.visible = active || p.t > 0;
   }
   stepParts(dt); drawMini(); sfx.update(cars[0], state === 'play');
-  const splitActive = localTwoPlayer && state !== 'menu' && state !== 'over';
+  const splitActive = !trainingMode && localTwoPlayer && state !== 'menu' && state !== 'over';
   document.body.classList.toggle('split-screen', splitActive);
   // During a replay, follow the player who scored instead of always following P1.
   if (state === 'menu') {
