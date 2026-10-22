@@ -128,6 +128,7 @@ async function main() {
     await delay(350);
     assert(Math.abs(await evalJS('window.rocketArena.ball.y') - frozenHeight)<0.01,
       'Wall training shot dropped before launch input');
+    await evalJS('window.dispatchEvent(new KeyboardEvent("keydown",{code:"ShiftLeft",bubbles:true}))');
     await evalJS('window.dispatchEvent(new KeyboardEvent("keydown",{code:"Space",bubbles:true}))');
     await eventually(()=>evalJS('window.rocketArena.cars[0].jumps === 1 && window.rocketArena.cars[0].wallVerticalAxis === null'),9000);
     await evalJS('window.dispatchEvent(new KeyboardEvent("keyup",{code:"Space",bubbles:true}))');
@@ -135,7 +136,11 @@ async function main() {
       'Wall jump failed to detach inward for the selected side');
     assert.equal(await evalJS('window.rocketArena.cars[0].pitch > 0.6'),true,
       'Wall jump reset the aerial nose-up pitch');
-    console.log('Wall-to-air training: frozen setup, inward jump and nose-up pitch passed.');
+    // Require a REAL car-ball collision from this repeatable practice setup,
+    // not merely a camera movement or a scripted "air dribble" label.
+    await eventually(()=>evalJS('window.rocketArena.cars[0].jumps > 0 && /[1-9]/.test(document.getElementById("trainingTouchCount").textContent)'),15000);
+    await evalJS('window.dispatchEvent(new KeyboardEvent("keyup",{code:"ShiftLeft",bubbles:true}))');
+    console.log('Wall-to-air dribble achieved at least one real airborne ball touch.');
     await evalJS('document.getElementById("trainingLaunch").click()');
     await delay(250);
     assert.equal(await evalJS('Number.isFinite(window.rocketArena.ball.y)'),true);
