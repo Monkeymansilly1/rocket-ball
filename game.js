@@ -2635,8 +2635,11 @@ function resolveBallWall(axis, sign, rampSurfaceY) {
   const atWallLip = rampSurfaceY > WALL_RAMP_HEIGHT * 0.78 &&
     ball.y > rampSurfaceY - 2.2 &&
     ball.y < rampSurfaceY + 4.2;
-  if (atWallLip && outward > 5 && ball.vy > -5) {
-    ball.vy = Math.max(ball.vy, outward * 0.86 + 1.1);
+  // At the lip, the rounded ramp has ALREADY converted most outward
+  // velocity to upward motion. Do not require a large remaining outward speed
+  // or inject another vertical "pop" every frame.
+  if (atWallLip && outward > 1.1 && ball.vy > 1.5) {
+    ball.vy = Math.max(ball.vy, Math.hypot(outward, ball.vy) * 0.93);
     if (axis === 'x') ball.vx = 0;
     else ball.vz = 0;
     ball.onRamp = false;
