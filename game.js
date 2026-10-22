@@ -370,6 +370,74 @@ function applyArenaStyle(style) {
 }
 applyArenaStyle('sunset');
 
+// Full-resolution Octane visual model; hitboxes and controls remain independent.
+let octaneSceneTemplate = null, octaneModelLoading = false, octaneModelReady = false;
+const octaneWheelAxis = new THREE.Vector3(0, 1, 0);
+function makeDetailedOctane(car) {
+  if (!octaneSceneTemplate || !car || car.model !== 'octane' || car.mesh.detailed) return;
+  const m = car.mesh, model = octaneSceneTemplate.clone(true);
+  const col = car.ai ? (car.team ? hexCss(ORANGE) : hexCss(BLUE)) :
+    car.team ? (localTwoPlayer && car === cars[mode] ? player2Paint : hexCss(ORANGE)) : playerPaint;
+  const paint = new THREE.Color(col);
+  const wheelNodes = [];
+  model.traverse(object => {
+    if (/^Dieci - (FR|FL|BR|BL) \(Octane\)$/.test(object.name)) wheelNodes.push(object);
+    if (!object.isMesh) return;
+    object.castShadow = true; object.receiveShadow = true;
+    const originalMaterials = Array.isArray(object.material) ? object.material : [object.material];
+    const materials = originalMaterials.map(material => {
+      const mat = material.clone();
+      const matName = (mat.name || '').toLowerCase().replace(/\s+/g, '_');
+      if (matName === 'paint' || matName === 'octane_body') {
+        mat.color.copy(paint); mat.roughness = 0.3; mat.metalness = 0.25; mat.needsUpdate = true;
+      }
+      return mat;
+    });
+    object.material = Array.isArray(object.material) ? materials : materials[0];
+  });
+  // Exported Octane points forward along X; Rocket Ball points forward along Z.
+  const fitted = new THREE.Group(); fitted.add(model);
+  model.rotation.y -= Math.PI / 2;
+  fitted.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(fitted);
+  const size = box.getSize(new THREE.Vector3());
+  if (![size.x, size.y, size.z].every(v => Number.isFinite(v) && v > 1e-5)) {
+    console.warn('Octane model bounds invalid, using standard car.');
+    return;
+  }
+  model.scale.multiplyScalar(Math.min(2.42 / size.x, 1.5 / size.y, 3.95 / size.z));
+  fitted.updateMatrixWorld(true);
+  const fit = new THREE.Box3().setFromObject(fitted);
+  const center = fit.getCenter(new THREE.Vector3());
+  fitted.position.set(-center.x, -fit.min.y - 0.48, -center.z);
+  // Keep the existing body rotation pivot and boost flame; hide placeholder geometry only.
+  for (const child of m.body.children) if (child !== m.flame) child.visible = false;
+  m.body.add(fitted);
+  m.detailed = true;
+  m.detailedRoot = fitted;
+  m.detailedWheels = wheelNodes;
+  m.wheels = [];
+}
+function loadDetailedOctane() {
+  if (octaneModelLoading || octaneModelReady) return;
+  const status = $('modelLoadStatus');
+  if (!THREE.GLTFLoader) {
+    if (status) status.textContent = 'Using lightweight car (3D importer unavailable)';
+    return;
+  }
+  octaneModelLoading = true;
+  new THREE.GLTFLoader().load('assets/octane/scene.gltf', gltf => {
+    octaneSceneTemplate = gltf.scene;
+    octaneModelReady = true; octaneModelLoading = false;
+    for (const car of cars) makeDetailedOctane(car);
+    if (status) status.textContent = '✓ Detailed Octane and Dieci wheels loaded';
+  }, undefined, err => {
+    octaneModelLoading = false;
+    console.warn('Full Octane could not load; retaining playable car:', err);
+    if (status) status.textContent = 'Using lightweight car (model unavailable)';
+  });
+}
+
 // build car mesh for different model types (improved visuals)
 function carMesh(col, typeName) {
   const type = CAR_MODELS.find(t => t.name === typeName) || CAR_MODELS[0];
@@ -669,7 +737,8 @@ function mkCar(team, k, ai, modelName) {
   car.displayName = ai ? (team ? 'ORANGE BOT ' : 'BLUE BOT ') + (k + 1) : playerName;
   // model-based properties
   const mdef = CAR_MODELS.find(m => m.name === model);
-  car.hit = mdef.hit; car.hitbox = CAR_HITBOXES[model] || CAR_HITBOXES.octane; car.mass = mdef.mass * 4; car.cap = mdef.cap; car.baseCap = mdef.cap; // scale mass multiplier into existing physics constants
+  car.hit = mdef.hit; car.hitbox = CAR_HITBOXES[model] || CAR_HITBOXES.octane; car.mass = mdef.mass * 4; car.cap = mdef.cap; car.baseCap = mdef.cap;
+  if (model === 'octane' && octaneModelReady) makeDetailedOctane(car); // scale mass multiplier into existing physics constants
   return car;
 }
 function buildTeams() {
@@ -2375,14 +2444,12 @@ function render(dt) {
       const a = (1 - c.flip / 0.55) * Math.PI * 2;
       if (Math.abs(c.fx) >= Math.abs(c.fz)) m.body.rotation.x = a * Math.sign(c.fx); else m.body.rotation.z = a * Math.sign(c.fz);
     }
-    // wheel rotation visual
-    if (m.wheels && m.wheels.length) {
-      const sp = Math.hypot(c.vx, c.vz);
-      const wheelSpeed = sp * 0.6; // tweak multiplier for visual speed
-      for (const w of m.wheels) {
-        // rotate around local axis
-        w.rotation.x += wheelSpeed * dt;
-      }
+    // Detailed wheels use their real axle pivots.
+    const wheelSpeed = Math.hypot(c.vx, c.vz) * 0.6;
+    if (m.detailedWheels && m.detailedWheels.length) {
+      for (const wheel of m.detailedWheels) wheel.rotateOnAxis(octaneWheelAxis, wheelSpeed * dt);
+    } else if (m.wheels && m.wheels.length) {
+      for (const wheel of m.wheels) wheel.rotation.x += wheelSpeed * dt;
     }
   }
   ballMesh.position.set(ball.x, ball.y, ball.z);
@@ -2459,6 +2526,7 @@ function render(dt) {
 
 // ---------- loop ----------
 buildTeams(); kickoff(); pick('mode', 2); pick('diff', 1);
+loadDetailedOctane();
 window.rocketArena = {
   ball, physics: PHYSICS_TUNING,
   get cars() { return cars; },
