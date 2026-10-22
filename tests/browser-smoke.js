@@ -104,6 +104,11 @@ async function main() {
     await evalJS('document.getElementById("freePlayBtn").click()');
     await eventually(()=>evalJS('window.rocketArena.state==="play" && window.rocketArena.cars.length===1'));
     assert.equal(await evalJS('document.body.classList.contains("free-play")'),true);
+    await evalJS('document.getElementById("trainingPreset").value="wall"; document.getElementById("trainingPreset").dispatchEvent(new Event("change",{bubbles:true}))');
+    assert.equal(await evalJS('window.rocketArena.ball.x > 60'),true);
+    assert.equal(await evalJS('document.getElementById("trainingShotCount").textContent.includes("2")'),true);
+    await evalJS('document.getElementById("trainingNextShot").click()');
+    assert.equal(await evalJS('document.getElementById("trainingShotCount").textContent.includes("3")'),true);
     await evalJS('document.getElementById("trainingLaunch").click()');
     await delay(250);
     assert.equal(await evalJS('Number.isFinite(window.rocketArena.ball.y)'),true);
