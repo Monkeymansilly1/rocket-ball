@@ -41,6 +41,7 @@ const bootstrap = [
   'const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));',
   'const ball={x:0,y:12.4,z:0,vx:0,vy:-20,vz:0,wx:0,wy:0,wz:0,onRamp:false};',
   'let lastTouch=null,previousTouch=null;',
+  'const trainingMode=false; const updateTrainingCounters=()=>{};',
   'const playerStats=[{goals:0,assists:0,shots:0,saves:0,clears:0}];',
   'const cars=[]; const eventCooldown={}; const t=0,state="play";',
   'const showGameEvent=()=>{},sparks=()=>{};',
