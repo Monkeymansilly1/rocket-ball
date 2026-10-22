@@ -378,53 +378,275 @@ function buildArena() {
 }
 buildArena();
 function buildStadium() {
-  const sc = document.createElement('canvas'); sc.width = 8; sc.height = 256; const sg = sc.getContext('2d');
-  const gr = sg.createLinearGradient(0, 0, 0, 128);
-  [[0, '#070b24'], [0.45, '#2a2160'], [0.7, '#a14a68'], [0.88, '#ff7c3c'], [1, '#ffc27a']].forEach(([o, c]) => gr.addColorStop(o, c));
-  sg.fillStyle = gr; sg.fillRect(0, 0, 8, 128); sg.fillStyle = '#2a1a30'; sg.fillRect(0, 128, 8, 128);
-  skyMesh = new THREE.Mesh(new THREE.SphereGeometry(1500, 24, 16), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(sc), side: THREE.BackSide, fog: false, depthWrite: false }));
-  skyMesh.renderOrder = -1; scene.add(skyMesh);
-  const st = new Float32Array(450);
-  for (let i = 0; i < 150; i++) { const a = Math.random() * 6.283, e = 0.5 + Math.random() * 0.9, r = 1400;
-    st[i * 3] = Math.cos(a) * Math.cos(e) * r; st[i * 3 + 1] = Math.sin(e) * r; st[i * 3 + 2] = Math.sin(a) * Math.cos(e) * r; }
-  const stg = new THREE.BufferGeometry(); stg.setAttribute('position', new THREE.BufferAttribute(st, 3));
-  scene.add(new THREE.Points(stg, new THREE.PointsMaterial({ color: 0xffffff, size: 2, sizeAttenuation: false, fog: false })));
+  // The bowl sits OUTSIDE the glass playable enclosure. Stadium structure is
+  // decorative only and cannot cause rogue collisions or interrupt wall riding.
+  const stadium = new THREE.Group();
+  stadium.name='Coliseum Stadium';
+  scene.add(stadium);
+  const stone = new THREE.MeshStandardMaterial({color:0xd3c6ae,roughness:.84,metalness:.06});
+  const oldStone = new THREE.MeshStandardMaterial({color:0x938c82,roughness:.9});
+  const ivory = new THREE.MeshStandardMaterial({color:0xe9d9ba,roughness:.76});
+  const dark = new THREE.MeshStandardMaterial({color:0x132338,metalness:.36,roughness:.53});
+  const gold = new THREE.MeshBasicMaterial({color:0xffd48c});
+  const roofTrim = new THREE.MeshStandardMaterial({color:0xc7b69b,metalness:.2,roughness:.73});
+  const blueCloth = new THREE.MeshStandardMaterial({
+    color:0x125bb6,roughness:.88,side:THREE.DoubleSide
+  });
+  const orangeCloth = new THREE.MeshStandardMaterial({
+    color:0xe97729,roughness:.88,side:THREE.DoubleSide
+  });
+  blueCloth.userData.teamSide='blue';
+  orangeCloth.userData.teamSide='orange';
 
-  // city skyline with lit windows
-  const wc = document.createElement('canvas'); wc.width = 64; wc.height = 128; const wg = wc.getContext('2d');
-  wg.fillStyle = '#0b0e1c'; wg.fillRect(0, 0, 64, 128);
-  for (let y = 0; y < 16; y++) for (let x = 0; x < 8; x++) if (Math.random() < 0.38) { wg.fillStyle = ['#ffc46b', '#ffe3a1', '#8cb8ff', '#ff9d5c'][(x * 3 + y) % 4]; wg.fillRect(x * 8 + 1, y * 8 + 2, 5, 4); }
-  const wtex = new THREE.CanvasTexture(wc); wtex.wrapS = wtex.wrapT = THREE.RepeatWrapping; wtex.magFilter = THREE.NearestFilter;
-  for (let i = 0; i < 80; i++) {
-    const a = (i / 80) * 6.283 + Math.random() * 0.05, R = 430 + Math.random() * 220, w = 28 + Math.random() * 40, h = 50 + Math.random() * 190 * (0.3 + 0.7 * Math.random());
-    const tx = wtex.clone(); tx.needsUpdate = true; tx.repeat.set(Math.max(1, Math.round(w / 14)), Math.max(1, Math.round(h / 22)));
-    const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, w * 0.8), new THREE.MeshBasicMaterial({ map: tx }));
-    b.position.set(Math.cos(a) * R, h / 2 - 2, Math.sin(a) * R); b.rotation.y = -a; scene.add(b);
+  // Bright blue day with wispy procedural clouds, no image downloads.
+  const cv=document.createElement('canvas');cv.width=512;cv.height=1024;
+  const sky=cv.getContext('2d');
+  const gradient=sky.createLinearGradient(0,0,0,cv.height);
+  gradient.addColorStop(0,'#2878ba');gradient.addColorStop(.32,'#61ade4');
+  gradient.addColorStop(.68,'#a2d5f5');gradient.addColorStop(1,'#e7eef0');
+  sky.fillStyle=gradient;sky.fillRect(0,0,cv.width,cv.height);
+  const rand=(n)=>{const x=Math.sin(n*216.17+9.3)*49781.232;return x-Math.floor(x);};
+  for(let cloud=0;cloud<38;cloud++){
+    const x=rand(cloud*3)*cv.width,y=180+rand(cloud*3+1)*480;
+    const w=35+rand(cloud*3+2)*105;
+    sky.fillStyle='rgba(255,255,255,.08)';
+    for(let puff=0;puff<6;puff++){
+      sky.beginPath();
+      sky.ellipse(x+(puff-2.5)*w*.16,
+        y+Math.sin(puff*1.7)*4,w*.23,6+rand(cloud+puff)*10,-.12,0,Math.PI*2);
+      sky.fill();
+    }
   }
-  const cm = new THREE.MeshBasicMaterial({ color: 0x16121e }), red = new THREE.MeshBasicMaterial({ color: 0xff3b30 });
-  for (const [cx, cz, ry] of [[-330, 420, 0.6], [340, -380, 2.4], [60, 480, 1.2]]) {
-    const cg = new THREE.Group(), bx = (w, h, d, x, y, z, m) => { const o = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m || cm); o.position.set(x, y, z); cg.add(o); };
-    bx(3, 150, 3, 0, 75, 0); bx(110, 3, 3, 25, 150, 0); bx(24, 6, 6, -42, 148, 0); bx(12, 10, 8, -52, 146, 0); bx(5, 5, 5, 0, 156, 0, red); bx(0.8, 50, 0.8, 55, 124, 0);
-    cg.position.set(cx, 0, cz); cg.rotation.y = ry; scene.add(cg);
+  skyMesh=new THREE.Mesh(new THREE.SphereGeometry(1200,36,20),
+    new THREE.MeshBasicMaterial({
+      map:new THREE.CanvasTexture(cv),side:THREE.BackSide,fog:false,depthWrite:false
+    }));
+  skyMesh.renderOrder=-2; scene.add(skyMesh);
+
+  // Squircle outline covers every corner of the rectangular playing field.
+  const ringPoint=(a,rx,rz,y)=>{
+    const sx=Math.cos(a),sz=Math.sin(a),power=.52;
+    return new THREE.Vector3(
+      rx*Math.sign(sx)*Math.pow(Math.abs(sx),power),y,
+      rz*Math.sign(sz)*Math.pow(Math.abs(sz),power)
+    );
+  };
+  const ringCurve=(rx,rz,y,segments=128)=>{
+    const points=[];
+    for(let i=0;i<segments;i++)points.push(ringPoint(i/segments*Math.PI*2,rx,rz,y));
+    return new THREE.CatmullRomCurve3(points,true,'centripetal');
+  };
+  const makeRim=(rx,rz,y,rad,mat)=>{
+    const pipe=new THREE.Mesh(
+      new THREE.TubeGeometry(ringCurve(rx,rz,y),160,rad,5,true),mat);
+    stadium.add(pipe);return pipe;
+  };
+  // Continuous stepped terraces rise up behind the rounded arena walls.
+  const steps=18,sectors=144,seatPoints=[],seatColors=[];
+  const seatMat=new THREE.MeshStandardMaterial({vertexColors:true,metalness:.06,roughness:.91,side:THREE.DoubleSide});
+  const seatVerts=[],seatIndices=[],seatVertsColors=[];
+  const blueSeat=new THREE.Color(0x173b68),orangeSeat=new THREE.Color(0x5c3830);
+  for(let step=0;step<steps;step++){
+    const y=9.0+step*1.83;
+    const inX=100+step*2.65,inZ=125+step*2.55;
+    const outX=inX+2.72,outZ=inZ+2.64;
+    for(let j=0;j<=sectors;j++){
+      const a=(j%sectors)/sectors*Math.PI*2;
+      const left=ringPoint(a,inX,inZ,y),right=ringPoint(a,outX,outZ,y+.16);
+      const ci=(j%sectors)/sectors;
+      const paint=(Math.sin(a)<0?blueSeat:orangeSeat).clone()
+        .multiplyScalar(.73+.15*Math.cos(ci*13));
+      seatVerts.push(...left.toArray(),...right.toArray());
+      for(let k=0;k<2;k++)seatVertsColors.push(paint.r,paint.g,paint.b);
+      if(j<sectors){
+        const b=step*(sectors+1)*2+j*2;
+        seatIndices.push(b,b+1,b+2,b+1,b+3,b+2);
+      }
+    }
+  }
+  const seatGeo=new THREE.BufferGeometry();
+  seatGeo.setAttribute('position',new THREE.Float32BufferAttribute(seatVerts,3));
+  seatGeo.setAttribute('color',new THREE.Float32BufferAttribute(seatVertsColors,3));
+  seatGeo.setIndex(seatIndices);seatGeo.computeVertexNormals();
+  const terraces=new THREE.Mesh(seatGeo,seatMat);
+  terraces.receiveShadow=true;stadium.add(terraces);
+  for(const i of [0,5,11,17]){
+    makeRim(101+i*2.65,126+i*2.55,9+i*1.83,.54,roofTrim);
   }
 
-  // crowd stands
-  const spots = [];
-  for (let r = 0; r < 12; r++) {
-    const off = 12 + r * 1.9, y = 3 + r * 1.5;
-    for (let z = -HL - 10; z <= HL + 10; z += 2.2) spots.push([-HW - off, y, z], [HW + off, y, z]);
-    for (let x = -HW; x <= HW; x += 2.2) spots.push([x, y, -HL - GD - off + 4], [x, y, HL + GD + off - 4]);
+  // A single GPU-instanced crowd with coloured spectator lights.
+  const audienceRows=18,perRow=160,people=audienceRows*perRow;
+  const crowd=new THREE.InstancedMesh(
+    new THREE.BoxGeometry(.78,.85,.7),
+    new THREE.MeshBasicMaterial({color:0xffffff}),people
+  );
+  const crowdMatrix=new THREE.Matrix4(),crowdColor=new THREE.Color();
+  for(let row=0;row<audienceRows;row++){
+    for(let j=0;j<perRow;j++){
+      const i=row*perRow+j;
+      const a=(j+(row%2)*.5)/perRow*Math.PI*2;
+      const pos=ringPoint(a,100.4+row*2.65,125.4+row*2.55,10+row*1.83);
+      crowdMatrix.makeScale(.87,1,1);
+      crowdMatrix.setPosition(pos.x,pos.y,pos.z);
+      crowd.setMatrixAt(i,crowdMatrix);
+      const blue=pos.z<0;
+      const palette=blue ?
+        [0x5b95de,0x1672d8,0x98cff7,0x315fa1,0x394b80,0xd2eaff] :
+        [0xffab50,0xe87937,0xf7d38f,0xc2522a,0xffdaaa,0x994b2b];
+      crowdColor.setHex(palette[Math.floor(rand(i*11)*palette.length)]);
+      crowd.setColorAt(i,crowdColor);
+    }
   }
-  const im = new THREE.InstancedMesh(new THREE.BoxGeometry(1.2, 1.2, 1.2), new THREE.MeshBasicMaterial({ color: 0xffffff }), spots.length);
-  const m4 = new THREE.Matrix4(), col = new THREE.Color(), pal = [0x16324a, 0x1d4766, 0x3a2a1c, 0x5a3a1a, 0x24415c, 0x0f2236, 0x2fb8ff, 0xff8a1f];
-  spots.forEach((p, i) => { m4.setPosition(p[0], p[1], p[2]); im.setMatrixAt(i, m4); col.setHex(pal[Math.random() < 0.92 ? (i * 7) % 6 : 6 + (i % 2)]); im.setColorAt(i, col); });
-  scene.add(im);
-  for (const x of [-1, 1]) for (const z of [-1, 1]) {
-    const px = x * (HW + 44), pz = z * (HL + 44);
-    const pole = new THREE.Mesh(new THREE.BoxGeometry(1.4, 60, 1.4), new THREE.MeshBasicMaterial({ color: 0x10202c })); pole.position.set(px, 30, pz);
-    const head = new THREE.Mesh(new THREE.BoxGeometry(10, 4, 1.4), new THREE.MeshBasicMaterial({ color: 0xfff1c8 })); head.position.set(px, 60, pz); head.lookAt(0, 10, 0);
-    scene.add(pole, head);
+  crowd.instanceMatrix.needsUpdate=true;
+  crowd.instanceColor.needsUpdate=true;
+  crowd.frustumCulled=false;stadium.add(crowd);
+
+  // Lower arcade follows the grandstand instead of floating in the distance.
+  const pillarsPerTier=40;
+  const makeArcade=(count,rx,rz,baseY,height,span)=>{
+    const colGeom=new THREE.CylinderGeometry(.82,1.05,height,8);
+    const colMesh=new THREE.InstancedMesh(colGeom,stone,count*2);
+    const mtx=new THREE.Matrix4();
+    for(let i=0;i<count;i++){
+      const a=(i+.5)/count*Math.PI*2,center=ringPoint(a,rx,rz,0);
+      const tangent=ringPoint(a+.001,rx,rz,0).sub(ringPoint(a-.001,rx,rz,0)).normalize();
+      const angle=Math.atan2(-tangent.z,tangent.x);
+      const bay=new THREE.Group();
+      bay.position.set(center.x,0,center.z);bay.rotation.y=angle;
+      for(const sx of [-1,1]){
+        const local=new THREE.Vector3(sx*span,baseY+height/2,0);
+        local.applyAxisAngle(new THREE.Vector3(0,1,0),angle);
+        mtx.makeTranslation(center.x+local.x,local.y,center.z+local.z);
+        colMesh.setMatrixAt(i*2+(sx>0?1:0),mtx);
+      }
+      const arch=new THREE.Mesh(
+        new THREE.TorusGeometry(span,.88,7,18,Math.PI),ivory);
+      arch.position.set(0,baseY+height,0);
+      bay.add(arch);
+      // Stone lintel/capstone over the doorway.
+      const cap=new THREE.Mesh(new THREE.BoxGeometry(span*2+2.5,.8,1.6),roofTrim);
+      cap.position.y=baseY+height+span+.65;bay.add(cap);
+      stadium.add(bay);
+    }
+    colMesh.instanceMatrix.needsUpdate=true;colMesh.frustumCulled=false;
+    stadium.add(colMesh);
+  };
+  makeArcade(pillarsPerTier,143,171,36,13,6.35);
+  makeRim(145,173,56.2,1.25,stone);
+
+  // The outer high arches are the defining Utopia Coliseum silhouette.
+  makeArcade(36,165,196,47,15,7.9);
+  makeRim(167,198,70.8,1.7,ivory);
+
+  // Coloured canvas shades over the stands: a proper open-air roof.
+  const roofGeo=new THREE.BufferGeometry();
+  const roofPos=[],roofCol=[];
+  const firstBlue=new THREE.Color(0x104d9d),firstOrange=new THREE.Color(0xc76738);
+  for(let i=0;i<144;i++){
+    const a0=i/144*Math.PI*2,a1=(i+1)/144*Math.PI*2;
+    const mid=(a0+a1)/2;
+    const col=(Math.sin(mid)<0?firstBlue:firstOrange).clone()
+      .multiplyScalar(i%3===0?.83:1.0);
+    const q=[
+      ringPoint(a0,145,173,56.5),ringPoint(a1,145,173,56.5),
+      ringPoint(a0,165,196,65.8),ringPoint(a1,165,196,65.8)
+    ];
+    const flat=[q[0],q[1],q[2],q[1],q[3],q[2]];
+    for(const vertex of flat) {
+      roofPos.push(vertex.x,vertex.y,vertex.z);
+      roofCol.push(col.r,col.g,col.b);
+    }
   }
+  roofGeo.setAttribute('position',new THREE.Float32BufferAttribute(roofPos,3));
+  roofGeo.setAttribute('color',new THREE.Float32BufferAttribute(roofCol,3));
+  roofGeo.computeVertexNormals();
+  stadium.add(new THREE.Mesh(roofGeo,
+    new THREE.MeshStandardMaterial({vertexColors:true,side:THREE.DoubleSide,roughness:.85})));
+
+  // Flags between Roman arches and inner concourse arches.
+  for(let i=0;i<32;i++){
+    const a=(i+.5)/32*Math.PI*2,p=ringPoint(a,148,178,0);
+    const flag=new THREE.Group();
+    flag.position.set(p.x,49,p.z);
+    const fabric=new THREE.Mesh(new THREE.PlaneGeometry(3.5,8.2),
+      p.z<0?blueCloth:orangeCloth);
+    fabric.position.y=-4.7;fabric.rotation.y=Math.atan2(p.x,p.z);
+    flag.add(fabric);
+    const crest=new THREE.Mesh(new THREE.CircleGeometry(1.06,6),
+      new THREE.MeshBasicMaterial({color:0xe8f4ff,transparent:true,opacity:.8,side:THREE.DoubleSide}));
+    crest.position.copy(fabric.position);crest.position.y+=1.7;
+    crest.rotation.y=fabric.rotation.y;flag.add(crest);
+    stadium.add(flag);
+  }
+
+  // Real double-sided scoreboard panels above the goals, no sponsor ads.
+  const screen=document.createElement('canvas');screen.width=512;screen.height=240;
+  const cg=screen.getContext('2d');
+  cg.fillStyle='#061628';cg.fillRect(0,0,512,240);
+  cg.fillStyle='#1d639c';cg.fillRect(0,0,256,15);
+  cg.fillStyle='#ff903f';cg.fillRect(256,0,256,15);
+  cg.fillStyle='#ebf7ff';cg.textAlign='center';
+  cg.font='bold 56px Arial';cg.fillText('ROCKET BALL',256,108);
+  cg.font='bold 23px Arial';cg.fillStyle='#90b9df';
+  cg.fillText('BLUE       VS       ORANGE',256,166);
+  cg.fillStyle='#e2b66e';cg.fillRect(98,189,316,4);
+  const screenMaterial=new THREE.MeshBasicMaterial({
+    map:new THREE.CanvasTexture(screen),side:THREE.DoubleSide
+  });
+  for(const sign of [-1,1]){
+    const display=new THREE.Mesh(new THREE.PlaneGeometry(32,15),screenMaterial);
+    display.position.set(0,49,sign*156);
+    display.rotation.y=sign>0?Math.PI:0;
+    stadium.add(display);
+    const frame=new THREE.Mesh(new THREE.BoxGeometry(34,17,.8),dark);
+    frame.position.copy(display.position);
+    frame.position.z+=sign*.6;
+    stadium.add(frame);
+  }
+
+  // Floodlight rigs with emissive bulbs instead of expensive point lights.
+  const bulb=new THREE.MeshBasicMaterial({color:0xfff7db});
+  const pole=new THREE.MeshStandardMaterial({color:0x8b99aa,metalness:.85,roughness:.28});
+  const bulbGeo=new THREE.BoxGeometry(.72,.85,.23),lightCount=12;
+  const bulbs=new THREE.InstancedMesh(bulbGeo,bulb,lightCount*18);
+  const bulbsMatrix=new THREE.Matrix4();
+  for(let i=0;i<lightCount;i++){
+    const a=(i+.5)/lightCount*Math.PI*2,p=ringPoint(a,157,186,0);
+    const mast=new THREE.Mesh(new THREE.CylinderGeometry(.42,.6,18,8),pole);
+    mast.position.set(p.x,63,p.z);stadium.add(mast);
+    const head=new THREE.Group();head.position.set(p.x,73,p.z);
+    head.rotation.y=Math.atan2(-p.x,-p.z);
+    const housing=new THREE.Mesh(new THREE.BoxGeometry(10.5,4.4,1.1),dark);
+    head.add(housing);stadium.add(head);
+    for(let k=0;k<18;k++){
+      const b=(i*18+k),column=k%6,row=Math.floor(k/6);
+      const local=new THREE.Vector3(-4.4+column*1.7,-1.5+row*1.45,.65);
+      local.applyAxisAngle(new THREE.Vector3(0,1,0),head.rotation.y);
+      bulbsMatrix.makeTranslation(p.x+local.x,73+local.y,p.z+local.z);
+      bulbs.setMatrixAt(b,bulbsMatrix);
+    }
+  }
+  bulbs.instanceMatrix.needsUpdate=true;bulbs.frustumCulled=false;
+  stadium.add(bulbs);
+
+  // Thin translucent wire roof conveys the enclosed gameplay volume without
+  // hiding the open sky. All decorative geometry remains outside ball physics.
+  const wires=[],gridMaterial=new THREE.LineBasicMaterial({
+    color:0xd1e7ef,transparent:true,opacity:.085,depthWrite:false
+  });
+  for(let x=-HW;x<=HW;x+=16){
+    for(let z=-HL;z<HL;z+=12){
+      wires.push(x,CEIL+.4,z,x,CEIL+.4,Math.min(HL,z+12));
+    }
+  }
+  for(let z=-HL;z<=HL;z+=16){
+    for(let x=-HW;x<HW;x+=12){
+      wires.push(x,CEIL+.4,z,Math.min(HW,x+12),CEIL+.4,z);
+    }
+  }
+  const wiresGeo=new THREE.BufferGeometry();
+  wiresGeo.setAttribute('position',new THREE.Float32BufferAttribute(wires,3));
+  stadium.add(new THREE.LineSegments(wiresGeo,gridMaterial));
 }
 buildStadium();
 function applyArenaStyle(style) {
