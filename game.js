@@ -6,7 +6,7 @@ if (typeof THREE === 'undefined') {
   return;
 }
 // ---------- tuning (units are roughly metres) ----------
-const HW = 80, HL = 104, GW = 15, GH = 10.5, GD = 14, CEIL = 44, CH = 14, BR = 2.4;
+const HW = 80, HL = 104, GW = 15, GH = 10.5, GD = 14, CEIL = 44, CH = 14, BR = 91.25 / 50;
 const PHYSICS_TUNING = {
   // Reference constants requested by the project. The playable arena is scaled
   // down (~50 reference units per game unit), so scaled values are used by the solver.
@@ -34,17 +34,17 @@ const PHYSICS_TUNING = {
   OCTANE_HITBOX_CENTRE_OFFSET: { x:13.876, y:0, z:20.755 },
   ARENA_HALF_EXTENTS_REFERENCE: { x:4096, y:5120 }, ARENA_HEIGHT_REFERENCE: 2048,
   // Stable scaled values used by the current Three.js arena.
-  GRAVITY_FORCE: 28, MAX_SPEED: 46, GROUND_MAX_SPEED: 40, REVERSE_MAX_SPEED: 26,
-  BOOST_FORCE: 19.83, AIR_BOOST_FORCE: 43, AIR_LINEAR_DRAG: 0.05, GROUND_ACCELERATION: 46,
+  GRAVITY_FORCE: 650 / 50, MAX_SPEED: 2300 / 50, GROUND_MAX_SPEED: 1410 / 50, REVERSE_MAX_SPEED: 24,
+  BOOST_FORCE: 991.667 / 50, AIR_BOOST_FORCE: 1058.333 / 50, AIR_LINEAR_DRAG: 0.025, GROUND_ACCELERATION: 1600 / 50,
   TURN_RATE_SLOW: 3.4, TURN_RATE_FAST: 1.4, HANDBRAKE_TURN_MULTIPLIER: 1.6,
-  NORMAL_LATERAL_FRICTION: 9, POWERSLIDE_FRICTION_MULTIPLIER: 0.18,
-  JUMP_IMPULSE: 11, JUMP_HOLD_FORCE: 28, JUMP_HOLD_DURATION: 0.2,
-  DOUBLE_JUMP_IMPULSE: 9.5, DODGE_IMPULSE: 17,
+  NORMAL_LATERAL_FRICTION: 14, POWERSLIDE_FRICTION_MULTIPLIER: 0.18,
+  JUMP_IMPULSE: 291.67 / 50, JUMP_HOLD_FORCE: 1458.33 / 50, JUMP_HOLD_DURATION: 0.2,
+  DOUBLE_JUMP_IMPULSE: 291.67 / 50, DODGE_IMPULSE: 17,
   PITCH_TORQUE_SPEED: 3.4, YAW_TORQUE_SPEED: 2.85, ROLL_TORQUE_SPEED: 4.2,
   // Tuned to the existing arena's actual scale for predictable, playable ball movement.
-  BALL_GRAVITY_FORCE: 24, MAX_BALL_SPEED: 80, BALL_MAX_ANGULAR_SPEED: 6,
-  BALL_RESTITUTION: 0.82, BALL_FLOOR_RESTITUTION: 0.78, BALL_WALL_RESTITUTION: 0.84,
-  BALL_SURFACE_FRICTION: 0.035, BALL_HIT_MULTIPLIER: 1.35,
+  BALL_GRAVITY_FORCE: 650 / 50, MAX_BALL_SPEED: 6000 / 50, BALL_MAX_ANGULAR_SPEED: 6,
+  BALL_RESTITUTION: 0.6, BALL_FLOOR_RESTITUTION: 0.6, BALL_WALL_RESTITUTION: 0.6,
+  BALL_SURFACE_FRICTION: 0.35, BALL_HIT_MULTIPLIER: 1.0,
   BALL_HIT_FORWARD_FORCE: 6, BALL_FORWARD_SPEED_FACTOR: 0.34,
   BALL_FLIP_HIT_BONUS: 8, BALL_BOOST_HIT_BONUS: 5,
   BALL_UPWARD_POP: 5.5, BALL_EXTRA_HIT_MAX_RELATIVE_SPEED: 4600 / 50,
@@ -1982,6 +1982,38 @@ function applyDirectionalBoost(c, dt, onSurface) {
   c.vy += nose.y * accel * dt;
   c.vz += nose.z * accel * dt;
 }
+// Standard 120Hz Rocket League-inspired ground response in game units
+// (one world unit ~= 50 Unreal units). Throttle has a 1410uu/s terminal
+// speed, while boost can accelerate well past it WITHOUT instant deceleration
+// the moment boost is released.
+function groundThrottleAcceleration(v) {
+  const speed = Math.abs(v) * PHYSICS_TUNING.REFERENCE_SCALE;
+  if (speed >= 1410) return 0;
+  if (speed > 1400) return (160 * (1410 - speed) / 10) / PHYSICS_TUNING.REFERENCE_SCALE;
+  return (1600 - 1440 * (speed / 1400)) / PHYSICS_TUNING.REFERENCE_SCALE;
+}
+function stepGroundForward(v, throttle, boosting, dt) {
+  const demand = boosting ? 1 : clamp(throttle || 0, -1, 1);
+  if (Math.abs(demand) < 0.01) {
+    const amount = 525 / PHYSICS_TUNING.REFERENCE_SCALE * dt;
+    return Math.abs(v) <= amount ? 0 : v - Math.sign(v) * amount;
+  }
+  if (v * demand < -0.01) return v + Math.sign(demand) *
+    (3500 / PHYSICS_TUNING.REFERENCE_SCALE) * dt;
+  return v + demand * groundThrottleAcceleration(v) * dt;
+}
+function groundSteeringCurvature(speedUnits, powerslide) {
+  const samples = [[0,.0069],[500,.0042],[1000,.0028],[1500,.0017],
+    [1750,.0014],[2300,.0010]];
+  let curvature=samples[samples.length-1][1];
+  for(let i=1;i<samples.length;i++) if(speedUnits <= samples[i][0]) {
+    const a=samples[i-1],b=samples[i];
+    const t=clamp((speedUnits-a[0])/(b[0]-a[0]),0,1);
+    curvature=a[1]+(b[1]-a[1])*t;
+    break;
+  }
+  return curvature * (1 + (powerslide || 0) * 1.15);
+}
 function stepCar(c, ct, dt) {
   c.demoCooldown = Math.max(0, (c.demoCooldown || 0) - dt);
   c.ballHitCooldown = Math.max(0, (c.ballHitCooldown || 0) - dt);
@@ -2074,23 +2106,29 @@ function stepCar(c, ct, dt) {
     c.powerslide = clamp((c.powerslide || 0) +
       (ct.hand ? PHYSICS_TUNING.POWERSLIDE_RISE_RATE : -PHYSICS_TUNING.POWERSLIDE_FALL_RATE) * dt, 0, 1);
     const hb = c.powerslide;
-    const physicsAccel = physicsStyle === 'arcade' ? 1.3 : physicsStyle === 'heavy' ? 0.82 : 1;
-    const acc = PHYSICS_TUNING.GROUND_ACCELERATION * physicsAccel *
-      Math.max(0, 1 - Math.abs(vf) / PHYSICS_TUNING.MAX_SPEED);
-    if (ct.throttle) vf += ct.throttle * (vf * ct.throttle < 0 ? 70 : acc) * dt;
-    else vf *= Math.max(0, 1 - 0.9 * dt);
+    const physicalScale = physicsStyle === 'arcade' ? 1.2 : physicsStyle === 'heavy' ? 0.85 : 1;
+    const effectiveThrottle = ct.throttle || (bo ? 1 : 0);
+    vf = stepGroundForward(vf, effectiveThrottle, bo, dt * physicalScale);
+    // Gravity must pull the car downhill; this is especially important on
+    // side-wall ramps where holding W should not produce free uphill thrust.
+    if (c.wallRide) {
+      const slope = arenaRampAt(c.x,c.z);
+      const slopeAlongNose = slope.dx*sy+slope.dz*cy;
+      vf -= PHYSICS_TUNING.GRAVITY_FORCE *
+        (slopeAlongNose / Math.hypot(1, slopeAlongNose)) * dt;
+    }
     const lateralFriction = PHYSICS_TUNING.NORMAL_LATERAL_FRICTION *
       (1 - hb * (1 - PHYSICS_TUNING.POWERSLIDE_FRICTION_MULTIPLIER));
-    vs *= Math.max(0, 1 - lateralFriction * dt);
-    const forwardCap = (bo ? PHYSICS_TUNING.MAX_SPEED : PHYSICS_TUNING.GROUND_MAX_SPEED) * (c.cap || 1);
-    vf = clamp(vf, -PHYSICS_TUNING.REVERSE_MAX_SPEED, Math.min(forwardCap, PHYSICS_TUNING.MAX_SPEED));
-    const speedRatio = clamp(Math.abs(vf) / PHYSICS_TUNING.MAX_SPEED, 0, 1);
-    const turnRate = PHYSICS_TUNING.TURN_RATE_SLOW -
-      (PHYSICS_TUNING.TURN_RATE_SLOW - PHYSICS_TUNING.TURN_RATE_FAST) * speedRatio;
-    const sr = turnRate * (1 + hb * (PHYSICS_TUNING.HANDBRAKE_TURN_MULTIPLIER - 1)) *
-      clamp(Math.abs(vf) / 2.5, 0, 1);
-    c.yaw -= ct.steer * sr * (vf >= 0 ? 1 : -1) * dt;
-    c.vx = sy * vf + cy * vs; c.vz = cy * vf - sy * vs;
+    vs *= Math.exp(-lateralFriction * dt);
+    // Use curvature rather than arbitrary turn-rate interpolation. Fast cars
+    // naturally take wider arcs; handbrake breaks the rear grip.
+    const yawRate = Math.abs(vf) * PHYSICS_TUNING.REFERENCE_SCALE *
+      groundSteeringCurvature(Math.abs(vf)*PHYSICS_TUNING.REFERENCE_SCALE,hb);
+    c.yaw -= (ct.steer || 0) * Math.min(5.5,yawRate) *
+      (vf >= 0 ? 1 : -1) * dt;
+    // Resolve tyre velocity in the NEW heading, not last frame's steering.
+    const sy2=Math.sin(c.yaw),cy2=Math.cos(c.yaw);
+    c.vx = sy2 * vf + cy2 * vs; c.vz = cy2 * vf - sy2 * vs;
     // Ramp traction projects velocity along the slope; no zeroing on every frame.
     if (c.wallRide) {
       const grade = arenaRampAt(c.x, c.z);
@@ -2159,9 +2197,9 @@ function stepCar(c, ct, dt) {
     }
   }
   if (c.ai) c.boost = Math.min(100, c.boost + 8 * dt);
-  const absoluteLimit = ground && !bo && !ct.jump
-    ? PHYSICS_TUNING.GROUND_MAX_SPEED
-    : PHYSICS_TUNING.MAX_SPEED;
+  // Boost momentum persists after boost is released. Only genuine physics
+  // (coasting, braking, tyre friction) can slow the car from supersonic speed.
+  const absoluteLimit = PHYSICS_TUNING.MAX_SPEED;
   const carSpeed = Math.hypot(c.vx, c.vy, c.vz);
   if (carSpeed > absoluteLimit) {
     const scale = absoluteLimit / carSpeed;
