@@ -38,6 +38,8 @@ const functions = [
   extract('rampProfile'), extract('arenaRampAt'),
   extract('getCarOrientation'), extract('getCarForward'),
   extract('aerialControl'), extract('applyDirectionalBoost'),
+  extract('groundThrottleAcceleration'), extract('stepGroundForward'),
+  extract('groundSteeringCurvature'),
   extract('clampBallMotion'), extract('ballSurfaceImpulse'),
   extract('resolveBallWall'), extract('stepBall'), extract('hitBall')
 ].join('\n');
@@ -56,8 +58,8 @@ const bootstrap = [
   'const showGameEvent=()=>{},sparks=()=>{};',
   'const goal=()=>{throw Error("Unexpected goal in physics test")};',
   'const rampEase=t=>t*t*(3-2*t);'
-].join('\n') + '\n' + functions + '\nreturn {ball,stepBall,hitBall,resolveBallWall,arenaRampAt,getCarForward,aerialControl,applyDirectionalBoost,cars};';
-const {ball,stepBall,hitBall,resolveBallWall,arenaRampAt,getCarForward,aerialControl,applyDirectionalBoost,cars} = new Function(bootstrap)(THREE,tuning);
+].join('\n') + '\n' + functions + '\nreturn {ball,stepBall,hitBall,resolveBallWall,arenaRampAt,getCarForward,aerialControl,applyDirectionalBoost,stepGroundForward,groundSteeringCurvature,cars};';
+const {ball,stepBall,hitBall,resolveBallWall,arenaRampAt,getCarForward,aerialControl,applyDirectionalBoost,stepGroundForward,groundSteeringCurvature,cars} = new Function(bootstrap)(THREE,tuning);
 
 for(let i=0;i<240;i++)stepBall(1/120);
 assert(ball.y >= scaledBallRadius-.001 && ball.y < 20 && Number.isFinite(ball.y),'Floor contact unstable');
@@ -70,12 +72,12 @@ assert(Math.hypot(ball.vx,ball.vy,ball.vz)<=tuning.MAX_BALL_SPEED+.0001,'Ball sp
 
 const car={x:0,y:.55,z:0,vx:0,vy:0,vz:30,yaw:0,pitch:0,hit:1.7,team:0,fl:0,flip:0,demoTimer:0,ballHitCooldown:0};
 cars.push(car);
-Object.assign(ball,{x:0,y:.55,z:4,vx:0,vy:0,vz:0,wx:0,wy:0,wz:0});
+Object.assign(ball,{x:0,y:.55,z:3.2,vx:0,vy:0,vz:0,wx:0,wy:0,wz:0});
 hitBall(car);
 const first=ball.vz;
 assert(first>1&&first<=tuning.MAX_BALL_SPEED,'Car-ball impulse failed');
 assert(car.ballHitCooldown>0,'Shot cooldown missing');
-Object.assign(ball,{x:0,y:.55,z:4,vx:0,vy:0,vz:0});
+Object.assign(ball,{x:0,y:.55,z:3.2,vx:0,vy:0,vz:0});
 hitBall(car);
 assert(ball.vz<first,'Repeated contact gained excessive power');
 
@@ -114,4 +116,16 @@ assert(flyer.airQuat && Math.abs(flyer.airQuat.length()-1)<1e-6,
   'Air rotation lost normalized physical orientation');
 assert(getCarForward(flyer).distanceTo(before)>.1,
   'Pitch/yaw inputs failed to change the actual boost direction');
+// Throttle should converge on 1410uu/s, boost to 2300uu/s, and coasting
+// must not erase boost momentum instantly. This used to ruin all ground plays.
+let driveSpeed=0;
+for(let i=0;i<1200;i++) driveSpeed=stepGroundForward(driveSpeed,1,false,1/120);
+assert(Math.abs(driveSpeed-1410/50)<0.2,
+  'Throttle-only speed no longer converges to 1410 uu/s: '+driveSpeed);
+let boostedSpeed=2300/50;
+const afterCoast=stepGroundForward(boostedSpeed,0,false,1/120);
+assert(afterCoast>45,'Releasing boost instantly erased supersonic momentum');
+const lowCurve=groundSteeringCurvature(500,0);
+const highCurve=groundSteeringCurvature(2300,0);
+assert(lowCurve>highCurve*3,'Steering should have larger curvature at low speed');
 console.log('PASS: syntax, training controls, floor, walls, ball speed cap, car-ball impacts');
