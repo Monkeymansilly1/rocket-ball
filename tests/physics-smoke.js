@@ -25,11 +25,12 @@ function extract(name) {
   throw Error('Incomplete function ' + name);
 }
 const functions = [
+  extract('rampProfile'), extract('arenaRampAt'),
   extract('clampBallMotion'), extract('ballSurfaceImpulse'),
   extract('resolveBallWall'), extract('stepBall'), extract('hitBall')
 ].join('\n');
 const bootstrap = [
-  'const BR=2.4,HW=80,HL=104,GW=15,GH=10.5,GD=14,CH=14,CEIL=44,WALL_RAMP_HEIGHT=9.5;',
+  'const BR=2.4,HW=80,HL=104,GW=15,GH=10.5,GD=14,CH=14,CEIL=44,WALL_RAMP_HEIGHT=9.5,WALL_RAMP_WIDTH=24;',
   'const PHYSICS_TUNING = {BALL_GRAVITY_FORCE:24,BALL_DRAG_REFERENCE:.03,BALL_RESTITUTION:.82,BALL_WALL_RESTITUTION:.84,BALL_FLOOR_RESTITUTION:.78,BALL_FRICTION_REFERENCE:.35,BALL_MAX_ANGULAR_SPEED:6,MAX_BALL_SPEED:80,BALL_MASS_REFERENCE:30,CAR_MASS_REFERENCE:180,CAR_BALL_RESTITUTION:0};',
   'const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));',
   'const ball={x:0,y:12.4,z:0,vx:0,vy:-20,vz:0,wx:0,wy:0,wz:0,onRamp:false};',
@@ -38,9 +39,9 @@ const bootstrap = [
   'const cars=[]; const eventCooldown={}; const t=0,state="play";',
   'const showGameEvent=()=>{},sparks=()=>{};',
   'const goal=()=>{throw Error("Unexpected goal in physics test")};',
-  'const arenaRampAt=()=>({height:0,dx:0,dz:0});'
-].join('\n') + '\n' + functions + '\nreturn {ball,stepBall,hitBall,resolveBallWall,cars};';
-const {ball,stepBall,hitBall,resolveBallWall,cars} = new Function(bootstrap)();
+  'const rampEase=t=>t*t*(3-2*t);'
+].join('\n') + '\n' + functions + '\nreturn {ball,stepBall,hitBall,resolveBallWall,arenaRampAt,cars};';
+const {ball,stepBall,hitBall,resolveBallWall,arenaRampAt,cars} = new Function(bootstrap)();
 
 for(let i=0;i<240;i++)stepBall(1/120);
 assert(ball.y >= 2.399 && ball.y < 20 && Number.isFinite(ball.y),'Floor contact unstable');
@@ -64,9 +65,11 @@ assert(ball.vz<first,'Repeated contact gained excessive power');
 
 // A ball travelling outward at the top of a ramp must continue UP the
 // vertical wall instead of ricocheting directly back onto the pitch.
-Object.assign(ball,{x:77.6,y:12.2,z:0,vx:24,vy:1,vz:0,onRamp:true});
-resolveBallWall('x',1,12);
-assert(ball.vx===0 && ball.vy>18 && ball.onWall,'Ramp-to-wall ball transfer failed');
+const wallX=80-2.4-0.05;
+Object.assign(ball,{x:wallX,y:2.4+arenaRampAt(wallX,0).height+0.25,z:0,
+  vx:24,vy:1,vz:0,onRamp:true});
+stepBall(1/120);
+assert(ball.vx===0 && ball.vy>18 && ball.onWall,'Real ramp-to-wall ball transfer failed');
 for(let i=0;i<35;i++)stepBall(1/120);
 assert(ball.y>14,'The ball did not rise after transferring onto the wall');
 
