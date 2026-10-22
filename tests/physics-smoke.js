@@ -116,6 +116,14 @@ assert(flyer.airQuat && Math.abs(flyer.airQuat.length()-1)<1e-6,
   'Air rotation lost normalized physical orientation');
 assert(getCarForward(flyer).distanceTo(before)>.1,
   'Pitch/yaw inputs failed to change the actual boost direction');
+// Directional dodge should rotate the PHYSICAL car hitbox through a tumble.
+// Previously the gameplay hitbox stayed still and only the car art flipped.
+const flipper={yaw:0,pitch:0,roll:0,airQuat:null,airOmega:null,
+  flip:.55,flipAxis:new THREE.Vector3(1,0,0),jumps:2};
+for(let i=0;i<30;i++)
+  aerialControl(flipper,{throttle:0,steer:0,roll:0},1/120);
+assert(getCarForward(flipper).z<-.7,
+  'Directional dodge failed to rotate the actual physics orientation');
 // Throttle should converge on 1410uu/s, boost to 2300uu/s, and coasting
 // must not erase boost momentum instantly. This used to ruin all ground plays.
 let driveSpeed=0;
