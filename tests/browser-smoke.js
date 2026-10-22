@@ -100,7 +100,12 @@ async function main() {
       .catch(err=>{throw new Error('Game startup: '+err.message+'; browser exceptions: '+JSON.stringify(errors));});
     console.log('Game loaded; testing Free Play');
     assert.equal(await evalJS('window.rocketArena.state'),'menu');
-
+    await eventually(()=>evalJS('window.rocketArena.cars[0]?.mesh?.detailed===true'),25000)
+      .catch(async err=>{throw new Error('Detailed Octane failed to load: '+err.message+
+        '; status='+await evalJS('document.getElementById("modelLoadStatus").textContent')+
+        '; browserErrors='+JSON.stringify(errors));});
+    assert.equal(await evalJS('window.rocketArena.cars[0].mesh.detailedWheels.length'),4);
+    console.log('Detailed Octane 3D body, original material maps and four wheels loaded.');
     await evalJS('document.getElementById("freePlayBtn").click()');
     await eventually(()=>evalJS('window.rocketArena.state==="play" && window.rocketArena.cars.length===1'));
     assert.equal(await evalJS('document.body.classList.contains("free-play")'),true);
