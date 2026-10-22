@@ -1956,11 +1956,14 @@ function stepCar(c, ct, dt) {
     c.pitch += wrap(Math.PI / 2 - c.pitch) * clamp(9 * dt, 0, 1);
     c.roll = 0;
   } else {
+    const touchingRamp = c.y <= startingRamp.height + 1.05;
+    // Keep adhesion while accelerating UP a slope. The former vy<=0.5
+    // check incorrectly marked upward-moving ramp cars as airborne.
     c.wallRide = c.wallDetachTimer <= 0 && startingRamp.height > 0.03 &&
-      c.y <= startingRamp.height + 1.2 && c.vy <= 0.5;
+      touchingRamp && (c.wallRide || c.vy <= 0.5);
     if (c.wallRide) {
       const targetY = startingRamp.height + 0.55;
-      if (c.y < targetY) c.y = targetY;
+      if (c.y < targetY) c.y += (targetY - c.y) * clamp(45 * dt, 0, 1);
       if (c.vy < 0) c.vy = 0;
       const slopeAlongNose = startingRamp.dx * sy + startingRamp.dz * cy;
       const pitchTarget = Math.atan(slopeAlongNose);
