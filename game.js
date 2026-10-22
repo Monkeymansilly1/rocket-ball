@@ -1015,7 +1015,7 @@ let player2Paint = '#ff8a1f', player2PaintCustom = false;
 let physicsStyle = 'standard';
 let localTwoPlayer = false;
 let goalExplosionStyle = 'classic';
-let trainingMode = false, trainingGoals = 0, trainingAttempts = 0, trainingWallArmed = false;
+let trainingMode = false, trainingGoals = 0, trainingAttempts = 0, trainingAirTouches = 0, trainingWallArmed = false;
 let paused = false;
 let lastTouch = null;
 let previousTouch = null;
@@ -1143,6 +1143,7 @@ function start(freePlay = false) {
   trainingMode = !!freePlay;
   trainingGoals = 0;
   trainingAttempts = 0;
+  trainingAirTouches = 0;
   trainingWallArmed = false;
   paused = false;
   window.__rocketPhysicsAccumulator = 0;
@@ -1151,6 +1152,7 @@ function start(freePlay = false) {
   if ($('trainingTools')) $('trainingTools').hidden = !trainingMode;
   if ($('trainingGoalCount')) $('trainingGoalCount').textContent = 'GOALS 0';
   if ($('trainingShotCount')) $('trainingShotCount').textContent = 'ATTEMPT 1';
+  if ($('trainingTouchCount')) $('trainingTouchCount').textContent = 'AIR TOUCHES 0';
   const nameEl = $('name'); if (nameEl) playerName = (nameEl.value || 'PLAYER').toString().trim().slice(0,12) || 'PLAYER';
   const name2El = $('name2'); if (name2El) player2Name = (name2El.value || 'PLAYER 2').toString().trim().slice(0,12) || 'PLAYER 2';
   const sel = document.querySelector('.car-opts:not(.car-opts-p2) button.on'); if (sel && sel.dataset.car) playerCarModel = sel.dataset.car;
@@ -1192,7 +1194,7 @@ function resetTrainingCar() {
     yaw: 0, pitch: 0, roll: 0, jumps: 0, jt: 0,
     flip: 0, fl: 0, hold: 0, ground: true,
     wallRide: false, wallVerticalAxis: null, wallVerticalSign: 0, wallDetachTimer: 0,
-    airQuat: null, airOmega: null, demoTimer: 0, boost: 100, ballHitCooldown: 0
+    airQuat: null, airOmega: null, demoTimer: 0, boost: 100, ballHitCooldown: 0, airTouchCooldown: 0
   });
   car.wallDetachTimer = 0;
   car.mesh.root.visible = true;
@@ -1220,6 +1222,7 @@ function launchTrainingBall() {
 function updateTrainingCounters() {
   if ($('trainingGoalCount')) $('trainingGoalCount').textContent = 'GOALS ' + trainingGoals;
   if ($('trainingShotCount')) $('trainingShotCount').textContent = 'ATTEMPT ' + trainingAttempts;
+  if ($('trainingTouchCount')) $('trainingTouchCount').textContent = 'AIR TOUCHES ' + trainingAirTouches;
 }
 function loadTrainingShot(scenario = 'dribble') {
   if (!trainingMode || !cars[0]) return;
@@ -1229,6 +1232,7 @@ function loadTrainingShot(scenario = 'dribble') {
   resetTrainingBall();
   const car = cars[0];
   const variation = (trainingAttempts % 5) - 2;
+  trainingAirTouches = 0;
   trainingWallArmed = false;
   switch (scenario) {
     case 'aerial':
@@ -1252,9 +1256,9 @@ function loadTrainingShot(scenario = 'dribble') {
       car.wallRide = true;
       car.wallVerticalAxis = 'x'; car.wallVerticalSign = sideSign;
       car.ground = true;
-      const ballX = sideSign * (HW - 4.9);
+      const ballX = sideSign * (HW - 3.5);
       Object.assign(ball, {
-        x: ballX, z: car.z + 2.3, y: car.y + 5.8,
+        x: ballX, z: car.z + 1.3, y: car.y + 5.8,
         vx: -sideSign * 12, vy: 11.8, vz: 3,
         wx: 0, wy: 0, wz: 0,
         onRamp: false, onGround: false, onWall: false
@@ -1981,6 +1985,7 @@ function applyDirectionalBoost(c, dt, onSurface) {
 function stepCar(c, ct, dt) {
   c.demoCooldown = Math.max(0, (c.demoCooldown || 0) - dt);
   c.ballHitCooldown = Math.max(0, (c.ballHitCooldown || 0) - dt);
+  c.airTouchCooldown = Math.max(0, (c.airTouchCooldown || 0) - dt);
   if (c.demoTimer > 0) {
     c.demoTimer = Math.max(0, c.demoTimer - dt);
     c.vx = c.vy = c.vz = 0; c.y = 0.55; c.pitch = 0; c.fl = 0;
@@ -2403,6 +2408,12 @@ function hitBall(c) {
   const rvz = ball.vz - (c.vz + contactSpeed.z);
   const closing = -(rvx * nx + rvy * ny + rvz * nz);
   if (closing <= 0.18) return;
+  if (trainingMode && !c.ai && !c.ground && !c.wallRide &&
+      closing > 0.7 && (c.airTouchCooldown || 0) <= 0) {
+    trainingAirTouches++;
+    c.airTouchCooldown = 0.17;
+    updateTrainingCounters();
+  }
 
   const index = cars.indexOf(c), stat = playerStats[index];
   if (lastTouch !== c) { previousTouch = lastTouch; lastTouch = c; }
