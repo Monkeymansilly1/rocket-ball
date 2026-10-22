@@ -499,3 +499,46 @@ body:has(#msg.replay-title) #skipReplayButton { display:block; }
   #quickPlayButton { right:12px; bottom:12px; min-width:145px; min-height:56px; font-size:22px; }
   #skipReplayButton { right:170px; bottom:12px; min-height:46px; padding:0 10px; }
 }
+
+
+/* Free Play & camera configuration */
+.start-actions { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin:10px 0 4px; }
+#menu .start-actions .play-btn { margin-top:0; }
+#menu .free-play-btn {
+  pointer-events:auto; min-width:174px; padding:12px 20px; border:2px solid #8fc5ff;
+  border-radius:9px; background:#15497e; color:#fff; box-shadow:0 5px 0 #07152a;
+  font:italic 900 23px Impact,"Arial Narrow",sans-serif; cursor:pointer;
+}
+#menu .free-play-btn:hover { background:#216ab3; transform:translateY(-1px); }
+#trainingTools {
+  position:fixed; left:50%; top:88px; transform:translateX(-50%);
+  z-index:13; width:min(820px,calc(100vw - 24px));
+  background:rgba(4,18,40,.94); border:2px solid #7da6e5; border-radius:12px;
+  padding:12px 15px; box-shadow:0 6px 25px #0009; text-align:center; pointer-events:auto;
+  color:#fff; font:800 13px "Trebuchet MS",sans-serif;
+}
+#trainingTools[hidden] { display:none!important; }
+#trainingTools strong { color:#fff; letter-spacing:.14em; margin-right:20px; }
+#trainingGoalCount { color:#ffc773; }
+.training-actions { display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-top:10px; }
+.training-actions button {
+  padding:8px 12px; background:#174785; border:1px solid #6b9ad7; border-radius:7px;
+  color:#fff; cursor:pointer; font:800 12px "Trebuchet MS",sans-serif;
+}
+.training-actions button:hover { background:#2569ac; }
+.training-actions button kbd { padding:3px 4px; margin-left:4px; border-radius:3px; background:#081c3a; }
+#trainingTools ~ #hud { pointer-events:none; }
+.camera-shake-option { display:flex; gap:10px; align-items:center; font:700 13px "Trebuchet MS",sans-serif; color:#cce7ff; margin:9px 0; }
+.camera-shake-option input { width:17px; height:17px; accent-color:#53bcff; }
+body.free-play #score { display:none!important; }
+body.free-play #trainingTools { display:block; }
+body.free-play #quickPlayButton { display:none!important; }
+body.free-play #boost2,body.free-play #p2Tag { display:none!important; }
+body.free-play #boost #bt { font-size:30px; }
+@media(max-width:800px) {
+  #trainingTools { top:102px; padding:8px; }
+  .training-actions { gap:5px; }
+  .training-actions button { font-size:10px; padding:6px; }
+  .start-actions { gap:8px; }
+  #menu .free-play-btn { min-width:145px; font-size:20px; }
+}
