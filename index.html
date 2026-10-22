@@ -16,6 +16,16 @@
   </div>
   <button id="skipReplayButton" type="button">SKIP REPLAY <kbd>SPACE</kbd></button>
   <button id="quickPlayButton" type="button">▶ PLAY <small>MATCHES &amp; MODES</small></button>
+  <div id="trainingTools" aria-label="Free Play tools" hidden>
+    <strong>⚽ FREE PLAY</strong><span id="trainingGoalCount">GOALS 0</span>
+    <div class="training-actions">
+      <button id="trainingResetBall" type="button" title="Reset ball (R)">RESET BALL <kbd>R</kbd></button>
+      <button id="trainingPass" type="button" title="Pass the ball to yourself (T)">PASS <kbd>T</kbd></button>
+      <button id="trainingLaunch" type="button" title="Launch an aerial ball (Y)">AERIAL <kbd>Y</kbd></button>
+      <button id="trainingResetCar" type="button" title="Reset car (Backspace)">RESET CAR <kbd>⌫</kbd></button>
+      <button id="trainingExit" type="button">GARAGE</button>
+    </div>
+  </div>
 <div id="hud">
   <div id="score"><b id="s0">0</b><span id="clock">2:00</span><b id="s1">0</b></div>
   <div id="player">PLAYER</div>
@@ -90,7 +100,10 @@
     <p>Keyboard defaults — P1: <b>W A S D</b>, jump <b>Space</b>, boost <b>Left Shift</b>, drift <b>E</b>, air roll <b>Q/E</b>. Change any binding above.</p>
     <p>Controller defaults — steer with the <b>left stick</b>, accelerate <b>RT/R2</b>, reverse <b>LT/L2</b>, jump <b>A/✕</b>, boost <b>X/□</b>, drift <b>LB/L1</b>. Enable Local 2-player to use a second controller. Camera <b>C</b> · Mute <b>M</b> · Pause <b>P</b></p>
     <p>In the air, steer and tilt to line up aerials. Press jump again with a direction to flip.</p>
-    <button id="playBtn" class="play-btn" type="button">▶ PLAY</button>
+    <div class="start-actions">
+      <button id="playBtn" class="play-btn" type="button">▶ PLAY MATCH</button>
+      <button id="freePlayBtn" class="free-play-btn" type="button">⚽ FREE PLAY</button>
+    </div>
     <p class="go" id="go">Choose your setup, then press PLAY</p>
   </div>
     <details id="controlsSettings" class="controls-settings">
@@ -113,6 +126,29 @@
             </select>
           </div>
           <p class="setting-help">Changes team colours and score indicators for clearer separation. Your custom car paint can stay as you chose it.</p>
+          <h3>Camera</h3>
+          <div class="setting-row">
+            <label for="settingCameraFov">Field of view</label>
+            <input id="settingCameraFov" type="range" min="60" max="110" step="1" value="77">
+            <output id="settingCameraFovValue" for="settingCameraFov">77°</output>
+          </div>
+          <div class="setting-row">
+            <label for="settingCameraDistance">Camera distance</label>
+            <input id="settingCameraDistance" type="range" min="8" max="20" step="0.5" value="12">
+            <output id="settingCameraDistanceValue" for="settingCameraDistance">12</output>
+          </div>
+          <div class="setting-row">
+            <label for="settingCameraHeight">Camera height</label>
+            <input id="settingCameraHeight" type="range" min="2" max="9" step="0.5" value="5">
+            <output id="settingCameraHeightValue" for="settingCameraHeight">5</output>
+          </div>
+          <div class="setting-row">
+            <label for="settingCameraStiffness">Camera stiffness</label>
+            <input id="settingCameraStiffness" type="range" min="2" max="15" step="1" value="7">
+            <output id="settingCameraStiffnessValue" for="settingCameraStiffness">7</output>
+          </div>
+          <label class="camera-shake-option"><input id="settingCameraShake" type="checkbox" checked> Goal camera shake</label>
+          <p class="setting-help">Customise your view of the pitch. Settings apply to both players and save automatically.</p>
           <h3>Controller</h3>
           <div class="setting-row">
             <label for="settingDeadZone">Stick dead zone</label>
