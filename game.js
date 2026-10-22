@@ -2392,18 +2392,32 @@ window.rocketArena = {
 };
 let last = performance.now();
 (function loop(now) {
-  const frameDt = Math.min(0.05, (now - last) / 1000); last = now;
+  const wallDt = Math.min(0.25, Math.max(0, (now - last) / 1000)); last = now;
+  const frameDt = Math.min(0.05, wallDt);
   pollControllers();
-  // Fixed 120 Hz physics with a small frame-time clamp for stable contacts.
+  // Physics remains deterministic at 120Hz. The clock, countdown, goal intro,
+  // and replay still track real elapsed time when the GPU is running slowly.
   if (typeof window.__rocketPhysicsAccumulator !== 'number') window.__rocketPhysicsAccumulator = 0;
   if (!paused) {
-    window.__rocketPhysicsAccumulator += frameDt;
+    window.__rocketPhysicsAccumulator = Math.min(0.15, window.__rocketPhysicsAccumulator + frameDt);
     const fixedDt = 1 / 120;
     let steps = 0;
     while (window.__rocketPhysicsAccumulator >= fixedDt && steps < 6) {
       update(fixedDt);
       window.__rocketPhysicsAccumulator -= fixedDt;
       steps++;
+    }
+    const skippedTime = Math.max(0, wallDt - steps * fixedDt);
+    if (skippedTime > 0) {
+      if (state === 'kick' || state === 'goal') cd -= skippedTime;
+      else if (state === 'replay') replayIndex += skippedTime * 30;
+      else if (state === 'play' && !trainingMode && !ot) {
+        clock = Math.max(0, clock - skippedTime);
+        if (clock <= 0) {
+          if (score[0] === score[1]) ot = true;
+          else { state = 'over'; showVictoryScreen(); }
+        }
+      }
     }
   } else window.__rocketPhysicsAccumulator = 0;
   render(frameDt);
