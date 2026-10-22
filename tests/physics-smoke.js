@@ -46,7 +46,7 @@ const functions = [
 const bootstrap = [
   'const THREE = arguments[0];',
   'const AIR_X=new THREE.Vector3(1,0,0),AIR_Y=new THREE.Vector3(0,1,0),AIR_Z=new THREE.Vector3(0,0,1);',
-  'const BR=91.25/50,HW=80,HL=104,GW=15,GH=10.5,GD=14,CH=14,CEIL=44,WALL_RAMP_HEIGHT=9.5,WALL_RAMP_WIDTH=24;',
+  'const BR=91.25/50,HW=80,HL=104,GW=15,GH=10.5,GD=14,CH=14,CEIL=44,WALL_RAMP_HEIGHT=256/50,WALL_RAMP_WIDTH=6;',
   'const PHYSICS_TUNING_AIR={PITCH_TORQUE_SPEED:3.4,YAW_TORQUE_SPEED:2.85,ROLL_TORQUE_SPEED:4.2,AIR_BOOST_FORCE:43,BOOST_FORCE:19.83};',
   'const PHYSICS_TUNING = arguments[1];',
   'const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));',
@@ -84,12 +84,12 @@ assert(ball.vz<first,'Repeated contact gained excessive power');
 // A ball travelling outward at the top of a ramp must continue UP the
 // vertical wall instead of ricocheting directly back onto the pitch.
 const wallX=80-scaledBallRadius-0.05;
-Object.assign(ball,{x:wallX,y:2.4+arenaRampAt(wallX,0).height+0.25,z:0,
+Object.assign(ball,{x:wallX,y:scaledBallRadius+arenaRampAt(wallX,0).height+0.25,z:0,
   vx:24,vy:1,vz:0,onRamp:true});
 stepBall(1/120);
 assert(ball.vx===0 && ball.vy>18 && ball.onWall,'Real ramp-to-wall ball transfer failed');
 for(let i=0;i<35;i++)stepBall(1/120);
-assert(ball.y>14,'The ball did not rise after transferring onto the wall');
+assert(ball.y>7.5,'The ball did not rise after transferring onto the wall');
 
 // A pitched-up car must be able to hit a ball above its nose in 3D.
 Object.assign(car,{x:0,y:7,z:0,vx:0,vy:22,vz:0,yaw:Math.PI/2,pitch:Math.PI/2,
