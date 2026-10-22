@@ -58,10 +58,17 @@ const TEAM_COLOR_PRESETS = {
 };
 let BLUE = 0x2fb8ff, ORANGE = 0xff8a1f;
 let gameVolume = 0.75, colourVisionMode = 'normal', controllerDeadZone = 0.16;
+const cameraSettings = { fov: 77, distance: 12, height: 5, stiffness: 7, shake: true };
 try {
   const savedSettings = JSON.parse(localStorage.getItem('rocketArenaSettingsV1') || '{}');
   if (Number.isFinite(savedSettings.volume)) gameVolume = Math.max(0, Math.min(1, savedSettings.volume));
   if (Number.isFinite(savedSettings.deadZone)) controllerDeadZone = Math.max(0.05, Math.min(0.4, savedSettings.deadZone));
+  if (savedSettings.camera && typeof savedSettings.camera === 'object') {
+    for (const key of ['fov', 'distance', 'height', 'stiffness']) {
+      if (Number.isFinite(savedSettings.camera[key])) cameraSettings[key] = savedSettings.camera[key];
+    }
+    if (typeof savedSettings.camera.shake === 'boolean') cameraSettings.shake = savedSettings.camera.shake;
+  }
   if (Object.prototype.hasOwnProperty.call(TEAM_COLOR_PRESETS, savedSettings.colourVisionMode)) colourVisionMode = savedSettings.colourVisionMode;
 } catch (_) {}
 BLUE = TEAM_COLOR_PRESETS[colourVisionMode].blue;
@@ -602,6 +609,7 @@ let player2Paint = '#ff8a1f', player2PaintCustom = false;
 let physicsStyle = 'standard';
 let localTwoPlayer = false;
 let goalExplosionStyle = 'classic';
+let trainingMode = false, trainingGoals = 0;
 let paused = false;
 let lastTouch = null;
 let previousTouch = null;
@@ -704,8 +712,15 @@ function kickoff() {
     Object.assign(c, { x: f[0] * (c.team ? -1 : 1), y: 0.55, z: s * f[1] * HL, vx: 0, vy: 0, vz: 0, yaw: c.team ? Math.PI : 0, pitch: 0, roll: 0, wallRide: false, wallVerticalAxis: null, wallVerticalSign: 0, boost: 34, jumps: 0, jt: 0, flip: 0, fl: 0, ground: true, aiCd: 0, wait: SKILL[diff].wait });
   }
 }
-function start() {
+function start(freePlay = false) {
   sfx.init(); // read UI choices
+  trainingMode = !!freePlay;
+  trainingGoals = 0;
+  paused = false;
+  window.__rocketPhysicsAccumulator = 0;
+  document.body.classList.toggle('free-play', trainingMode);
+  if ($('trainingTools')) $('trainingTools').hidden = !trainingMode;
+  if ($('trainingGoalCount')) $('trainingGoalCount').textContent = 'GOALS 0';
   const nameEl = $('name'); if (nameEl) playerName = (nameEl.value || 'PLAYER').toString().trim().slice(0,12) || 'PLAYER';
   const name2El = $('name2'); if (name2El) player2Name = (name2El.value || 'PLAYER 2').toString().trim().slice(0,12) || 'PLAYER 2';
   const sel = document.querySelector('.car-opts:not(.car-opts-p2) button.on'); if (sel && sel.dataset.car) playerCarModel = sel.dataset.car;
@@ -713,12 +728,80 @@ function start() {
   const paint2El = $('paint2'); if (paint2El) player2Paint = paint2El.value || '#ff8a1f';
   const explosionEl = $('explosion'); if (explosionEl) goalExplosionStyle = explosionEl.value;
   document.body.classList.remove('victory-screen');
-  buildTeams(); score = [0, 0]; clock = MATCH; ot = false; pads.forEach(p => p.t = 0);
+  buildTeams();
+  if (trainingMode) {
+    // Train with one real custom garage car and no AI players.
+    for (const bot of cars.slice(1)) scene.remove(bot.mesh.root);
+    cars = cars.slice(0, 1);
+  }
+  score = [0, 0]; clock = MATCH; ot = false; pads.forEach(p => p.t = 0);
   playerStats = cars.map(() => ({ goals: 0, assists: 0, shots: 0, saves: 0, clears: 0, shotsOnGoal: 0, demos: 0 }));
   const victory = $('victory'); if (victory) { victory.style.display = 'none'; victory.dataset.shown = ''; }
   kickoff(); state = 'kick'; cd = 3; $('menu').style.display = 'none'; $('msg').textContent = '';
+  if (trainingMode) {
+    state = 'play'; cd = 0; resetTrainingCar(); resetTrainingBall();
+    $('msg').textContent = ''; 
+  }
   const pHUD = $('player'); if (pHUD) pHUD.textContent = playerName;
 }
+// Free Play lets players practise aerials, wall shots and ground dribbles
+// without changing normal match rules or spawning opposition bots.
+function resetTrainingBall() {
+  Object.assign(ball, {
+    x: 0, y: BR + 1, z: 0, vx: 0, vy: 0, vz: 0,
+    wx: 0, wy: 0, wz: 0, onRamp: false, onGround: false
+  });
+  ballMesh.quaternion.identity();
+  lastTouch = previousTouch = null;
+}
+function resetTrainingCar() {
+  const car = cars[0]; if (!car) return;
+  Object.assign(car, {
+    x: 0, y: 0.55, z: -34, vx: 0, vy: 0, vz: 0,
+    yaw: 0, pitch: 0, roll: 0, jumps: 0, jt: 0,
+    flip: 0, fl: 0, hold: 0, ground: true,
+    wallRide: false, wallVerticalAxis: null, wallVerticalSign: 0,
+    demoTimer: 0, boost: 100, ballHitCooldown: 0
+  });
+  car.mesh.root.visible = true;
+}
+function passTrainingBall() {
+  if (!trainingMode || !cars[0]) return;
+  const car = cars[0], sx = Math.sin(car.yaw), sz = Math.cos(car.yaw);
+  Object.assign(ball, {
+    x: clamp(car.x + sx * 16, -HW + 9, HW - 9),
+    z: clamp(car.z + sz * 16, -HL + 9, HL - 9),
+    y: BR + 1.2, vx: -sx * 18, vy: 3.5, vz: -sz * 18,
+    wx: 0, wy: 0, wz: 0, onRamp: false
+  });
+}
+function launchTrainingBall() {
+  if (!trainingMode || !cars[0]) return;
+  const car = cars[0], sx = Math.sin(car.yaw), sz = Math.cos(car.yaw);
+  Object.assign(ball, {
+    x: clamp(car.x + sx * 11, -HW + 9, HW - 9),
+    z: clamp(car.z + sz * 11, -HL + 9, HL - 9),
+    y: BR + 5, vx: sx * 21, vy: 17, vz: sz * 21,
+    wx: 0, wy: 0, wz: 0, onRamp: false
+  });
+}
+function exitTraining() {
+  trainingMode = false; paused = false;
+  document.body.classList.remove('free-play');
+  if ($('trainingTools')) $('trainingTools').hidden = true;
+  state = 'menu'; $('menu').style.display = 'grid';
+  $('mt').textContent = 'ROCKET ARENA 3D';
+}
+for (const [id, action] of [
+  ['trainingResetBall', resetTrainingBall], ['trainingPass', passTrainingBall],
+  ['trainingLaunch', launchTrainingBall], ['trainingResetCar', resetTrainingCar],
+  ['trainingExit', exitTraining]
+]) {
+  if ($(id)) $(id).addEventListener('click', action);
+}
+if ($('freePlayBtn')) $('freePlayBtn').addEventListener('click', e => {
+  e.preventDefault(); e.stopPropagation(); start(true);
+});
 function pick(k, v) {
   if (k === 'mode') mode = v; else diff = v;
   for (const b of document.querySelectorAll('[data-' + k + ']')) b.classList.toggle('on', +b.dataset[k] === v);
@@ -841,6 +924,8 @@ function renderControlBindings() {
 /* Corner HUD controls inspired by modern car-soccer interfaces. */
 const garageToggle = $('garageToggle');
 if (garageToggle) garageToggle.addEventListener('click', () => {
+  trainingMode = false; document.body.classList.remove('free-play');
+  if ($('trainingTools')) $('trainingTools').hidden = true;
   state = 'menu';
   $('menu').style.display = 'grid';
   $('mt').textContent = 'GARAGE';
@@ -849,7 +934,7 @@ if (garageToggle) garageToggle.addEventListener('click', () => {
 const quickPlayButton = $('quickPlayButton');
 if (quickPlayButton) quickPlayButton.addEventListener('click', () => {
   if (state === 'menu' || state === 'over') start();
-  else { state = 'menu'; $('menu').style.display = 'grid'; $('mt').textContent = 'MATCH SETUP'; }
+  else { trainingMode = false; document.body.classList.remove('free-play'); if ($('trainingTools')) $('trainingTools').hidden = true; state = 'menu'; $('menu').style.display = 'grid'; $('mt').textContent = 'MATCH SETUP'; }
 });
 const viewToggle = $('viewToggle');
 if (viewToggle) viewToggle.addEventListener('click', () => {
@@ -985,6 +1070,13 @@ addEventListener('keydown', e => {
   if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code) || remappedKey) e.preventDefault();
   if (!keys[e.code] && e.code === controlBindings.p1.keyboard.jump) jumpQ = true;
   if (!keys[e.code] && e.code === controlBindings.p2.keyboard.jump && state === 'play' && localTwoPlayer) jumpQ2 = true;
+  if (trainingMode && state === 'play' && !paused &&
+      !(e.target && e.target.closest && e.target.closest('input, textarea, select'))) {
+    if (!e.repeat && e.code === 'KeyR') resetTrainingBall();
+    if (!e.repeat && e.code === 'KeyT') passTrainingBall();
+    if (!e.repeat && e.code === 'KeyY') launchTrainingBall();
+    if (!e.repeat && e.code === 'Backspace') { resetTrainingCar(); e.preventDefault(); }
+  }
   if (!keys[e.code] && e.code === 'KeyC') { ballCam = !ballCam; $('cam').textContent = ballCam ? 'Ball cam (C)' : 'Chase cam (C)'; }
   if (e.code === 'Enter' && (state === 'menu' || state === 'over') && document.activeElement !== $('name')) start();
   if (state === 'menu' || state === 'over') {
@@ -1039,7 +1131,7 @@ function hexCss(hex) { return '#' + Number(hex).toString(16).padStart(6, '0'); }
 function saveGeneralSettings() {
   try {
     localStorage.setItem('rocketArenaSettingsV1', JSON.stringify({
-      volume: gameVolume, colourVisionMode, deadZone: controllerDeadZone
+      volume: gameVolume, colourVisionMode, deadZone: controllerDeadZone, camera: cameraSettings
     }));
   } catch (_) {}
 }
@@ -1100,6 +1192,30 @@ if (deadZoneSetting) {
     controllerDeadZone = clamp(Number(deadZoneSetting.value) || 0.16, 0.05, 0.4);
     if (deadZoneSettingValue) deadZoneSettingValue.value = Math.round(controllerDeadZone * 100) + '%';
     saveGeneralSettings();
+  });
+}
+for (const [key, id, out, min, max, suffix] of [
+  ['fov', 'settingCameraFov', 'settingCameraFovValue', 60, 110, '°'],
+  ['distance', 'settingCameraDistance', 'settingCameraDistanceValue', 8, 20, ''],
+  ['height', 'settingCameraHeight', 'settingCameraHeightValue', 2, 9, ''],
+  ['stiffness', 'settingCameraStiffness', 'settingCameraStiffnessValue', 2, 15, '']
+]) {
+  const input = $(id), output = $(out);
+  cameraSettings[key] = clamp(cameraSettings[key], min, max);
+  if (!input) continue;
+  input.value = String(cameraSettings[key]);
+  if (output) output.value = cameraSettings[key] + suffix;
+  input.addEventListener('input', () => {
+    cameraSettings[key] = clamp(Number(input.value), min, max);
+    if (output) output.value = cameraSettings[key] + suffix;
+    saveGeneralSettings();
+  });
+}
+const cameraShakeInput = $('settingCameraShake');
+if (cameraShakeInput) {
+  cameraShakeInput.checked = cameraSettings.shake;
+  cameraShakeInput.addEventListener('change', () => {
+    cameraSettings.shake = cameraShakeInput.checked; saveGeneralSettings();
   });
 }
 applyColourVisionMode(colourVisionMode, false, false);
@@ -1346,6 +1462,7 @@ function stepCar(c, ct, dt) {
   // Keep a very short grace window so a clean boost collision still counts if boost
   // ends on the exact simulation frame the cars make contact.
   c.boostImpactTimer = bo ? 0.18 : Math.max(0, (c.boostImpactTimer || 0) - dt);
+  if (trainingMode && !c.ai) c.boost = 100;
   if (bo) { c.boost = Math.max(0, c.boost - PHYSICS_TUNING.BOOST_DRAIN_PER_SECOND * dt); emitBoost(c); }
   c.fl = bo ? 1 : 0;
   if (c.wallVerticalAxis) {
@@ -1861,6 +1978,13 @@ function showGameEvent(label, color = '#fff') {
   el.textContent = label; el.style.color = color; el.classList.remove('event-pop'); void el.offsetWidth; el.classList.add('event-pop');
 }
 function goal(team) {
+  if (trainingMode) {
+    trainingGoals++;
+    if ($('trainingGoalCount')) $('trainingGoalCount').textContent = 'GOALS ' + trainingGoals;
+    showGameEvent('FREE PLAY GOAL! · ' + trainingGoals, '#ffca64');
+    resetTrainingBall();
+    return;
+  }
   // Ball physics use metre-like units per second; convert speed to mph at the goal line.
   goalSpeedMph = Math.round(Math.hypot(ball.vx, ball.vy, ball.vz) * 2.236936);
   score[team]++;
@@ -1939,7 +2063,11 @@ function update(dt) {
         eventCooldown['shot'+ti] = t + 2.5; showGameEvent('SHOT ON GOAL', '#ffe36e');
       }
     }
-    clock -= dt; if (clock <= 0) { clock = 0; if (score[0] === score[1]) ot = true; else state = 'over'; } }
+    if (!trainingMode) {
+      clock -= dt;
+      if (clock <= 0) { clock = 0; if (score[0] === score[1]) ot = true; else state = 'over'; }
+    }
+  }
   else if (state === 'goal') {
     cd -= dt;
     dt *= 0.5;
@@ -2076,27 +2204,44 @@ const cam = { x: 0, y: 6, z: -60, lx: 0, ly: 2, lz: 0 };
 const cam2 = { x: 0, y: 6, z: 60, lx: 0, ly: 2, lz: 0 };
 const axis = new THREE.Vector3();
 function updateCam(dt, carIndex = 0, targetCamera = camera, camState = cam) {
-  const c = cars[carIndex] || cars[0]; let dx = -Math.sin(c.yaw), dz = -Math.cos(c.yaw);
-  if (ballCam) { const bx = c.x - ball.x, bz = c.z - ball.z, l = Math.hypot(bx, bz); if (l > 0.5) { dx = bx / l; dz = bz / l; } }
-  const k = 1 - Math.exp(-7 * dt);
-  const tx = clamp(c.x + dx * 11, -HW + 2, HW - 2), tz = clamp(c.z + dz * 11, -HL + 2, HL - 2), ty = clamp(c.y + 4.6, 2, CEIL - 1);
-  camState.x += (tx - camState.x) * k; camState.y += (ty - camState.y) * k; camState.z += (tz - camState.z) * k;
-  let lx = c.x - dx * 9, ly = 1.5, lz = c.z - dz * 9;
-  if (ballCam) { lx = ball.x; ly = ball.y; lz = ball.z; }
-  camState.lx += (lx - camState.lx) * k; camState.ly += (ly - camState.ly) * k; camState.lz += (lz - camState.lz) * k;
-
-  // camera shake
-  if (camShakeTime > 0) {
-    camShakeTime -= dt;
-    const shakeAmp = Math.min(1, camShakeTime * 2);
-    camState.x += (Math.random() - 0.5) * 2 * shakeAmp;
-    camState.y += (Math.random() - 0.5) * 1.2 * shakeAmp;
-    camState.z += (Math.random() - 0.5) * 2 * shakeAmp;
+  const car = cars[carIndex] || cars[0]; if (!car) return;
+  let backX = -Math.sin(car.yaw), backZ = -Math.cos(car.yaw);
+  if (ballCam) {
+    // Camera tracks the ball but stays behind the player's car.
+    const awayX = car.x - ball.x, awayZ = car.z - ball.z;
+    const length = Math.hypot(awayX, awayZ);
+    if (length > 0.6) { backX = awayX / length; backZ = awayZ / length; }
   }
+  const k = 1 - Math.exp(-cameraSettings.stiffness * dt);
+  const tx = clamp(car.x + backX * cameraSettings.distance, -HW + 2, HW - 2);
+  const tz = clamp(car.z + backZ * cameraSettings.distance, -HL + 2, HL - 2);
+  const ty = clamp(car.y + cameraSettings.height, 2, CEIL - 1.5);
+  camState.x += (tx - camState.x) * k;
+  camState.y += (ty - camState.y) * k;
+  camState.z += (tz - camState.z) * k;
+  const lookX = ballCam ? ball.x : car.x - backX * 9;
+  const lookY = ballCam ? ball.y : car.y + 1.0;
+  const lookZ = ballCam ? ball.z : car.z - backZ * 9;
+  camState.lx += (lookX - camState.lx) * k;
+  camState.ly += (lookY - camState.ly) * k;
+  camState.lz += (lookZ - camState.lz) * k;
 
-  targetCamera.position.set(camState.x, camState.y, camState.z); targetCamera.lookAt(camState.lx, camState.ly, camState.lz);
-  sun.position.set(c.x + 30, 80, c.z + 25); sun.target.position.set(c.x, 0, c.z); sun.target.updateMatrixWorld();
-  targetCamera.fov += (70 + Math.hypot(c.vx, c.vy, c.vz) * 0.4 + (c.fl ? 6 : 0) - targetCamera.fov) * k; targetCamera.updateProjectionMatrix();
+  if (cameraSettings.shake && camShakeTime > 0) {
+    camShakeTime = Math.max(0, camShakeTime - dt);
+    const shake = Math.min(0.45, camShakeTime) * 0.7;
+    camState.x += (Math.random() - 0.5) * shake;
+    camState.y += (Math.random() - 0.5) * shake;
+  } else if (camShakeTime > 0) {
+    camShakeTime = Math.max(0, camShakeTime - dt);
+  }
+  targetCamera.position.set(camState.x, camState.y, camState.z);
+  targetCamera.lookAt(camState.lx, camState.ly, camState.lz);
+  sun.position.set(car.x + 30, 80, car.z + 25);
+  sun.target.position.set(car.x, 0, car.z); sun.target.updateMatrixWorld();
+  const speed = Math.hypot(car.vx, car.vy, car.vz);
+  const desiredFov = clamp(cameraSettings.fov + speed * 0.10 + (car.fl ? 3 : 0), 60, 118);
+  targetCamera.fov += (desiredFov - targetCamera.fov) * k;
+  targetCamera.updateProjectionMatrix();
 }
 function render(dt) {
   if (state === 'play') saveReplayFrame();
@@ -2140,9 +2285,20 @@ function render(dt) {
   document.body.classList.toggle('split-screen', splitActive);
   // During a replay, follow the player who scored instead of always following P1.
   if (state === 'menu') {
-    // Clean stadium-only garage backdrop: hide active match cars and ball.
-    camera.position.set(0, 62, 190); camera.lookAt(0, 4, 0); camera.fov = 62; camera.updateProjectionMatrix();
-    cars.forEach(c => { c.mesh.root.visible = false; }); ballMesh.visible = false;
+    // Actual selected 3D car in the arena, not a black/empty garage backdrop.
+    const preview = cars[0];
+    cars.forEach(c => { c.mesh.root.visible = false; });
+    if (preview) {
+      preview.mesh.root.visible = true;
+      preview.mesh.root.position.set(28, 0.55, 0);
+      preview.mesh.root.rotation.set(0, Math.PI * 0.63 + Math.sin(performance.now() * 0.00045) * 0.2, 0);
+      preview.mesh.flame.visible = false;
+    }
+    ballMesh.visible = true;
+    ballMesh.position.set(36, BR + 0.35, -12);
+    camera.position.set(47, 8, 22);
+    camera.lookAt(27, 1.5, 0);
+    camera.fov = 64; camera.updateProjectionMatrix();
   } else if (state === 'over') {
     // Hold a close, centred camera on the straight winning lineup.
     const winTeam = score[0] === score[1] ? null : score[1] > score[0];
@@ -2157,9 +2313,12 @@ function render(dt) {
     if (splitActive) updateCam(dt, state === 'replay' ? replayCameraCarIndex : mode, camera2, cam2);
   }
   $('s0').textContent = score[0]; $('s1').textContent = score[1];
-  const s = Math.ceil(clock); $('clock').textContent = ot ? 'OT' : Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
-  const b = cars[0].boost; $('bf').style.width = (2.1 * b) + 'px'; $('bt').textContent = Math.round(b);
-  $('bf').style.background = b > 66 ? '#ffd35a' : '#37f2c0';
+  const s = Math.ceil(clock); $('clock').textContent = trainingMode ? 'FREE PLAY' : ot ? 'OT' : Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+  const b = trainingMode ? 100 : cars[0].boost;
+  $('bt').textContent = trainingMode ? '∞' : Math.round(b);
+  $('bf').style.width = '84%';
+  $('bf').style.background = 'conic-gradient(' + (b > 66 ? '#ffd35a' : '#37f2c0') +
+    ' ' + (b * 3.6) + 'deg, rgba(12,29,59,.65) ' + (b * 3.6) + 'deg)';
   const p2 = cars[mode];
   const bf2 = $('bf2'), bt2 = $('bt2');
   if (bf2 && bt2) { const b2 = p2 ? p2.boost : 0; bf2.style.width = (2.1 * b2) + 'px'; bt2.textContent = Math.round(b2); bf2.style.background = b2 > 66 ? '#ffd35a' : '#ff8a1f'; }
