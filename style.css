@@ -558,3 +558,13 @@ body.free-play #boost #bt { font-size:30px; }
 /* Free Play wall-to-air tutorial: concise and only visible for the drill. */
 .wall-training-tip { margin:7px auto 2px; max-width:760px; color:#c9eaff; font:700 12px 'Trebuchet MS',sans-serif; line-height:1.45; }
 .wall-training-tip[hidden] { display:none!important; }
+
+/* Restores competition-focused wide-FOV camera settings in one click. */
+.settings-preset-button {
+  display:block; margin:10px 0 10px auto; padding:9px 15px;
+  background:linear-gradient(135deg,#175c92,#247bc6);
+  border:1px solid #78c8fb; border-radius:7px; color:#fff;
+  cursor:pointer; font:800 12px 'Trebuchet MS',Arial,sans-serif;
+  letter-spacing:.045em;
+}
+.settings-preset-button:hover { filter:brightness(1.15); }
