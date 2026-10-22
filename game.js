@@ -192,7 +192,7 @@ function buildArena() {
       'rgba(227,240,241,.6)',0.65*resolution);
     g.strokeStyle = col; g.lineWidth = 1.0 * resolution;
     const boxWide = (GW+12)*2*resolution, depth=19*resolution;
-    g.strokeRect(px(0)-boxWide/2,pz(sign*(HL-9))-(sign>0?depth:0),boxWide,depth);
+    g.strokeRect(px(0)-boxWide/2,pz(sign*(HL-9))-(sign<0?depth:0),boxWide,depth);
     line([[px(-HW+12),pz(sign*(HL-13))],[px(-HW+12),pz(sign*12)]],
       col,1.15*resolution);
     line([[px(HW-12),pz(sign*(HL-13))],[px(HW-12),pz(sign*12)]],
