@@ -1015,7 +1015,7 @@ let player2Paint = '#ff8a1f', player2PaintCustom = false;
 let physicsStyle = 'standard';
 let localTwoPlayer = false;
 let goalExplosionStyle = 'classic';
-let trainingMode = false, trainingGoals = 0, trainingAttempts = 0;
+let trainingMode = false, trainingGoals = 0, trainingAttempts = 0, trainingWallArmed = false;
 let paused = false;
 let lastTouch = null;
 let previousTouch = null;
@@ -1143,6 +1143,7 @@ function start(freePlay = false) {
   trainingMode = !!freePlay;
   trainingGoals = 0;
   trainingAttempts = 0;
+  trainingWallArmed = false;
   paused = false;
   window.__rocketPhysicsAccumulator = 0;
   document.body.classList.toggle('free-play', trainingMode);
@@ -1228,6 +1229,7 @@ function loadTrainingShot(scenario = 'dribble') {
   resetTrainingBall();
   const car = cars[0];
   const variation = (trainingAttempts % 5) - 2;
+  trainingWallArmed = false;
   switch (scenario) {
     case 'aerial':
       car.z = -58;
@@ -1237,21 +1239,27 @@ function loadTrainingShot(scenario = 'dribble') {
       });
       break;
     case 'wall': {
-      // Begin a wall-to-air dribble with the car already attached to the
-      // vertical side wall and the ball travelling UP just ahead of it.
-      car.x = HW - 1.3; car.z = -34 + variation * 2;
-      car.y = WALL_RAMP_HEIGHT + 5.2;
-      car.yaw = Math.PI / 2;
+      // Repeatable first-touch setup: freeze both objects while the player
+      // prepares. Space releases car and ball with MATCHED upward/inward pace,
+      // leaving room for manual boost feathering and repeated light touches.
+      const sideSign = trainingAttempts % 2 === 0 ? -1 : 1;
+      car.x = sideSign * (HW - 1.3);
+      car.z = -37 + variation * 1.8;
+      car.y = WALL_RAMP_HEIGHT + 7.0;
+      car.yaw = sideSign * Math.PI / 2;
       car.pitch = Math.PI / 2;
+      car.vx = 0; car.vy = 13; car.vz = 2;
       car.wallRide = true;
-      car.wallVerticalAxis = 'x'; car.wallVerticalSign = 1;
+      car.wallVerticalAxis = 'x'; car.wallVerticalSign = sideSign;
       car.ground = true;
-      const x = HW - BR;
+      const ballX = sideSign * (HW - 4.9);
       Object.assign(ball, {
-        x, z: car.z + 4.5, y: car.y + 7.5,
-        vx: 0, vy: 9.5, vz: 2.8,
-        onRamp: false, onGround: false
+        x: ballX, z: car.z + 2.3, y: car.y + 5.8,
+        vx: -sideSign * 12, vy: 11.8, vz: 3,
+        wx: 0, wy: 0, wz: 0,
+        onRamp: false, onGround: false, onWall: false
       });
+      trainingWallArmed = true;
       break;
     }
     case 'save':
@@ -1274,10 +1282,14 @@ function loadTrainingShot(scenario = 'dribble') {
   }
   trainingAttempts++;
   updateTrainingCounters();
+  if (trainingWallArmed && wallTip) wallTip.textContent =
+    'READY: Press SPACE to launch from the wall. Feather SHIFT to catch the ball, tap S to angle the nose inward, and use Q/E for air roll.';
+  else if (wallTip) wallTip.textContent =
+    'Wall air dribble: jump inward, feather boost, match ball speed, and make several gentle touches.';
   showGameEvent('TRAINING · ' + scenario.toUpperCase(), '#8fe5ff');
 }
 function exitTraining() {
-  trainingMode = false; paused = false;
+  trainingMode = false; trainingWallArmed = false; paused = false;
   document.body.classList.remove('free-play');
   resize();
   if ($('trainingTools')) $('trainingTools').hidden = true;
@@ -2748,6 +2760,14 @@ function update(dt) {
       return;
     }
   } else return;
+  // A wall-to-air drill should not fall apart while the player reads the
+  // instructions or positions their hands. Physics starts on jump input.
+  if (trainingMode && trainingWallArmed) {
+    if (!(jumpQ || padJumpQueued.p1)) return;
+    trainingWallArmed = false;
+    const tip = $('wallTrainingTip');
+    if (tip) tip.textContent = 'IN FLIGHT: Feather SHIFT, tap S to tip into the arena and make gentle touches. H resets the shot.';
+  }
   // AI predictions are cached at 12.5 Hz, avoiding 120 costly long-horizon
   // predictions per second while the physics loop runs at 120 Hz.
   predictionTimer -= dt;
@@ -2867,7 +2887,7 @@ function updateCam(dt, carIndex = 0, targetCamera = camera, camState = cam) {
   const forwardLength = Math.hypot(front.x, front.z);
   let backX = forwardLength > 0.23 ? -front.x / forwardLength : -Math.sin(car.yaw);
   let backZ = forwardLength > 0.23 ? -front.z / forwardLength : -Math.cos(car.yaw);
-  if (ballCam) {
+  if (ballCam || (trainingMode && $('trainingPreset') && $('trainingPreset').value === 'wall')) {
     // Camera tracks the ball but stays behind the player's car.
     const awayX = car.x - ball.x, awayZ = car.z - ball.z;
     const length = Math.hypot(awayX, awayZ);
