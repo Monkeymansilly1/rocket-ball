@@ -117,6 +117,8 @@
       <button id="freePlayBtn" class="free-play-btn" type="button">⚽ FREE PLAY</button>
     </div>
     <p class="go" id="go">Choose your setup, then press PLAY</p>
+    <p class="model-credit"><span id="modelLoadStatus" role="status" aria-live="polite">Loading detailed Octane model…</span>
+    <small>3D Octane model based on <a href="https://sketchfab.com/3d-models/octane-rocket-league-car-9910f0a5d158425bbc7deb60c7a81f69" target="_blank" rel="noopener">Octane by Jako</a>, licensed <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>.</small></p>
   </div>
     <details id="controlsSettings" class="controls-settings">
       <summary>⚙ SETTINGS</summary>
@@ -202,6 +204,7 @@
 </div>
 <!-- Bundled Three.js r149 (MIT licence in lib/THREE-LICENSE.txt). -->
 <script src="lib/three.min.js"></script>
+<script src="lib/GLTFLoader.legacy.js"></script>
 <script src="game.js"></script>
 </body>
 </html>
