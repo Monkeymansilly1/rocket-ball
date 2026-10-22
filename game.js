@@ -1188,9 +1188,10 @@ function resetTrainingCar() {
     x: 0, y: 0.55, z: -34, vx: 0, vy: 0, vz: 0,
     yaw: 0, pitch: 0, roll: 0, jumps: 0, jt: 0,
     flip: 0, fl: 0, hold: 0, ground: true,
-    wallRide: false, wallVerticalAxis: null, wallVerticalSign: 0,
+    wallRide: false, wallVerticalAxis: null, wallVerticalSign: 0, wallDetachTimer: 0,
     demoTimer: 0, boost: 100, ballHitCooldown: 0
   });
+  car.wallDetachTimer = 0;
   car.mesh.root.visible = true;
 }
 function passTrainingBall() {
@@ -1232,13 +1233,20 @@ function loadTrainingShot(scenario = 'dribble') {
       });
       break;
     case 'wall': {
-      car.x = HW - 27; car.z = -37;
-      car.y = arenaRampAt(car.x, car.z).height + 0.55;
-      car.yaw = 0.6;
-      const x = HW - 9, z = -21 + variation * 2;
+      // Begin a wall-to-air dribble with the car already attached to the
+      // vertical side wall and the ball travelling UP just ahead of it.
+      car.x = HW - 1.3; car.z = -34 + variation * 2;
+      car.y = WALL_RAMP_HEIGHT + 5.2;
+      car.yaw = Math.PI / 2;
+      car.pitch = Math.PI / 2;
+      car.wallRide = true;
+      car.wallVerticalAxis = 'x'; car.wallVerticalSign = 1;
+      car.ground = true;
+      const x = HW - BR;
       Object.assign(ball, {
-        x, z, y: BR + arenaRampAt(x, z).height + 0.5,
-        vx: 4, vy: 0, vz: 15
+        x, z: car.z + 4.5, y: car.y + 7.5,
+        vx: 0, vy: 9.5, vz: 2.8,
+        onRamp: false, onGround: false
       });
       break;
     }
@@ -1931,16 +1939,24 @@ function stepCar(c, ct, dt) {
     return;
   }
   c.jt += dt; if (c.flip > 0) c.flip -= dt;
+  // Brief separation grace after a wall/ramp jump. Otherwise the same ramp
+  // snaps the car back onto its surface in the next physics step.
+  c.wallDetachTimer = Math.max(0, (c.wallDetachTimer || 0) - dt);
   const sy = Math.sin(c.yaw), cy = Math.cos(c.yaw);
   const startingRamp = arenaRampAt(c.x, c.z);
   if (c.wallVerticalAxis) {
     c.wallRide = true;
     if (c.wallVerticalAxis === 'x') c.x = c.wallVerticalSign * (HW - 1.3);
     else c.z = c.wallVerticalSign * (HL - 1.9);
+    // Align the bonnet with the upward wall direction without hard-snapping.
+    const wallYaw = c.wallVerticalAxis === 'x'
+      ? c.wallVerticalSign * Math.PI / 2
+      : c.wallVerticalSign > 0 ? 0 : Math.PI;
+    c.yaw += wrap(wallYaw - c.yaw) * clamp(6 * dt, 0, 1);
     c.pitch += wrap(Math.PI / 2 - c.pitch) * clamp(9 * dt, 0, 1);
     c.roll = 0;
   } else {
-    c.wallRide = startingRamp.height > 0.03 &&
+    c.wallRide = c.wallDetachTimer <= 0 && startingRamp.height > 0.03 &&
       c.y <= startingRamp.height + 1.2 && c.vy <= 0.5;
     if (c.wallRide) {
       const targetY = startingRamp.height + 0.55;
@@ -1954,7 +1970,7 @@ function stepCar(c, ct, dt) {
       c.roll += (0 - c.roll) * clamp(7 * dt, 0, 1);
     }
   }
-  const ground = c.y <= 0.56 || c.wallRide; c.ground = ground;
+  const ground = c.wallDetachTimer <= 0 && (c.y <= 0.56 || c.wallRide); c.ground = ground;
   const bo = !!ct.boost && c.boost > 0;
   // Keep a very short grace window so a clean boost collision still counts if boost
   // ends on the exact simulation frame the cars make contact.
@@ -2035,14 +2051,37 @@ function stepCar(c, ct, dt) {
     if (c.wallVerticalAxis) {
       const wallAxis = c.wallVerticalAxis, wallSign = c.wallVerticalSign;
       c.wallVerticalAxis = null; c.wallVerticalSign = 0; c.wallRide = false;
-      c.vy = Math.max(c.vy, PHYSICS_TUNING.JUMP_IMPULSE);
-      if (wallAxis === 'x') c.vx = wallSign * 9;
-      else c.vz = wallSign * 9;
-      c.pitch = 0; c.jumps = 1; c.jt = 0;
-      c.hold = PHYSICS_TUNING.JUMP_HOLD_DURATION; c.y += 0.05;
+      c.wallDetachTimer = 0.32;
+      // Surface-normal impulse goes INTO the arena, not through the wall.
+      // Preserve upward wall momentum and bonnet pitch so boost can follow
+      // the ball immediately instead of launching horizontally.
+      c.vy = Math.max(c.vy, 8.5);
+      if (wallAxis === 'x') {
+        c.vx = -wallSign * 12;
+        c.x -= wallSign * 0.12;
+      } else {
+        c.vz = -wallSign * 12;
+        c.z -= wallSign * 0.12;
+      }
+      c.pitch = Math.max(0.75, c.pitch);
+      c.jumps = 1; c.jt = 0;
+      c.hold = PHYSICS_TUNING.JUMP_HOLD_DURATION;
+      c.y += 0.08;
     } else if (ground) {
-      c.vy = PHYSICS_TUNING.JUMP_IMPULSE; c.jumps = 1; c.jt = 0;
-      c.hold = PHYSICS_TUNING.JUMP_HOLD_DURATION; c.y += 0.05;
+      if (c.wallRide) {
+        const slope = arenaRampAt(c.x, c.z);
+        const norm = Math.hypot(slope.dx, 1, slope.dz);
+        const launch = PHYSICS_TUNING.JUMP_IMPULSE;
+        c.vx += -slope.dx / norm * launch * 0.9;
+        c.vz += -slope.dz / norm * launch * 0.9;
+        c.vy = Math.max(c.vy, launch / norm);
+        c.wallRide = false;
+        c.wallDetachTimer = 0.28;
+      } else {
+        c.vy = PHYSICS_TUNING.JUMP_IMPULSE;
+      }
+      c.jumps = 1; c.jt = 0;
+      c.hold = PHYSICS_TUNING.JUMP_HOLD_DURATION; c.y += 0.08;
     } else if (c.jumps === 1 && c.jt < PHYSICS_TUNING.DOUBLE_JUMP_WINDOW) {
       c.jumps = 2;
       const f = ct.dodge ? ct.dodge[0] : ct.throttle, s = ct.dodge ? ct.dodge[1] : ct.steer;
@@ -2117,8 +2156,14 @@ function stepCar(c, ct, dt) {
     } else {
       c.pitch += wrap(Math.PI / 2 - c.pitch) * clamp(9 * dt, 0, 1);
     }
-  } else if (rampNow.height > 0.03 && ((c.wallRide && !ct.jump) || c.y < rampSupportY - 0.05 || (c.y <= rampSupportY + 0.22 && c.vy <= 0.5))) {
-    c.y = rampSupportY; c.vy = 0; c.wallRide = true;
+  } else if (c.wallDetachTimer <= 0 && rampNow.height > 0.03 &&
+      ((c.wallRide && !ct.jump) || c.y < rampSupportY - 0.05 ||
+       (c.y <= rampSupportY + 0.22 && c.vy <= 0.5))) {
+    // Maintain tangent velocity on the curved mesh rather than killing y
+    // velocity / snapping the car each frame. Support is positional only.
+    c.y += (rampSupportY - c.y) * clamp(35 * dt, 0, 1);
+    c.vy = c.vx * rampNow.dx + c.vz * rampNow.dz;
+    c.wallRide = true;
     const slopeAlongNose = rampNow.dx * Math.sin(c.yaw) + rampNow.dz * Math.cos(c.yaw);
     const pitchTarget = Math.atan(slopeAlongNose);
     c.pitch += wrap(pitchTarget - c.pitch) * clamp(10 * dt, 0, 1);
