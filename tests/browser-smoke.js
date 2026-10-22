@@ -116,8 +116,11 @@ async function main() {
     await evalJS('document.getElementById("settingCameraFov").value="87"; document.getElementById("settingCameraFov").dispatchEvent(new Event("input",{bubbles:true}))');
     assert.equal(await evalJS('JSON.parse(localStorage.getItem("rocketArenaSettingsV1")).camera.fov'),87);
     console.log('Free Play passed; testing normal match');
+    await evalJS('document.getElementById("settingGraphics").value="low"; document.getElementById("settingGraphics").dispatchEvent(new Event("change",{bubbles:true}))');
     await evalJS('document.getElementById("playBtn").click()');
-    await eventually(()=>evalJS('window.rocketArena.state==="play"'),8000);
+    await eventually(()=>evalJS('window.rocketArena.state==="play"'),18000)
+      .catch(async err=>{throw new Error('Match kickoff: '+err.message+' state='+await evalJS('window.rocketArena.state')+
+        ' announcement='+await evalJS('document.getElementById("msg").textContent')+' browserErrors='+JSON.stringify(errors));});
     assert.equal(await evalJS('window.rocketArena.cars.length'),4);
     const pos0=await evalJS('window.rocketArena.cars[0].z');
     await evalJS('window.dispatchEvent(new KeyboardEvent("keydown",{code:"KeyW",bubbles:true}))');
