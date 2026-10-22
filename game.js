@@ -154,154 +154,227 @@ Object.assign(sun.shadow.camera, { left: -45, right: 45, top: 45, bottom: -45, n
 scene.add(sun); scene.add(sun.target);
 
 function buildArena() {
-  const S = 8, TW = 2 * HW * S, TH = 2 * HL * S, T = 10 * S, cvs = document.createElement('canvas'); cvs.width = TW; cvs.height = TH;
-  const g = cvs.getContext('2d');
-  for (let i = 0; i * T < TW; i++) for (let j = 0; j * T < TH; j++) { g.fillStyle = (i + j) % 2 ? '#2c6a2b' : '#33782f'; g.fillRect(i * T, j * T, T, T); }
-  const paint = (y0, y1, col) => {
-    g.save(); g.beginPath(); g.rect(0, y0, TW, y1 - y0); g.clip(); g.fillStyle = col;
-    for (let x = -TH; x < TW + TH; x += 16 * S) { g.beginPath(); g.moveTo(x, y0); g.lineTo(x + 7 * S, y0); g.lineTo(x + 7 * S - (y1 - y0), y1); g.lineTo(x - (y1 - y0), y1); g.fill(); }
-    g.restore();
-  };
-  paint(0, TH * 0.3, 'rgba(40,120,255,.6)'); paint(TH * 0.7, TH, 'rgba(255,125,30,.55)');
-  g.strokeStyle = 'rgba(255,255,255,.75)'; g.lineWidth = 5; g.strokeRect(3, 3, TW - 6, TH - 6);
-  const bw = (GW + 10) * S * 2, bd = 18 * S;
-  g.strokeRect((TW - bw) / 2, 3, bw, bd); g.strokeRect((TW - bw) / 2, TH - 3 - bd, bw, bd);
-  g.beginPath(); g.moveTo(0, TH / 2); g.lineTo(TW, TH / 2); g.stroke();
-  g.beginPath(); g.arc(TW / 2, TH / 2, 14 * S, 0, 7); g.stroke();
-  const tex = new THREE.CanvasTexture(cvs); tex.anisotropy = 8;
-  pitchMesh = new THREE.Mesh(new THREE.PlaneGeometry(2 * HW, 2 * HL), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.9 }));
-  pitchMesh.rotation.x = -Math.PI / 2; pitchMesh.receiveShadow = true; scene.add(pitchMesh);
-  const out = new THREE.Mesh(new THREE.PlaneGeometry(2400, 2400), new THREE.MeshBasicMaterial({ color: 0x1a1620 }));
-  out.rotation.x = -Math.PI / 2; out.position.y = -0.1; scene.add(out);
-
-  const BH = 8;
-  const glass = new THREE.MeshBasicMaterial({ color: 0x8bdcff, transparent: true, opacity: 0.13, side: THREE.DoubleSide, depthWrite: false });
-  const dim = {
-    [BLUE]: new THREE.MeshStandardMaterial({ color: 0x172b40, roughness: 0.46, metalness: 0.38, side: THREE.DoubleSide }),
-    [ORANGE]: new THREE.MeshStandardMaterial({ color: 0x25283a, roughness: 0.46, metalness: 0.38, side: THREE.DoubleSide })
-  };
-  const bright = { [BLUE]: new THREE.MeshBasicMaterial({ color: BLUE }), [ORANGE]: new THREE.MeshBasicMaterial({ color: ORANGE }) };
-  const wallRibMat = new THREE.MeshStandardMaterial({ color: 0x101b2a, roughness: 0.42, metalness: 0.55 });
-  const wallGridMat = {
-    [BLUE]: new THREE.MeshBasicMaterial({ color: 0x3bbcff, transparent: true, opacity: 0.34 }),
-    [ORANGE]: new THREE.MeshBasicMaterial({ color: 0xff8a1f, transparent: true, opacity: 0.34 })
-  };
-  dim[BLUE].userData.teamSide = 'blue'; dim[BLUE].userData.teamRole = 'dim';
-  dim[ORANGE].userData.teamSide = 'orange'; dim[ORANGE].userData.teamRole = 'dim';
-  bright[BLUE].userData.teamSide = 'blue'; bright[ORANGE].userData.teamSide = 'orange';
-  wallGridMat[BLUE].userData.teamSide = 'blue'; wallGridMat[ORANGE].userData.teamSide = 'orange';
-  const plane = (w, h, x, y, z, ry, m) => { const o = new THREE.Mesh(new THREE.PlaneGeometry(w, h), m); o.position.set(x, y, z); o.rotation.y = ry; scene.add(o); };
-  const wall = (w, x, z, ry, col) => {
-    plane(w, BH, x, BH / 2, z, ry, dim[col]);
-    plane(w, CEIL - BH, x, BH + (CEIL - BH) / 2, z, ry, glass);
-    const o = new THREE.Mesh(new THREE.BoxGeometry(w, 0.7, 0.7), bright[col]);
-    o.position.set(x, BH, z); o.rotation.y = ry; scene.add(o);
-    // Repeating metal ribs and coloured cross-bars give the enclosure a proper arena structure.
-    const sideWall = Math.abs(x) > HW - 1;
-    for (let along = -w / 2 + 7; along < w / 2 - 3; along += 10) {
-      const normal = sideWall ? -Math.sign(x) * 0.22 : -Math.sign(z) * 0.22;
-      const rib = new THREE.Mesh(new THREE.BoxGeometry(0.34, CEIL, 0.52), wallRibMat);
-      rib.position.set(
-        x + Math.cos(ry) * along + Math.sin(ry) * normal,
-        CEIL / 2,
-        z - Math.sin(ry) * along + Math.cos(ry) * normal
-      );
-      rib.rotation.y = ry; scene.add(rib);
-    }
-    // Lower retaining-wall rails break up the solid panels and make the arena enclosure read as a structure.
-    for (const y of [2, 4, 6]) {
-      const beam = new THREE.Mesh(new THREE.BoxGeometry(w, 0.14, 0.3), wallRibMat);
-      beam.position.set(x, y, z); beam.rotation.y = ry; scene.add(beam);
-    }
-    for (const y of [15, 23, 31, 39]) {
-      const bar = new THREE.Mesh(new THREE.BoxGeometry(w, 0.12, 0.22), wallGridMat[col]);
-      bar.position.set(x, y, z); bar.rotation.y = ry; scene.add(bar);
-    }
-  };
-  const cw = CH * 1.4142;
-  for (const sz of [-1, 1]) {
-    const col = sz < 0 ? BLUE : ORANGE;
-    for (const sx of [-1, 1]) {
-      wall(HL - CH, sx * HW, sz * (HL - CH) / 2, Math.PI / 2, col);                       // side walls
-      wall(HW - CH - GW, sx * (GW + HW - CH) / 2, sz * HL, 0, col);                        // end walls beside the goal
-      wall(cw, sx * (HW - CH / 2), sz * (HL - CH / 2), sx * sz > 0 ? Math.PI / 4 : -Math.PI / 4, col); // rounded corners
-    }
-    plane(2 * GW, CEIL - GH, 0, GH + (CEIL - GH) / 2, sz * HL, 0, glass);
-    const mat = bright[col];
-    const post = (x, y, w, h) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.9), mat); m.position.set(x, y, sz * HL); scene.add(m); };
-    post(-GW, GH / 2, 0.9, GH); post(GW, GH / 2, 0.9, GH); post(0, GH, 2 * GW + 0.9, 0.9);
-    const net = new THREE.Mesh(new THREE.BoxGeometry(2 * GW, GH, GD, 12, 5, 5), new THREE.MeshBasicMaterial({ color: col, wireframe: true, transparent: true, opacity: 0.3 }));
-    net.position.set(0, GH / 2, sz * (HL + GD / 2)); scene.add(net);
-    const pl = new THREE.PointLight(col, 1.2, 60);
-    pl.userData.teamSide = sz < 0 ? 'blue' : 'orange';
-    pl.position.set(0, 6, sz * (HL - 5)); scene.add(pl);
+  // Utopia-inspired coliseum field: one uninterrupted render surface uses the
+  // SAME height function as car and ball collision physics. No corner patches,
+  // disconnected ramp meshes or visible cracks at the seams.
+  const resolution = 7, TW = 2 * HW * resolution, TH = 2 * HL * resolution;
+  const canvas = document.createElement('canvas');
+  canvas.width = TW; canvas.height = TH;
+  const g = canvas.getContext('2d');
+  const tile = 9 * resolution;
+  for (let x = 0; x < TW; x += tile) for (let y = 0; y < TH; y += tile) {
+    const ix = Math.floor(x / tile), iy = Math.floor(y / tile);
+    g.fillStyle = (ix + iy) % 2 ? '#356f35' : '#3e7c3d';
+    g.fillRect(x, y, tile, tile);
+    // fine mowing lines give the turf some texture without external downloads
+    g.fillStyle = 'rgba(240,255,195,.032)';
+    g.fillRect(x + tile * 0.18, y, tile * 0.15, tile);
   }
-  const rampMat = rampMeshMaterial = new THREE.MeshStandardMaterial({ color: 0x59b849, roughness: 0.86, metalness: 0.03, side: THREE.DoubleSide });
-  const addRampMesh = (axis, sign, alongMin, alongMax) => {
-    const acrossSteps = 28, alongSteps = Math.max(8, Math.ceil((alongMax - alongMin) / 5));
-    const positions = [], uvs = [], indices = [];
-    for (let j = 0; j <= alongSteps; j++) {
-      const v = j / alongSteps;
-      const along = alongMin + (alongMax - alongMin) * v;
-      for (let i = 0; i <= acrossSteps; i++) {
-        const t = i / acrossSteps;
-        let px, pz, rise;
-        if (axis === 'x') {
-          px = sign * (HW - WALL_RAMP_WIDTH + t * (WALL_RAMP_WIDTH - 0.5));
-          pz = along;
-          rise = rampProfile(Math.abs(px), HW - 0.5).height;
-        } else {
-          px = along;
-          pz = sign * (HL - WALL_RAMP_WIDTH + t * (WALL_RAMP_WIDTH - 0.5));
-          rise = rampProfile(Math.abs(pz), HL - 0.5).height;
-        }
-        positions.push(px, rise + 0.035, pz);
-        uvs.push(t, v);
-      }
-    }
-    for (let j = 0; j < alongSteps; j++) for (let i = 0; i < acrossSteps; i++) {
-      const a = j * (acrossSteps + 1) + i, b = a + acrossSteps + 1;
-      indices.push(a, b, a + 1, b, b + 1, a + 1);
-    }
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-    geo.setIndex(indices); geo.computeVertexNormals();
-    const mesh = new THREE.Mesh(geo, rampMat);
-    mesh.receiveShadow = true; mesh.castShadow = true; scene.add(mesh);
+  const line = (points, colour, width) => {
+    g.beginPath(); g.moveTo(...points[0]);
+    for (const point of points.slice(1)) g.lineTo(...point);
+    g.lineWidth = width; g.strokeStyle = colour; g.lineJoin = 'round'; g.lineCap = 'round'; g.stroke();
   };
+  const px = x => (x + HW) * resolution;
+  const pz = z => (HL - z) * resolution;
+  g.lineWidth = 3.3 * resolution; g.strokeStyle = 'rgba(246,252,238,.8)';
+  g.strokeRect(px(-HW + 10), pz(HL - 10), (2 * HW - 20) * resolution, (2 * HL - 20) * resolution);
+  line([[px(-HW + 7),pz(0)],[px(HW - 7),pz(0)]], 'rgba(247,255,248,.76)', 0.65 * resolution);
+  g.beginPath(); g.arc(px(0),pz(0),14 * resolution,0,Math.PI*2);
+  g.lineWidth = 0.85 * resolution; g.strokeStyle = 'rgba(241,253,249,.9)'; g.stroke();
+  g.beginPath(); g.arc(px(0),pz(0),2 * resolution,0,Math.PI*2); g.fillStyle='#e6f7f0'; g.fill();
   for (const sign of [-1, 1]) {
-    // Straight wall ramps stop exactly where the corner patches begin.
-    addRampMesh('x', sign, -HL + WALL_RAMP_WIDTH, HL - WALL_RAMP_WIDTH);
-    addRampMesh('z', sign, -(HW - WALL_RAMP_WIDTH), -(GW + 2));
-    addRampMesh('z', sign, GW + 2, HW - WALL_RAMP_WIDTH);
+    const col = sign < 0 ? '#28a9ff' : '#ff962a';
+    // Large inlaid team-colour lanes match the field references.
+    line([[px(-HW+14),pz(sign*(HL-12))],[px(-30),pz(sign*43)],[px(0),pz(sign*27)],[px(30),pz(sign*43)],[px(HW-14),pz(sign*(HL-12))]],
+      col,2.1*resolution);
+    line([[px(-HW+14),pz(sign*(HL-15))],[px(-31),pz(sign*46)],[px(0),pz(sign*31)],[px(31),pz(sign*46)],[px(HW-14),pz(sign*(HL-15))]],
+      'rgba(227,240,241,.6)',0.65*resolution);
+    g.strokeStyle = col; g.lineWidth = 1.0 * resolution;
+    const boxWide = (GW+12)*2*resolution, depth=19*resolution;
+    g.strokeRect(px(0)-boxWide/2,pz(sign*(HL-9))-(sign>0?depth:0),boxWide,depth);
+    line([[px(-HW+12),pz(sign*(HL-13))],[px(-HW+12),pz(sign*12)]],
+      col,1.15*resolution);
+    line([[px(HW-12),pz(sign*(HL-13))],[px(HW-12),pz(sign*12)]],
+      col,1.15*resolution);
   }
-  const addCornerRamp = (sx, sz) => {
-    const steps = 24, positions = [], indices = [];
-    for (let j = 0; j <= steps; j++) {
-      const tz = j / steps;
-      const az = HL - WALL_RAMP_WIDTH + tz * (WALL_RAMP_WIDTH - 0.5);
-      for (let i = 0; i <= steps; i++) {
-        const tx = i / steps;
-        const ax = HW - WALL_RAMP_WIDTH + tx * (WALL_RAMP_WIDTH - 0.5);
-        const x = sx * ax, z = sz * az;
-        positions.push(x, arenaRampAt(x, z).height + 0.035, z);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.anisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), 8);
+  texture.colorSpace = THREE.SRGBColorSpace || texture.colorSpace;
+  const surfaceGeo = new THREE.PlaneGeometry(2*HW-1,2*HL-1,112,148);
+  surfaceGeo.rotateX(-Math.PI/2);
+  const pos = surfaceGeo.attributes.position;
+  for (let i=0;i<pos.count;i++) pos.setY(i,arenaRampAt(pos.getX(i),pos.getZ(i)).height);
+  pos.needsUpdate = true; surfaceGeo.computeVertexNormals();
+  pitchMesh = new THREE.Mesh(surfaceGeo,new THREE.MeshStandardMaterial({map:texture,roughness:.94,side:THREE.DoubleSide}));
+  pitchMesh.receiveShadow = true; scene.add(pitchMesh);
+
+  // The external concourse lives behind the collision walls, not over the turf.
+  const stone = new THREE.MeshStandardMaterial({color:0xb6a78c,roughness:.83});
+  const concourse = new THREE.Mesh(new THREE.PlaneGeometry(2400,2400),stone);
+  concourse.rotation.x = -Math.PI/2; concourse.position.y = -.28; scene.add(concourse);
+
+  const wallBottom = 9.5;
+  const glass = new THREE.MeshPhysicalMaterial({
+    color:0xa8deef,roughness:.12,metalness:.04,transparent:true,opacity:.095,
+    depthWrite:false,side:THREE.DoubleSide
+  });
+  const barrier = new THREE.MeshStandardMaterial({color:0x29465a,metalness:.45,roughness:.49,side:THREE.DoubleSide});
+  const rail = {
+    [-1]:new THREE.MeshBasicMaterial({color:BLUE}),
+    [1]:new THREE.MeshBasicMaterial({color:ORANGE})
+  };
+  rail[-1].userData.teamSide='blue'; rail[1].userData.teamSide='orange';
+  const trim = new THREE.MeshStandardMaterial({color:0xc3d6d7,roughness:.44,metalness:.35});
+  const hexWire = {
+    [-1]:new THREE.LineBasicMaterial({color:0x73cfff,transparent:true,opacity:.19,depthWrite:false}),
+    [1]:new THREE.LineBasicMaterial({color:0xffb769,transparent:true,opacity:.19,depthWrite:false})
+  };
+  const hexPanels = (width,height,side) => {
+    const verts=[],radius=2.6,dy=Math.sqrt(3)*radius;
+    const cols=Math.ceil(width/(radius*3))+2;
+    const rows=Math.ceil(height/dy)+2;
+    for(let row=0;row<rows;row++) for(let column=0;column<cols;column++){
+      const cx=-width/2+column*radius*3 + (row%2)*radius*1.5;
+      const cy=dy*row+wallBottom;
+      for(let k=0;k<6;k++){
+        const a=Math.PI/3*k,b=Math.PI/3*(k+1);
+        const x1=cx+radius*Math.cos(a),y1=cy+radius*Math.sin(a);
+        const x2=cx+radius*Math.cos(b),y2=cy+radius*Math.sin(b);
+        if(x1>=-width/2&&x1<=width/2&&x2>=-width/2&&x2<=width/2&&
+          y1>=wallBottom&&y2>=wallBottom&&y1<=CEIL&&y2<=CEIL)
+          verts.push(x1,y1,.13,x2,y2,.13);
       }
     }
-    for (let j = 0; j < steps; j++) for (let i = 0; i < steps; i++) {
-      const a = j * (steps + 1) + i, b = a + steps + 1;
-      indices.push(a, b, a + 1, b, b + 1, a + 1);
-    }
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    geo.setIndex(indices); geo.computeVertexNormals();
-    const mesh = new THREE.Mesh(geo, rampMat);
-    mesh.receiveShadow = true; mesh.castShadow = true; scene.add(mesh);
+    const geom=new THREE.BufferGeometry();
+    geom.setAttribute('position',new THREE.Float32BufferAttribute(verts,3));
+    return new THREE.LineSegments(geom,hexWire[side]);
   };
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) addCornerRamp(sx, sz);
-  const oct = [[HW - CH, HL], [HW, HL - CH], [HW, -(HL - CH)], [HW - CH, -HL], [-(HW - CH), -HL], [-HW, -(HL - CH)], [-HW, HL - CH], [-(HW - CH), HL]];
-  const loop = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(oct.map(p => new THREE.Vector3(p[0], CEIL, p[1]))), new THREE.LineBasicMaterial({ color: 0x37f2c0, transparent: true, opacity: 0.6 }));
-  scene.add(loop);
+  const segments=[];
+  // Every perimeter segment shares endpoints: corners are sealed physically
+  // and visually, with an actual opening through both goal mouths.
+  for(const sign of [-1,1]){
+    for(const side of [-1,1]){
+      segments.push([[side*HW,sign*(HL-CH)],[side*HW,0],sign]);
+      segments.push([[side*HW,0],[side*HW,-sign*(HL-CH)],-sign]);
+      segments.push([[side*HW,sign*(HL-CH)],[side*(HW-CH),sign*HL],sign]);
+      segments.push([[side*(GW+.4),sign*HL],[side*(HW-CH),sign*HL],sign]);
+    }
+  }
+  // Remove mirrored duplicate half-wall sections while preserving geometry.
+  const seen=new Set();
+  for(const [a,b,side] of segments){
+    const key=[a,b].map(q=>q.map(v=>v.toFixed(2)).join(',')).sort().join('|');
+    if(seen.has(key))continue;seen.add(key);
+    const dx=b[0]-a[0],dz=b[1]-a[1],length=Math.hypot(dx,dz);
+    const mx=(a[0]+b[0])/2,mz=(a[1]+b[1])/2;
+    const wallGroup=new THREE.Group();
+    wallGroup.position.set(mx,0,mz); wallGroup.rotation.y=Math.atan2(-dz,dx);
+    const makeBox=(w,h,d,y,mat)=>{
+      const o=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);
+      o.position.y=y;wallGroup.add(o);return o;
+    };
+    makeBox(length,wallBottom,.42,wallBottom/2,barrier);
+    const upper=new THREE.Mesh(new THREE.PlaneGeometry(length,CEIL-wallBottom),glass);
+    upper.position.y=wallBottom+(CEIL-wallBottom)/2;wallGroup.add(upper);
+    wallGroup.add(hexPanels(length,CEIL-wallBottom,side));
+    makeBox(length,.8,.7,.4,trim);
+    makeBox(length,.34,.7,wallBottom,rail[side]);
+    makeBox(length,.3,.7,CEIL,trim);
+    const slats=Math.max(1,Math.round(length/11));
+    for(let i=1;i<slats;i++){
+      const bar=makeBox(.28,CEIL-wallBottom,.45,(CEIL+wallBottom)/2,trim);
+      bar.position.x=length*(i/slats-.5);
+    }
+    scene.add(wallGroup);
+  }
+
+  // One rounded, lit goal portal at each end with recessed tunnel geometry.
+  const goalTunnelDark = new THREE.MeshStandardMaterial({color:0x162432,metalness:.2,roughness:.7,side:THREE.DoubleSide});
+  const netMat = new THREE.LineBasicMaterial({color:0xd7e9f9,transparent:true,opacity:.48,depthWrite:false});
+  for(const sign of [-1,1]){
+    const colorMat=rail[sign];
+    const portalZ=sign*HL;
+    const goalFloor=new THREE.Mesh(new THREE.BoxGeometry(2*GW,.2,GD),goalTunnelDark);
+    goalFloor.position.set(0,-.05,sign*(HL+GD/2));scene.add(goalFloor);
+    const goalRoof=new THREE.Mesh(new THREE.BoxGeometry(2*GW,.2,GD),goalTunnelDark);
+    goalRoof.position.set(0,GH+.1,sign*(HL+GD/2));scene.add(goalRoof);
+    for(const side of [-1,1]){
+      const wall=new THREE.Mesh(new THREE.PlaneGeometry(GD,GH),goalTunnelDark);
+      wall.position.set(side*GW,GH/2,sign*(HL+GD/2));
+      wall.rotation.y=Math.PI/2;scene.add(wall);
+    }
+    const back=new THREE.Mesh(new THREE.PlaneGeometry(2*GW,GH),goalTunnelDark);
+    back.position.set(0,GH/2,sign*(HL+GD));scene.add(back);
+
+    const portal=[];
+    portal.push(new THREE.Vector3(-GW,0,portalZ));
+    const round=3.6;
+    portal.push(new THREE.Vector3(-GW,GH-round,portalZ));
+    for(let i=0;i<=8;i++){
+      const angle=Math.PI-i/8*(Math.PI/2);
+      portal.push(new THREE.Vector3(-GW+round+round*Math.cos(angle),
+        GH-round+round*Math.sin(angle),portalZ));
+    }
+    portal.push(new THREE.Vector3(GW-round,GH,portalZ));
+    for(let i=0;i<=8;i++){
+      const angle=Math.PI/2-i/8*(Math.PI/2);
+      portal.push(new THREE.Vector3(GW-round+round*Math.cos(angle),
+        GH-round+round*Math.sin(angle),portalZ));
+    }
+    portal.push(new THREE.Vector3(GW,0,portalZ));
+    const curve=new THREE.CatmullRomCurve3(portal,false,'centripetal');
+    const stoneArch=new THREE.Mesh(new THREE.TubeGeometry(curve,60,1.3,8,false),trim);
+    scene.add(stoneArch);
+    const neon=new THREE.Mesh(new THREE.TubeGeometry(curve,60,.42,8,false),colorMat);
+    neon.position.z=-sign*.18;scene.add(neon);
+    const goalMesh=[];
+    for(let x=-GW;x<=GW+.01;x+=2.3)
+      goalMesh.push(x,0,sign*(HL+GD),x,GH,sign*(HL+GD));
+    for(let y=0;y<=GH+.01;y+=2.3)
+      goalMesh.push(-GW,y,sign*(HL+GD),GW,y,sign*(HL+GD));
+    const netGeom=new THREE.BufferGeometry();
+    netGeom.setAttribute('position',new THREE.Float32BufferAttribute(goalMesh,3));
+    scene.add(new THREE.LineSegments(netGeom,netMat));
+    const light=new THREE.PointLight(sign<0?BLUE:ORANGE,1.1,62);
+    light.userData.teamSide=sign<0?'blue':'orange';
+    light.position.set(0,7,sign*(HL-5));scene.add(light);
+  }
+
+  // Add visible blue/orange tiled trim along the smooth ramps, sampled from
+  // arenaRampAt so markings hug the playable collision surface.
+  const addCurve=(pts,mat,radius=.17)=>{
+    const curve=new THREE.CatmullRomCurve3(pts,false,'centripetal');
+    const mesh=new THREE.Mesh(new THREE.TubeGeometry(curve,Math.max(16,pts.length*2),radius,5,false),mat);
+    scene.add(mesh);
+  };
+  for(const sign of [-1,1]){
+    for(const sx of [-1,1]){
+      const pts=[];
+      for(let z=0;z<=HL-CH;z+=4){
+        const x=sx*(HW-WALL_RAMP_WIDTH+2),worldZ=sign*z;
+        pts.push(new THREE.Vector3(x,arenaRampAt(x,worldZ).height+.17,worldZ));
+      }
+      addCurve(pts,rail[sign],.23);
+    }
+    for(const sx of [-1,1]){
+      const pts=[];
+      for(let x=GW+2;x<=HW-CH;x+=3){
+        const worldX=sx*x,z=sign*(HL-WALL_RAMP_WIDTH+2);
+        pts.push(new THREE.Vector3(worldX,arenaRampAt(worldX,z).height+.17,z));
+      }
+      addCurve(pts,rail[sign],.23);
+    }
+  }
+  // Transparent upper enclosure rim under the coliseum seating.
+  const borderPoints=[
+    [HW-CH,HL],[HW,HL-CH],[HW,-HL+CH],[HW-CH,-HL],
+    [-HW+CH,-HL],[-HW,-HL+CH],[-HW,HL-CH],[-HW+CH,HL]
+  ];
+  const rim=new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(
+    borderPoints.map(p=>new THREE.Vector3(p[0],CEIL,p[1]))),
+    new THREE.LineBasicMaterial({color:0xc5dfff,transparent:true,opacity:.38}));
+  scene.add(rim);
 }
 buildArena();
 function buildStadium() {
