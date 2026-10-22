@@ -2281,20 +2281,28 @@ function bump() {
 // Resolve the physical impulse every contact; only boost the shot at a new impact.
 function hitBall(c) {
   if (c.demoTimer > 0) return;
+  // Proper 3D oriented hitbox: yaw + aerial pitch + roll. The old collision
+  // ignored pitch and roll, so a car pointing up a wall could visually touch
+  // the ball while the collision system thought it had missed it completely.
   const sy = Math.sin(c.yaw), cy = Math.cos(c.yaw);
-  const dx = ball.x - c.x, dz = ball.z - c.z;
+  const sp = Math.sin(c.pitch || 0), cp = Math.cos(c.pitch || 0);
+  const sr = Math.sin(c.roll || 0), cr = Math.cos(c.roll || 0);
+  const rx = cy * cr - sy * sp * sr, ry = cp * sr, rz = -sy * cr - cy * sp * sr;
+  const ux = -cy * sr - sy * sp * cr, uy = cp * cr, uz = sy * sr - cy * sp * cr;
+  const fx = sy * cp, fy = sp, fz = cy * cp;
+  const dx = ball.x - c.x, dy = ball.y - c.y, dz = ball.z - c.z;
   const box = c.hitbox || {
     length: c.hit || 1.7, width: (c.hit || 1.7) * 0.6, height: 0.55,
     forward: 0, up: 0
   };
-  const dy = ball.y - (c.y + box.up);
-  const forward = dx * sy + dz * cy - box.forward;
-  const side = dx * cy - dz * sy;
+  const forward = dx * fx + dy * fy + dz * fz - box.forward;
+  const side = dx * rx + dy * ry + dz * rz;
+  const height = dx * ux + dy * uy + dz * uz - box.up;
   const halfLength = box.length, halfWidth = box.width, halfHeight = box.height;
   const nearForward = clamp(forward, -halfLength, halfLength);
   const nearSide = clamp(side, -halfWidth, halfWidth);
-  const nearHeight = clamp(dy, -halfHeight, halfHeight);
-  let nf = forward - nearForward, ns = side - nearSide, nh = dy - nearHeight;
+  const nearHeight = clamp(height, -halfHeight, halfHeight);
+  let nf = forward - nearForward, ns = side - nearSide, nh = height - nearHeight;
   let distance = Math.hypot(nf, ns, nh);
   if (distance >= BR) return;
 
@@ -2304,14 +2312,16 @@ function hitBall(c) {
     const faces = [
       { gap: halfLength - Math.abs(forward), f: Math.sign(forward) || 1, s: 0, h: 0 },
       { gap: halfWidth - Math.abs(side), f: 0, s: Math.sign(side) || 1, h: 0 },
-      { gap: halfHeight - Math.abs(dy), f: 0, s: 0, h: Math.sign(dy) || 1 }
+      { gap: halfHeight - Math.abs(height), f: 0, s: 0, h: Math.sign(height) || 1 }
     ].sort((a, b) => a.gap - b.gap);
     nf = faces[0].f; ns = faces[0].s; nh = faces[0].h;
     distance = 0;
   } else {
     nf /= distance; ns /= distance; nh /= distance;
   }
-  const nx = sy * nf + cy * ns, ny = nh, nz = cy * nf - sy * ns;
+  const nx = fx * nf + rx * ns + ux * nh;
+  const ny = fy * nf + ry * ns + uy * nh;
+  const nz = fz * nf + rz * ns + uz * nh;
   const penetration = BR - distance;
   const separation = Math.min(penetration + 0.001, BR + 0.7);
   ball.x += nx * separation;
@@ -2430,6 +2440,28 @@ function goalExplosion(team) {
   [880, 1047, 1318].forEach((f, i) => setTimeout(() => sfx.tone(f, 0.28, 'sawtooth', 0.18), i * 100));
 }
 
+// Transfer momentum from the curved ramp into VERTICAL wall rolling. Without
+// this the ball hits a flat invisible barrier at the ramp lip and rebounds.
+function resolveBallWall(axis, sign, rampSurfaceY) {
+  const outward = (axis === 'x' ? ball.vx : ball.vz) * sign;
+  const atWallLip = rampSurfaceY > WALL_RAMP_HEIGHT * 0.78 &&
+    ball.y > rampSurfaceY - 2.2 &&
+    ball.y < rampSurfaceY + 4.2;
+  if (atWallLip && outward > 5 && ball.vy > -5) {
+    ball.vy = Math.max(ball.vy, outward * 0.86 + 1.1);
+    if (axis === 'x') ball.vx = 0;
+    else ball.vz = 0;
+    ball.onRamp = false;
+    ball.onGround = false;
+    ball.onWall = true;
+    // Turning surface momentum upward is the wall ramp continuation, not an
+    // extra speed boost. The sphere will naturally slow and fall under gravity.
+  } else {
+    ballSurfaceImpulse(axis === 'x' ? -sign : 0, 0,
+      axis === 'z' ? -sign : 0, PHYSICS_TUNING.BALL_WALL_RESTITUTION);
+    ball.onWall = false;
+  }
+}
 function stepBall(dt) {
   const p = PHYSICS_TUNING;
   // Integrate velocity before contacts, keeping all motion in world space.
@@ -2485,9 +2517,7 @@ function stepBall(dt) {
   if (Math.abs(ball.x) > HW - BR && az <= HL + BR) {
     const sign = Math.sign(ball.x);
     ball.x = sign * (HW - BR);
-    if (!(ball.onRamp && ball.y < surface + BR)) {
-      ballSurfaceImpulse(-sign, 0, 0, p.BALL_WALL_RESTITUTION);
-    }
+    resolveBallWall('x', sign, surface);
   }
   if (Math.abs(ball.z) > HL) {
     // Goal interior has its own side / roof / back-wall colliders.
@@ -2509,9 +2539,7 @@ function stepBall(dt) {
       !(Math.abs(ball.x) < GW - BR && ball.y < GH - BR)) {
     const sign = Math.sign(ball.z);
     ball.z = sign * (HL - BR);
-    if (!(ball.onRamp && ball.y < surface + BR)) {
-      ballSurfaceImpulse(0, 0, -sign, p.BALL_WALL_RESTITUTION);
-    }
+    resolveBallWall('z', sign, surface);
   }
 
   // Rolling rotation follows ground velocity; airborne spin decays slowly.
