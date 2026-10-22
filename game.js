@@ -2848,7 +2848,11 @@ window.rocketArena = {
   ball, physics: PHYSICS_TUNING,
   get cars() { return cars; },
   get score() { return score; },
-  get state() { return state; }
+  get state() { return state; },
+  // Read-only references for browser-level stadium regression checks.
+  get stadium() { return scene.getObjectByName('Coliseum Stadium'); },
+  get pitch() { return pitchMesh; },
+  get pads() { return pads; }
 };
 let last = performance.now();
 (function loop(now) {
