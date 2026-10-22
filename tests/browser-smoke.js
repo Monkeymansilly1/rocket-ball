@@ -122,6 +122,14 @@ async function main() {
     assert.equal(await evalJS('document.getElementById("trainingShotCount").textContent.includes("2")'),true);
     await evalJS('document.getElementById("trainingNextShot").click()');
     assert.equal(await evalJS('document.getElementById("trainingShotCount").textContent.includes("3")'),true);
+    assert.equal(await evalJS('window.rocketArena.cars[0].wallVerticalAxis'), 'x');
+    const beforeWallJump = await evalJS('window.rocketArena.cars[0].y');
+    await evalJS('window.dispatchEvent(new KeyboardEvent("keydown",{code:"Space",bubbles:true}))');
+    await eventually(()=>evalJS('window.rocketArena.cars[0].jumps === 1 && window.rocketArena.cars[0].wallVerticalAxis === null'),9000);
+    await evalJS('window.dispatchEvent(new KeyboardEvent("keyup",{code:"Space",bubbles:true}))');
+    assert.equal(await evalJS('window.rocketArena.cars[0].vx < -2'),true,'Wall jump did not launch inward into arena');
+    assert.equal(await evalJS('window.rocketArena.cars[0].pitch > 0.6'),true,'Wall jump reset the aerial nose-up pitch');
+    console.log('Wall-to-air jump detached inward and preserved aerial orientation.');
     await evalJS('document.getElementById("trainingLaunch").click()');
     await delay(250);
     assert.equal(await evalJS('Number.isFinite(window.rocketArena.ball.y)'),true);
