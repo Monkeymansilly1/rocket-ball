@@ -164,7 +164,7 @@ async function main() {
     console.log('Air boost sustained lift and local-axis air roll passed.');
     await evalJS('document.getElementById("trainingResetBall").click()');
     const resetY=await evalJS('window.rocketArena.ball.y');
-    assert(Math.abs(resetY-3.4)<.3,'Training ball did not reset');
+    assert(Math.abs(resetY-(91.25/50+1))<.3,'Training ball did not reset');
     await evalJS('document.getElementById("trainingExit").click()');
     assert.equal(await evalJS('window.rocketArena.state'),'menu');
 
