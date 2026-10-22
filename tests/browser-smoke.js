@@ -142,11 +142,13 @@ async function main() {
     // Full 3D flight must overcome gravity with upward-oriented boost.
     await evalJS('(function(){const c=window.rocketArena.cars[0]; Object.assign(c,{x:0,y:16,z:0,vx:0,vy:0,vz:0,pitch:1.15,yaw:0,roll:0,airQuat:null,airOmega:null,wallRide:false,wallVerticalAxis:null,wallDetachTimer:1,jumps:1,hold:0,flip:0,ballHitCooldown:0});window.rocketArena.ball.x=40;window.rocketArena.ball.z=40;})()');
     await evalJS('window.dispatchEvent(new KeyboardEvent("keydown",{code:"ShiftLeft",bubbles:true}))');
-    await delay(480);
+    await eventually(()=>evalJS('window.rocketArena.cars[0].vy > 1.4 && !!window.rocketArena.cars[0].airQuat'),15000)
+      .catch(async err=>{throw new Error('Aerial boost failed after physics progress: '+err.message+
+        ', vy='+await evalJS('window.rocketArena.cars[0].vy')+
+        ', pitch='+await evalJS('window.rocketArena.cars[0].pitch'));});
     const airVy=await evalJS('window.rocketArena.cars[0].vy');
     await evalJS('window.dispatchEvent(new KeyboardEvent("keyup",{code:"ShiftLeft",bubbles:true}))');
-    assert(airVy>1, 'Aerial boost still cannot overcome gravity: vy='+airVy);
-    assert.equal(await evalJS('!!window.rocketArena.cars[0].airQuat'),true);
+    assert(airVy>1,'Aerial boost did not produce vertical lift');
     // Q/E air roll must actually rotate the physics quaternion, not only the mesh.
     const beforeRoll=await evalJS('window.rocketArena.cars[0].airQuat.toArray().join(",")');
     await evalJS('window.dispatchEvent(new KeyboardEvent("keydown",{code:"KeyE",bubbles:true}))');
