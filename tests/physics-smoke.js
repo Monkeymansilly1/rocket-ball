@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
+const THREE = require('../lib/three.min.js');
 
 const src = fs.readFileSync('game.js', 'utf8');
 const html = fs.readFileSync('index.html', 'utf8');
@@ -26,10 +27,13 @@ function extract(name) {
 }
 const functions = [
   extract('rampProfile'), extract('arenaRampAt'),
+  extract('getCarOrientation'), extract('getCarForward'),
   extract('clampBallMotion'), extract('ballSurfaceImpulse'),
   extract('resolveBallWall'), extract('stepBall'), extract('hitBall')
 ].join('\n');
 const bootstrap = [
+  'const THREE = arguments[0];',
+  'const AIR_X=new THREE.Vector3(1,0,0),AIR_Y=new THREE.Vector3(0,1,0),AIR_Z=new THREE.Vector3(0,0,1);',
   'const BR=2.4,HW=80,HL=104,GW=15,GH=10.5,GD=14,CH=14,CEIL=44,WALL_RAMP_HEIGHT=9.5,WALL_RAMP_WIDTH=24;',
   'const PHYSICS_TUNING = {BALL_GRAVITY_FORCE:24,BALL_DRAG_REFERENCE:.03,BALL_RESTITUTION:.82,BALL_WALL_RESTITUTION:.84,BALL_FLOOR_RESTITUTION:.78,BALL_FRICTION_REFERENCE:.35,BALL_MAX_ANGULAR_SPEED:6,MAX_BALL_SPEED:80,BALL_MASS_REFERENCE:30,CAR_MASS_REFERENCE:180,CAR_BALL_RESTITUTION:0};',
   'const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));',
@@ -40,8 +44,8 @@ const bootstrap = [
   'const showGameEvent=()=>{},sparks=()=>{};',
   'const goal=()=>{throw Error("Unexpected goal in physics test")};',
   'const rampEase=t=>t*t*(3-2*t);'
-].join('\n') + '\n' + functions + '\nreturn {ball,stepBall,hitBall,resolveBallWall,arenaRampAt,cars};';
-const {ball,stepBall,hitBall,resolveBallWall,arenaRampAt,cars} = new Function(bootstrap)();
+].join('\n') + '\n' + functions + '\nreturn {ball,stepBall,hitBall,resolveBallWall,arenaRampAt,getCarForward,cars};';
+const {ball,stepBall,hitBall,resolveBallWall,arenaRampAt,getCarForward,cars} = new Function(bootstrap)(THREE);
 
 for(let i=0;i<240;i++)stepBall(1/120);
 assert(ball.y >= 2.399 && ball.y < 20 && Number.isFinite(ball.y),'Floor contact unstable');
@@ -79,4 +83,7 @@ Object.assign(car,{x:0,y:7,z:0,vx:0,vy:22,vz:0,yaw:Math.PI/2,pitch:Math.PI/2,
 Object.assign(ball,{x:0,y:10.7,z:0,vx:0,vy:0,vz:0,wx:0,wy:0,wz:0});
 hitBall(car);
 assert(ball.vy>6,'Pitched-up car failed to register a real aerial collision');
+const pitchedNose=getCarForward({pitch:Math.PI/2,yaw:Math.PI/2,roll:0,airQuat:null});
+assert(pitchedNose.y>.99 && Math.abs(pitchedNose.x)<.01,
+  'Rendered nose did not face upward while pitched against the side wall');
 console.log('PASS: syntax, training controls, floor, walls, ball speed cap, car-ball impacts');
