@@ -381,7 +381,7 @@ function makeDetailedOctane(car) {
   const paint = new THREE.Color(col);
   const wheelNodes = [];
   model.traverse(object => {
-    if (/^Dieci - (FR|FL|BR|BL) \(Octane\)$/.test(object.name)) wheelNodes.push(object);
+    if (/^Dieci/i.test(object.name) && object.children.length >= 2) wheelNodes.push(object);
     if (!object.isMesh) return;
     object.castShadow = true; object.receiveShadow = true;
     const originalMaterials = Array.isArray(object.material) ? object.material : [object.material];
