@@ -102,8 +102,8 @@ async function main() {
     assert.equal(await evalJS('window.rocketArena.state'),'menu');
     // Verify the NEW arena exists as playable 3D geometry, not just an image.
     assert.equal(await evalJS('window.rocketArena.stadium.name'), 'Coliseum Stadium');
-    assert.equal(await evalJS('window.rocketArena.stadium.children.length > 120'), true);
-    assert.equal(await evalJS('window.rocketArena.stadium.children.filter(x => x.isInstancedMesh).length >= 2'),true);
+    assert.equal(await evalJS('window.rocketArena.stadium.children.length > 40'), true);
+    assert.equal(await evalJS('window.rocketArena.stadium.children.filter(x => x.isInstancedMesh).length >= 7'),true);
     assert.equal(await evalJS('window.rocketArena.pitch.geometry.attributes.position.count > 15000'),true);
     assert.equal(await evalJS('window.rocketArena.pads.filter(x => x.big).length'),6);
     assert.equal(await evalJS('window.rocketArena.pads.filter(x => !x.big).length'),31);
