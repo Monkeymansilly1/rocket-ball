@@ -157,10 +157,10 @@ async function main() {
     // Q/E air roll must actually rotate the physics quaternion, not only the mesh.
     const beforeRoll=await evalJS('window.rocketArena.cars[0].airQuat.toArray().join(",")');
     await evalJS('window.dispatchEvent(new KeyboardEvent("keydown",{code:"KeyE",bubbles:true}))');
-    await delay(260);
+    await eventually(()=>evalJS('!!window.rocketArena.cars[0].airQuat && window.rocketArena.cars[0].airQuat.toArray().join(",") !== '+JSON.stringify(beforeRoll)),12000)
+      .catch(async err=>{throw new Error('Physical air roll input had no effect: '+err.message+
+        ' omega='+await evalJS('JSON.stringify(window.rocketArena.cars[0].airOmega)'));});
     await evalJS('window.dispatchEvent(new KeyboardEvent("keyup",{code:"KeyE",bubbles:true}))');
-    assert.notEqual(await evalJS('window.rocketArena.cars[0].airQuat.toArray().join(",")'),beforeRoll,
-      'Air roll did not change the physics orientation');
     console.log('Air boost sustained lift and local-axis air roll passed.');
     await evalJS('document.getElementById("trainingResetBall").click()');
     const resetY=await evalJS('window.rocketArena.ball.y');
