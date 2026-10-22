@@ -26,10 +26,10 @@ function extract(name) {
 }
 const functions = [
   extract('clampBallMotion'), extract('ballSurfaceImpulse'),
-  extract('stepBall'), extract('hitBall')
+  extract('resolveBallWall'), extract('stepBall'), extract('hitBall')
 ].join('\n');
 const bootstrap = [
-  'const BR=2.4,HW=80,HL=104,GW=15,GH=10.5,GD=14,CH=14,CEIL=44;',
+  'const BR=2.4,HW=80,HL=104,GW=15,GH=10.5,GD=14,CH=14,CEIL=44,WALL_RAMP_HEIGHT=9.5;',
   'const PHYSICS_TUNING = {BALL_GRAVITY_FORCE:24,BALL_DRAG_REFERENCE:.03,BALL_RESTITUTION:.82,BALL_WALL_RESTITUTION:.84,BALL_FLOOR_RESTITUTION:.78,BALL_FRICTION_REFERENCE:.35,BALL_MAX_ANGULAR_SPEED:6,MAX_BALL_SPEED:80,BALL_MASS_REFERENCE:30,CAR_MASS_REFERENCE:180,CAR_BALL_RESTITUTION:0};',
   'const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));',
   'const ball={x:0,y:12.4,z:0,vx:0,vy:-20,vz:0,wx:0,wy:0,wz:0,onRamp:false};',
@@ -39,8 +39,8 @@ const bootstrap = [
   'const showGameEvent=()=>{},sparks=()=>{};',
   'const goal=()=>{throw Error("Unexpected goal in physics test")};',
   'const arenaRampAt=()=>({height:0,dx:0,dz:0});'
-].join('\n') + '\n' + functions + '\nreturn {ball,stepBall,hitBall,cars};';
-const {ball,stepBall,hitBall,cars} = new Function(bootstrap)();
+].join('\n') + '\n' + functions + '\nreturn {ball,stepBall,hitBall,resolveBallWall,cars};';
+const {ball,stepBall,hitBall,resolveBallWall,cars} = new Function(bootstrap)();
 
 for(let i=0;i<240;i++)stepBall(1/120);
 assert(ball.y >= 2.399 && ball.y < 20 && Number.isFinite(ball.y),'Floor contact unstable');
@@ -61,4 +61,19 @@ assert(car.ballHitCooldown>0,'Shot cooldown missing');
 Object.assign(ball,{x:0,y:.55,z:4,vx:0,vy:0,vz:0});
 hitBall(car);
 assert(ball.vz<first,'Repeated contact gained excessive power');
+
+// A ball travelling outward at the top of a ramp must continue UP the
+// vertical wall instead of ricocheting directly back onto the pitch.
+Object.assign(ball,{x:77.6,y:12.2,z:0,vx:24,vy:1,vz:0,onRamp:true});
+resolveBallWall('x',1,12);
+assert(ball.vx===0 && ball.vy>18 && ball.onWall,'Ramp-to-wall ball transfer failed');
+for(let i=0;i<35;i++)stepBall(1/120);
+assert(ball.y>14,'The ball did not rise after transferring onto the wall');
+
+// A pitched-up car must be able to hit a ball above its nose in 3D.
+Object.assign(car,{x:0,y:7,z:0,vx:0,vy:22,vz:0,yaw:Math.PI/2,pitch:Math.PI/2,
+  roll:0,ballHitCooldown:0,hitbox:{length:2.4,width:1.7,height:.75,forward:0,up:0}});
+Object.assign(ball,{x:0,y:10.7,z:0,vx:0,vy:0,vz:0,wx:0,wy:0,wz:0});
+hitBall(car);
+assert(ball.vy>6,'Pitched-up car failed to register a real aerial collision');
 console.log('PASS: syntax, training controls, floor, walls, ball speed cap, car-ball impacts');
