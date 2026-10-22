@@ -2053,6 +2053,18 @@ function groundSteeringCurvature(speedUnits, powerslide) {
     : .001800 - 4e-7*v;
   return Math.max(.0001,curvature) * (1 + (powerslide || 0) * 1.15);
 }
+// Tangent-space wheel basis at the car's contact point. Motion follows a
+// curved surface without adding artificial velocity uphill or snapping Y.
+function surfaceWheelAxes(yaw, surface) {
+  const sy=Math.sin(yaw),cy=Math.cos(yaw);
+  const dyForward=surface.dx*sy+surface.dz*cy;
+  const dySide=surface.dx*cy-surface.dz*sy;
+  const forward=new THREE.Vector3(sy,dyForward,cy).normalize();
+  const right=new THREE.Vector3(cy,dySide,-sy);
+  // On corner ramps two tangent basis vectors need orthogonalizing.
+  right.addScaledVector(forward,-right.dot(forward)).normalize();
+  return {forward,right};
+}
 function stepCar(c, ct, dt) {
   c.demoCooldown = Math.max(0, (c.demoCooldown || 0) - dt);
   c.ballHitCooldown = Math.max(0, (c.ballHitCooldown || 0) - dt);
@@ -2143,20 +2155,21 @@ function stepCar(c, ct, dt) {
       const pitchTarget = Math.atan(currentRamp.dx * sy + currentRamp.dz * cy);
       c.pitch += wrap(pitchTarget - c.pitch) * clamp(9 * dt, 0, 1);
     } else c.pitch *= Math.max(0, 1 - 10 * dt);
-    let vf = c.vx * sy + c.vz * cy, vs = c.vx * cy - c.vz * sy;
+    const surface = c.wallRide ? arenaRampAt(c.x,c.z) : {dx:0,dz:0};
+    const basis = surfaceWheelAxes(c.yaw,surface);
+    let vf=c.vx*basis.forward.x+c.vy*basis.forward.y+c.vz*basis.forward.z;
+    let vs=c.vx*basis.right.x+c.vy*basis.right.y+c.vz*basis.right.z;
     c.powerslide = clamp((c.powerslide || 0) +
       (ct.hand ? PHYSICS_TUNING.POWERSLIDE_RISE_RATE : -PHYSICS_TUNING.POWERSLIDE_FALL_RATE) * dt, 0, 1);
     const hb = c.powerslide;
     const physicalScale = physicsStyle === 'arcade' ? 1.2 : physicsStyle === 'heavy' ? 0.85 : 1;
     const effectiveThrottle = ct.throttle || (bo ? 1 : 0);
     vf = stepGroundForward(vf, effectiveThrottle, bo, dt * physicalScale);
-    // Gravity must pull the car downhill; this is especially important on
-    // side-wall ramps where holding W should not produce free uphill thrust.
+    // Project gravity along BOTH surface tangents. The normal component is
+    // resisted by wheel support, as with a tyre suspension/contact solver.
     if (c.wallRide) {
-      const slope = arenaRampAt(c.x,c.z);
-      const slopeAlongNose = slope.dx*sy+slope.dz*cy;
-      vf -= PHYSICS_TUNING.GRAVITY_FORCE *
-        (slopeAlongNose / Math.hypot(1, slopeAlongNose)) * dt;
+      vf -= PHYSICS_TUNING.GRAVITY_FORCE*basis.forward.y*dt;
+      vs -= PHYSICS_TUNING.GRAVITY_FORCE*basis.right.y*dt;
     }
     const lateralFriction = PHYSICS_TUNING.NORMAL_LATERAL_FRICTION *
       (1 - hb * (1 - PHYSICS_TUNING.POWERSLIDE_FRICTION_MULTIPLIER));
@@ -2167,14 +2180,13 @@ function stepCar(c, ct, dt) {
       groundSteeringCurvature(Math.abs(vf)*PHYSICS_TUNING.REFERENCE_SCALE,hb);
     c.yaw -= (ct.steer || 0) * Math.min(5.5,yawRate) *
       (vf >= 0 ? 1 : -1) * dt;
-    // Resolve tyre velocity in the NEW heading, not last frame's steering.
-    const sy2=Math.sin(c.yaw),cy2=Math.cos(c.yaw);
-    c.vx = sy2 * vf + cy2 * vs; c.vz = cy2 * vf - sy2 * vs;
-    // Ramp traction projects velocity along the slope; no zeroing on every frame.
-    if (c.wallRide) {
-      const grade = arenaRampAt(c.x, c.z);
-      c.vy = c.vx * grade.dx + c.vz * grade.dz;
-    } else c.vy = 0;
+    // Recombine true 3D velocity from tangent tyre directions; it keeps the
+    // same magnitude when turning onto steep slopes instead of generating
+    // huge free vertical speed and getting clamped by the global speed cap.
+    const nextAxes=surfaceWheelAxes(c.yaw,surface);
+    c.vx=nextAxes.forward.x*vf + nextAxes.right.x*vs;
+    c.vy=nextAxes.forward.y*vf + nextAxes.right.y*vs;
+    c.vz=nextAxes.forward.z*vf + nextAxes.right.z*vs;
   } else {
     const gravityScale = physicsStyle === 'floaty' ? 0.72 : physicsStyle === 'heavy' ? 1.2 : 1;
     c.vy -= PHYSICS_TUNING.GRAVITY_FORCE * gravityScale * dt;
