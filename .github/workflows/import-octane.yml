@@ -1,0 +1,34 @@
+name: Import credited Octane 3D assets
+on:
+  push:
+    paths:
+      - .github/workflows/import-octane.yml
+permissions:
+  contents: write
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download the CC BY 4.0 Octane assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          base=https://raw.githubusercontent.com/manrajpannu/rl-dart/main/public/models/octane
+          mkdir -p assets/octane/textures
+          curl -fLSs --retry 3 "$base/scene.bin" -o assets/octane/scene.bin
+          curl -fLSs --retry 3 "$base/textures/Octane_Chassis_baseColor.png" -o assets/octane/textures/Octane_Chassis_baseColor.png
+          curl -fLSs --retry 3 "$base/textures/Octane_Chassis_metallicRoughness.png" -o assets/octane/textures/Octane_Chassis_metallicRoughness.png
+          test "$(wc -c < assets/octane/scene.bin)" -gt 1000000
+          test "$(wc -c < assets/octane/textures/Octane_Chassis_baseColor.png)" -gt 100000
+          test "$(wc -c < assets/octane/textures/Octane_Chassis_metallicRoughness.png)" -gt 10000
+      - name: Commit versioned model assets
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/octane/scene.bin assets/octane/textures/
+          if ! git diff --cached --quiet; then
+            git commit -m "Import licensed Octane meshes and textures [skip ci]"
+            git push origin HEAD:main
+          fi
