@@ -8,7 +8,7 @@ const THREE = require('../lib/three.min.js');
 const src = fs.readFileSync('game.js', 'utf8');
 const html = fs.readFileSync('index.html', 'utf8');
 // Exercise the live physics tuning values, not a stale mocked constant set.
-const tuningLiteral = src.match(/const PHYSICS_TUNING = (\\{[\\s\\S]*?\\n\\});/);
+const tuningLiteral = src.match(/const PHYSICS_TUNING = (\{[\s\S]*?\n\});/);
 assert(tuningLiteral, 'Missing physics calibration block');
 const tuning = new Function('return '+tuningLiteral[1])();
 const scaledBallRadius = 91.25/50;
