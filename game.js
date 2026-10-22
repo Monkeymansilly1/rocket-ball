@@ -59,7 +59,7 @@ const TEAM_COLOR_PRESETS = {
 let BLUE = 0x2fb8ff, ORANGE = 0xff8a1f;
 let gameVolume = 0.75, colourVisionMode = 'normal', controllerDeadZone = 0.16;
 let graphicsQuality = 'balanced';
-const cameraSettings = { fov: 77, distance: 12, height: 5, stiffness: 7, shake: true };
+const cameraSettings = { fov: 105, distance: 8, height: 3.5, stiffness: 10, shake: false };
 try {
   const savedSettings = JSON.parse(localStorage.getItem('rocketArenaSettingsV1') || '{}');
   if (Number.isFinite(savedSettings.volume)) gameVolume = Math.max(0, Math.min(1, savedSettings.volume));
@@ -1146,6 +1146,9 @@ function start(freePlay = false) {
   trainingAirTouches = 0;
   trainingWallArmed = false;
   paused = false;
+  // Competitive car-soccer defaults to ball tracking, toggled at any time by C.
+  ballCam = true;
+  if ($('cam')) $('cam').textContent = 'Ball cam (C)';
   window.__rocketPhysicsAccumulator = 0;
   document.body.classList.toggle('free-play', trainingMode);
   resize();
@@ -1722,6 +1725,23 @@ for (const [key, id, out, min, max, suffix] of [
     saveGeneralSettings();
   });
 }
+// One-click camera values inspired by common competitive Rocket League
+// camera settings, retained through refresh as normal user settings.
+const rlCameraPreset = $('settingCameraCompetitive');
+if (rlCameraPreset) rlCameraPreset.addEventListener('click', () => {
+  Object.assign(cameraSettings, { fov:105, distance:8, height:3.5, stiffness:10, shake:false });
+  for (const [key, id, out, suffix] of [
+    ['fov','settingCameraFov','settingCameraFovValue','°'],
+    ['distance','settingCameraDistance','settingCameraDistanceValue',''],
+    ['height','settingCameraHeight','settingCameraHeightValue',''],
+    ['stiffness','settingCameraStiffness','settingCameraStiffnessValue','']
+  ]) {
+    if ($(id)) $(id).value=String(cameraSettings[key]);
+    if ($(out)) $(out).value=cameraSettings[key]+suffix;
+  }
+  if ($('settingCameraShake')) $('settingCameraShake').checked=false;
+  saveGeneralSettings();
+});
 const cameraShakeInput = $('settingCameraShake');
 if (cameraShakeInput) {
   cameraShakeInput.checked = cameraSettings.shake;
