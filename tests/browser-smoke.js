@@ -168,6 +168,9 @@ async function main() {
     await evalJS('document.getElementById("trainingExit").click()');
     assert.equal(await evalJS('window.rocketArena.state'),'menu');
 
+    await evalJS('document.getElementById("settingCameraCompetitive").click()');
+    assert.equal(await evalJS('Number(document.getElementById("settingCameraFov").value)'),105);
+    assert.equal(await evalJS('Number(document.getElementById("settingCameraDistance").value)'),8);
     await evalJS('document.getElementById("settingCameraFov").value="87"; document.getElementById("settingCameraFov").dispatchEvent(new Event("input",{bubbles:true}))');
     assert.equal(await evalJS('JSON.parse(localStorage.getItem("rocketArenaSettingsV1")).camera.fov'),87);
     console.log('Free Play passed; testing normal match');
