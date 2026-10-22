@@ -35,7 +35,7 @@ const PHYSICS_TUNING = {
   ARENA_HALF_EXTENTS_REFERENCE: { x:4096, y:5120 }, ARENA_HEIGHT_REFERENCE: 2048,
   // Stable scaled values used by the current Three.js arena.
   GRAVITY_FORCE: 28, MAX_SPEED: 46, GROUND_MAX_SPEED: 40, REVERSE_MAX_SPEED: 26,
-  BOOST_FORCE: 19.83, GROUND_ACCELERATION: 46,
+  BOOST_FORCE: 19.83, AIR_BOOST_FORCE: 43, AIR_LINEAR_DRAG: 0.05, GROUND_ACCELERATION: 46,
   TURN_RATE_SLOW: 3.4, TURN_RATE_FAST: 1.4, HANDBRAKE_TURN_MULTIPLIER: 1.6,
   NORMAL_LATERAL_FRICTION: 9, POWERSLIDE_FRICTION_MULTIPLIER: 0.18,
   JUMP_IMPULSE: 11, JUMP_HOLD_FORCE: 28, JUMP_HOLD_DURATION: 0.2,
@@ -1031,7 +1031,7 @@ let replayCameraCarIndex = 0;
 const REPLAY_HISTORY_LIMIT = 301;
 function saveReplayFrame() {
   replayHistory.push({
-    cars: cars.map(c => ({ x:c.x, y:c.y, z:c.z, vx:c.vx, vy:c.vy, vz:c.vz, yaw:c.yaw, pitch:c.pitch, roll:c.roll, wallRide:c.wallRide, wallVerticalAxis:c.wallVerticalAxis, wallVerticalSign:c.wallVerticalSign, flip:c.flip, fx:c.fx, fz:c.fz, fl:c.fl })),
+    cars: cars.map(c => ({ x:c.x, y:c.y, z:c.z, vx:c.vx, vy:c.vy, vz:c.vz, yaw:c.yaw, pitch:c.pitch, roll:c.roll, wallRide:c.wallRide, wallVerticalAxis:c.wallVerticalAxis, wallVerticalSign:c.wallVerticalSign, aq:c.airQuat ? c.airQuat.toArray() : null, flip:c.flip, fx:c.fx, fz:c.fz, fl:c.fl })),
     ball: { x:ball.x, y:ball.y, z:ball.z, vx:ball.vx, vy:ball.vy, vz:ball.vz, wx:ball.wx, wy:ball.wy, wz:ball.wz, onRamp:ball.onRamp }
   });
   if (replayHistory.length > REPLAY_HISTORY_LIMIT) replayHistory.shift();
@@ -1041,6 +1041,8 @@ function applyReplayFrame(frame) {
   frame.cars.forEach((p, i) => {
     const c = cars[i]; if (!c) return;
     Object.assign(c, p);
+    c.airQuat = p.aq ? new THREE.Quaternion().fromArray(p.aq) : null;
+    c.airOmega = null;
   });
   Object.assign(ball, frame.ball);
 }
@@ -1053,7 +1055,7 @@ const SKILL = [
 function mkCar(team, k, ai, modelName) {
   const model = modelName || CAR_MODELS[(k) % CAR_MODELS.length].name;
   const col = new THREE.Color(!ai && k === 0 ? (team ? player2Paint : playerPaint) : (team ? ORANGE : BLUE)).offsetHSL(0, 0, -0.09 * k);
-  const car = { team, k, x: 0, y: 0.55, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, pitch: 0, roll: 0, wallRide: false, wallVerticalAxis: null, wallVerticalSign: 0, ai, aiCd: 0, boost: 34, jumps: 0, jt: 0, flip: 0, fx: 0, fz: 0, fl: 0, ground: true, demoTimer: 0, demoCooldown: 0, boostImpactTimer: 0 };
+  const car = { team, k, x: 0, y: 0.55, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, pitch: 0, roll: 0, airQuat: null, airOmega: null, wallRide: false, wallVerticalAxis: null, wallVerticalSign: 0, ai, aiCd: 0, boost: 34, jumps: 0, jt: 0, flip: 0, fx: 0, fz: 0, fl: 0, ground: true, demoTimer: 0, demoCooldown: 0, boostImpactTimer: 0 };
   car.mesh = carMesh(col, model);
   car.model = model;
   car.displayName = ai ? (team ? 'ORANGE BOT ' : 'BLUE BOT ') + (k + 1) : playerName;
@@ -1133,7 +1135,7 @@ function kickoff() {
   lastTouch = null;
   for (const c of cars) {
     const f = FORM[c.k], s = c.team ? 1 : -1;
-    Object.assign(c, { x: f[0] * (c.team ? -1 : 1), y: 0.55, z: s * f[1] * HL, vx: 0, vy: 0, vz: 0, yaw: c.team ? Math.PI : 0, pitch: 0, roll: 0, wallRide: false, wallVerticalAxis: null, wallVerticalSign: 0, boost: 34, jumps: 0, jt: 0, flip: 0, fl: 0, ground: true, aiCd: 0, wait: SKILL[diff].wait });
+    Object.assign(c, { x: f[0] * (c.team ? -1 : 1), y: 0.55, z: s * f[1] * HL, vx: 0, vy: 0, vz: 0, yaw: c.team ? Math.PI : 0, pitch: 0, roll: 0, airQuat: null, airOmega: null, wallDetachTimer: 0, wallRide: false, wallVerticalAxis: null, wallVerticalSign: 0, boost: 34, jumps: 0, jt: 0, flip: 0, fl: 0, ground: true, aiCd: 0, wait: SKILL[diff].wait });
   }
 }
 function start(freePlay = false) {
@@ -1189,7 +1191,7 @@ function resetTrainingCar() {
     yaw: 0, pitch: 0, roll: 0, jumps: 0, jt: 0,
     flip: 0, fl: 0, hold: 0, ground: true,
     wallRide: false, wallVerticalAxis: null, wallVerticalSign: 0, wallDetachTimer: 0,
-    demoTimer: 0, boost: 100, ballHitCooldown: 0
+    airQuat: null, airOmega: null, demoTimer: 0, boost: 100, ballHitCooldown: 0
   });
   car.wallDetachTimer = 0;
   car.mesh.root.visible = true;
@@ -1924,6 +1926,38 @@ function aiCtl(c, dt) {
 }
 
 // ---------- physics ----------
+// Actual local-axis aerial rotation. Euler angles are kept for old HUD/replay
+// compatibility, but the quaternion is authoritative while the car is airborne.
+const AIR_X = new THREE.Vector3(1,0,0);
+const AIR_Y = new THREE.Vector3(0,1,0);
+const AIR_Z = new THREE.Vector3(0,0,1);
+function getCarOrientation(c) {
+  return c.airQuat || new THREE.Quaternion().setFromEuler(
+    new THREE.Euler(-(c.pitch || 0), c.yaw || 0, c.roll || 0, 'XYZ'));
+}
+function getCarForward(c) {
+  return AIR_Z.clone().applyQuaternion(getCarOrientation(c));
+}
+function aerialControl(c, ct, dt) {
+  if (!c.airQuat) c.airQuat = getCarOrientation(c).clone();
+  if (!c.airOmega) c.airOmega = { pitch:0, yaw:0, roll:0 };
+  const omega = c.airOmega;
+  // Stick input approaches an angular velocity; releasing the stick damps
+  // smoothly rather than instantly snapping to a different rotation.
+  const blend = 1 - Math.exp(-12 * dt);
+  const pitchTarget = clamp(ct.throttle || 0, -1, 1) * PHYSICS_TUNING.PITCH_TORQUE_SPEED;
+  const yawTarget = -clamp(ct.steer || 0, -1, 1) * PHYSICS_TUNING.YAW_TORQUE_SPEED;
+  const rollTarget = clamp(ct.roll || 0, -1, 1) * PHYSICS_TUNING.ROLL_TORQUE_SPEED;
+  omega.pitch += (pitchTarget - omega.pitch) * blend;
+  omega.yaw += (yawTarget - omega.yaw) * blend;
+  omega.roll += (rollTarget - omega.roll) * blend;
+  c.airQuat.multiply(new THREE.Quaternion().setFromAxisAngle(AIR_X, omega.pitch * dt));
+  c.airQuat.multiply(new THREE.Quaternion().setFromAxisAngle(AIR_Y, omega.yaw * dt));
+  c.airQuat.multiply(new THREE.Quaternion().setFromAxisAngle(AIR_Z, omega.roll * dt));
+  c.airQuat.normalize();
+  const e = new THREE.Euler().setFromQuaternion(c.airQuat, 'XYZ');
+  c.pitch = -e.x; c.yaw = e.y; c.roll = e.z;
+}
 function stepCar(c, ct, dt) {
   c.demoCooldown = Math.max(0, (c.demoCooldown || 0) - dt);
   c.ballHitCooldown = Math.max(0, (c.ballHitCooldown || 0) - dt);
@@ -1976,6 +2010,10 @@ function stepCar(c, ct, dt) {
     }
   }
   const ground = c.wallDetachTimer <= 0 && (c.y <= 0.56 || c.wallRide); c.ground = ground;
+  if (ground) {
+    c.airQuat = null;
+    c.airOmega = null;
+  }
   const bo = !!ct.boost && c.boost > 0;
   // Keep a very short grace window so a clean boost collision still counts if boost
   // ends on the exact simulation frame the cars make contact.
@@ -2036,21 +2074,25 @@ function stepCar(c, ct, dt) {
   } else {
     const gravityScale = physicsStyle === 'floaty' ? 0.72 : physicsStyle === 'heavy' ? 1.2 : 1;
     c.vy -= PHYSICS_TUNING.GRAVITY_FORCE * gravityScale * dt;
-    c.yaw -= ct.steer * (physicsStyle === 'arcade' ? 3.4 : PHYSICS_TUNING.YAW_TORQUE_SPEED) * dt;
+    aerialControl(c, ct, dt);
     if (c.hold > 0 && ct.jumpHeld && c.jumps === 1) {
       c.vy += PHYSICS_TUNING.JUMP_HOLD_FORCE * dt;
       c.hold = Math.max(0, c.hold - dt);
     } else c.hold = 0;
-    if (!ct.throttle && c.y < 4 && c.vy < 0) c.pitch *= Math.max(0, 1 - 5 * dt);
-    c.pitch = wrap(c.pitch - ct.throttle * PHYSICS_TUNING.PITCH_TORQUE_SPEED * dt);
-    c.roll = wrap(c.roll + (ct.roll || 0) * PHYSICS_TUNING.ROLL_TORQUE_SPEED * dt);
+    // Air throttle is not physical forward drive: it controls pitch above.
+    // Only a little aerodynamic drag acts while the car is airborne.
+    const damp = Math.max(0, 1 - PHYSICS_TUNING.AIR_LINEAR_DRAG * dt);
+    c.vx *= damp; c.vy *= damp; c.vz *= damp;
   }
-  // Boost continuously accelerates along the car's nose on ground and in air.
+  // Boost follows the full 3D nose orientation, including air roll and yaw.
+  // With upward pitch, AIR boost must exceed world gravity or a real
+  // sustained aerial / air dribble is physically impossible.
   if (bo) {
-    const cp = Math.cos(c.pitch);
-    c.vx += Math.sin(c.yaw) * cp * PHYSICS_TUNING.BOOST_FORCE * dt;
-    c.vy += Math.sin(c.pitch) * PHYSICS_TUNING.BOOST_FORCE * dt;
-    c.vz += Math.cos(c.yaw) * cp * PHYSICS_TUNING.BOOST_FORCE * dt;
+    const nose = getCarForward(c);
+    const accel = ground ? PHYSICS_TUNING.BOOST_FORCE : PHYSICS_TUNING.AIR_BOOST_FORCE;
+    c.vx += nose.x * accel * dt;
+    c.vy += nose.y * accel * dt;
+    c.vz += nose.z * accel * dt;
   }
   if (ct.jump) {
     if (c.wallVerticalAxis) {
@@ -2069,6 +2111,7 @@ function stepCar(c, ct, dt) {
         c.z -= wallSign * 0.12;
       }
       c.pitch = Math.max(0.75, c.pitch);
+      c.airQuat = null; c.airOmega = null;
       c.jumps = 1; c.jt = 0;
       c.hold = PHYSICS_TUNING.JUMP_HOLD_DURATION;
       c.y += 0.08;
@@ -2082,6 +2125,7 @@ function stepCar(c, ct, dt) {
         c.vy = Math.max(c.vy, launch / norm);
         c.wallRide = false;
         c.wallDetachTimer = 0.28;
+        c.airQuat = null; c.airOmega = null;
       } else {
         c.vy = PHYSICS_TUNING.JUMP_IMPULSE;
       }
@@ -2867,7 +2911,12 @@ function render(dt) {
   if (state === 'replay' && replayFrames.length) applyReplayFrame(replayFrames[Math.min(Math.floor(replayIndex), replayFrames.length - 1)]);
   for (const c of cars) {
     const m = c.mesh;
-    m.root.position.set(c.x, c.y, c.z); m.root.rotation.set(-c.pitch, c.yaw, c.roll || 0);
+    m.root.position.set(c.x, c.y, c.z);
+    if (c.airQuat && state !== 'menu' && state !== 'over') {
+      m.root.quaternion.copy(c.airQuat);
+    } else {
+      m.root.rotation.set(-c.pitch, c.yaw, c.roll || 0);
+    }
     m.flame.visible = !!c.fl; m.flame.scale.set(1, 0.7 + Math.random() * 0.6, 1);
     m.body.rotation.set(0, 0, 0);
     if (c.flip > 0) {
