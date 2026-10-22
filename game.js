@@ -201,10 +201,18 @@ function buildArena() {
   const texture = new THREE.CanvasTexture(canvas);
   texture.anisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), 8);
   texture.colorSpace = THREE.SRGBColorSpace || texture.colorSpace;
-  const surfaceGeo = new THREE.PlaneGeometry(2*HW-1,2*HL-1,112,148);
+  const surfaceGeo = new THREE.PlaneGeometry(2*HW,2*HL,112,148);
   surfaceGeo.rotateX(-Math.PI/2);
   const pos = surfaceGeo.attributes.position;
-  for (let i=0;i<pos.count;i++) pos.setY(i,arenaRampAt(pos.getX(i),pos.getZ(i)).height);
+  for (let i=0;i<pos.count;i++) {
+    const z=pos.getZ(i);
+    // Clip the ground's four corners into the SAME octagonal perimeter as the
+    // playable walls. The boundary now meets the diagonal glass exactly.
+    const maxX=HW-Math.max(0,Math.abs(z)-(HL-CH));
+    const x=pos.getX(i)*maxX/HW;
+    pos.setX(i,x);
+    pos.setY(i,arenaRampAt(x,z).height);
+  }
   pos.needsUpdate = true; surfaceGeo.computeVertexNormals();
   pitchMesh = new THREE.Mesh(surfaceGeo,new THREE.MeshStandardMaterial({map:texture,roughness:.94,side:THREE.DoubleSide}));
   pitchMesh.receiveShadow = true; scene.add(pitchMesh);
