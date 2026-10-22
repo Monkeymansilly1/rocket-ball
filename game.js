@@ -1970,6 +1970,14 @@ function aerialControl(c, ct, dt) {
   const e = new THREE.Euler().setFromQuaternion(c.airQuat, 'YXZ');
   c.pitch = -e.x; c.yaw = e.y; c.roll = e.z;
 }
+function applyDirectionalBoost(c, dt, onSurface) {
+  const nose = getCarForward(c);
+  const accel = onSurface ? PHYSICS_TUNING.BOOST_FORCE :
+    PHYSICS_TUNING.AIR_BOOST_FORCE;
+  c.vx += nose.x * accel * dt;
+  c.vy += nose.y * accel * dt;
+  c.vz += nose.z * accel * dt;
+}
 function stepCar(c, ct, dt) {
   c.demoCooldown = Math.max(0, (c.demoCooldown || 0) - dt);
   c.ballHitCooldown = Math.max(0, (c.ballHitCooldown || 0) - dt);
@@ -2096,16 +2104,8 @@ function stepCar(c, ct, dt) {
     const damp = Math.max(0, 1 - PHYSICS_TUNING.AIR_LINEAR_DRAG * dt);
     c.vx *= damp; c.vy *= damp; c.vz *= damp;
   }
-  // Boost follows the full 3D nose orientation, including air roll and yaw.
-  // With upward pitch, AIR boost must exceed world gravity or a real
-  // sustained aerial / air dribble is physically impossible.
-  if (bo) {
-    const nose = getCarForward(c);
-    const accel = ground ? PHYSICS_TUNING.BOOST_FORCE : PHYSICS_TUNING.AIR_BOOST_FORCE;
-    c.vx += nose.x * accel * dt;
-    c.vy += nose.y * accel * dt;
-    c.vz += nose.z * accel * dt;
-  }
+  // The nose, air roll and pitch determine the true rocket thrust vector.
+  if (bo) applyDirectionalBoost(c, dt, ground);
   if (ct.jump) {
     if (c.wallVerticalAxis) {
       const wallAxis = c.wallVerticalAxis, wallSign = c.wallVerticalSign;
@@ -3061,16 +3061,16 @@ window.rocketArena = {
 let last = performance.now();
 (function loop(now) {
   const wallDt = Math.min(0.25, Math.max(0, (now - last) / 1000)); last = now;
-  const frameDt = Math.min(0.05, wallDt);
+  const frameDt = Math.min(0.09, wallDt);
   pollControllers();
   // Physics remains deterministic at 120Hz. The clock, countdown, goal intro,
   // and replay still track real elapsed time when the GPU is running slowly.
   if (typeof window.__rocketPhysicsAccumulator !== 'number') window.__rocketPhysicsAccumulator = 0;
   if (!paused) {
-    window.__rocketPhysicsAccumulator = Math.min(0.15, window.__rocketPhysicsAccumulator + frameDt);
+    window.__rocketPhysicsAccumulator = Math.min(0.19, window.__rocketPhysicsAccumulator + frameDt);
     const fixedDt = 1 / 120;
     let steps = 0;
-    while (window.__rocketPhysicsAccumulator >= fixedDt && steps < 6) {
+    while (window.__rocketPhysicsAccumulator >= fixedDt && steps < 12) {
       update(fixedDt);
       window.__rocketPhysicsAccumulator -= fixedDt;
       steps++;
