@@ -1220,6 +1220,8 @@ function updateTrainingCounters() {
 }
 function loadTrainingShot(scenario = 'dribble') {
   if (!trainingMode || !cars[0]) return;
+  const wallTip = $('wallTrainingTip');
+  if (wallTip) wallTip.hidden = scenario !== 'wall';
   resetTrainingCar();
   resetTrainingBall();
   const car = cars[0];
