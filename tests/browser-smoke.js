@@ -94,8 +94,11 @@ async function main() {
     }
     await call('Page.enable');
     await call('Runtime.enable');
+    console.log('Navigating headless Chrome to local Rocket Ball server');
     await call('Page.navigate',{url});
-    await eventually(()=>evalJS('document.readyState==="complete" && !!window.rocketArena && !!window.THREE'));
+    await eventually(()=>evalJS('document.readyState==="complete" && !!window.rocketArena && !!window.THREE'),15000)
+      .catch(err=>{throw new Error('Game startup: '+err.message+'; browser exceptions: '+JSON.stringify(errors));});
+    console.log('Game loaded; testing Free Play');
     assert.equal(await evalJS('window.rocketArena.state'),'menu');
 
     await evalJS('document.getElementById("freePlayBtn").click()');
@@ -112,6 +115,7 @@ async function main() {
 
     await evalJS('document.getElementById("settingCameraFov").value="87"; document.getElementById("settingCameraFov").dispatchEvent(new Event("input",{bubbles:true}))');
     assert.equal(await evalJS('JSON.parse(localStorage.getItem("rocketArenaSettingsV1")).camera.fov'),87);
+    console.log('Free Play passed; testing normal match');
     await evalJS('document.getElementById("playBtn").click()');
     await eventually(()=>evalJS('window.rocketArena.state==="play"'),8000);
     assert.equal(await evalJS('window.rocketArena.cars.length'),4);
@@ -127,8 +131,13 @@ async function main() {
   } finally {
     if(socket)socket.close();
     chrome.kill();
+    await Promise.race([
+      new Promise(resolve=>chrome.once('exit',resolve)),
+      delay(1500)
+    ]);
     server.close();
-    fs.rmSync(profile,{recursive:true,force:true});
+    try { fs.rmSync(profile,{recursive:true,force:true,maxRetries:4,retryDelay:200}); }
+    catch(e) { console.warn('Chrome profile cleanup:',e.message); }
   }
 }
 main().catch(err=>{console.error(err);process.exitCode=1;server.close();});
