@@ -114,6 +114,19 @@ const CAR_MODELS = [
   { name: 'hyperion', len: 3.9, width: 2.02, height: 0.46, wheelR: 0.41, mass: 1.02, hit: 1.88, cap: 1.02 }
 ];
 
+// Collision hitboxes are independent of the visible body mesh. Each car keeps
+// its own dimensions, while all vehicles use the same movement/boost rules.
+// The Octane half-extents/offset use the supplied reference scaled by 1/50.
+const CAR_HITBOXES = {
+  octane:   { length:120.507/50, width:86.699/50, height:38.659/50, forward:13.876/50, up:20.755/50 },
+  dominus:  { length:2.57, width:1.64, height:0.64, forward:0.18, up:0.38 },
+  breakout: { length:2.50, width:1.62, height:0.59, forward:0.18, up:0.39 },
+  vortex:   { length:2.44, width:1.74, height:0.70, forward:0.20, up:0.40 },
+  striker:  { length:2.58, width:1.52, height:0.54, forward:0.19, up:0.33 },
+  raptor:   { length:2.35, width:1.82, height:0.85, forward:0.18, up:0.48 },
+  hyperion: { length:2.55, width:1.69, height:0.65, forward:0.22, up:0.36 }
+};
+
 // ---------- renderer / scene ----------
 const renderer = new THREE.WebGLRenderer({ canvas: $('c'), antialias: true });
 renderer.shadowMap.enabled = true;
@@ -656,7 +669,7 @@ function mkCar(team, k, ai, modelName) {
   car.displayName = ai ? (team ? 'ORANGE BOT ' : 'BLUE BOT ') + (k + 1) : playerName;
   // model-based properties
   const mdef = CAR_MODELS.find(m => m.name === model);
-  car.hit = mdef.hit; car.mass = mdef.mass * 4; car.cap = mdef.cap; car.baseCap = mdef.cap; // scale mass multiplier into existing physics constants
+  car.hit = mdef.hit; car.hitbox = CAR_HITBOXES[model] || CAR_HITBOXES.octane; car.mass = mdef.mass * 4; car.cap = mdef.cap; car.baseCap = mdef.cap; // scale mass multiplier into existing physics constants
   return car;
 }
 function buildTeams() {
@@ -1762,10 +1775,15 @@ function bump() {
 function hitBall(c) {
   if (c.demoTimer > 0) return;
   const sy = Math.sin(c.yaw), cy = Math.cos(c.yaw);
-  const dx = ball.x - c.x, dy = ball.y - c.y, dz = ball.z - c.z;
-  const forward = dx * sy + dz * cy;
+  const dx = ball.x - c.x, dz = ball.z - c.z;
+  const box = c.hitbox || {
+    length: c.hit || 1.7, width: (c.hit || 1.7) * 0.6, height: 0.55,
+    forward: 0, up: 0
+  };
+  const dy = ball.y - (c.y + box.up);
+  const forward = dx * sy + dz * cy - box.forward;
   const side = dx * cy - dz * sy;
-  const halfLength = c.hit || 1.7, halfWidth = halfLength * 0.6, halfHeight = 0.55;
+  const halfLength = box.length, halfWidth = box.width, halfHeight = box.height;
   const nearForward = clamp(forward, -halfLength, halfLength);
   const nearSide = clamp(side, -halfWidth, halfWidth);
   const nearHeight = clamp(dy, -halfHeight, halfHeight);
