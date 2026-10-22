@@ -123,16 +123,38 @@ async function main() {
     await evalJS('document.getElementById("trainingNextShot").click()');
     assert.equal(await evalJS('document.getElementById("trainingShotCount").textContent.includes("3")'),true);
     assert.equal(await evalJS('window.rocketArena.cars[0].wallVerticalAxis'), 'x');
-    const beforeWallJump = await evalJS('window.rocketArena.cars[0].y');
+    const wallSign = await evalJS('window.rocketArena.cars[0].wallVerticalSign');
+    const frozenHeight = await evalJS('window.rocketArena.ball.y');
+    await delay(350);
+    assert(Math.abs(await evalJS('window.rocketArena.ball.y') - frozenHeight)<0.01,
+      'Wall training shot dropped before launch input');
     await evalJS('window.dispatchEvent(new KeyboardEvent("keydown",{code:"Space",bubbles:true}))');
     await eventually(()=>evalJS('window.rocketArena.cars[0].jumps === 1 && window.rocketArena.cars[0].wallVerticalAxis === null'),9000);
     await evalJS('window.dispatchEvent(new KeyboardEvent("keyup",{code:"Space",bubbles:true}))');
-    assert.equal(await evalJS('window.rocketArena.cars[0].vx < -2'),true,'Wall jump did not launch inward into arena');
-    assert.equal(await evalJS('window.rocketArena.cars[0].pitch > 0.6'),true,'Wall jump reset the aerial nose-up pitch');
-    console.log('Wall-to-air jump detached inward and preserved aerial orientation.');
+    assert.equal(await evalJS('window.rocketArena.cars[0].vx * '+wallSign+' < -2'),true,
+      'Wall jump failed to detach inward for the selected side');
+    assert.equal(await evalJS('window.rocketArena.cars[0].pitch > 0.6'),true,
+      'Wall jump reset the aerial nose-up pitch');
+    console.log('Wall-to-air training: frozen setup, inward jump and nose-up pitch passed.');
     await evalJS('document.getElementById("trainingLaunch").click()');
     await delay(250);
     assert.equal(await evalJS('Number.isFinite(window.rocketArena.ball.y)'),true);
+    // Full 3D flight must overcome gravity with upward-oriented boost.
+    await evalJS('(function(){const c=window.rocketArena.cars[0]; Object.assign(c,{x:0,y:16,z:0,vx:0,vy:0,vz:0,pitch:1.15,yaw:0,roll:0,airQuat:null,airOmega:null,wallRide:false,wallVerticalAxis:null,wallDetachTimer:1,jumps:1,hold:0,flip:0,ballHitCooldown:0});window.rocketArena.ball.x=40;window.rocketArena.ball.z=40;})()');
+    await evalJS('window.dispatchEvent(new KeyboardEvent("keydown",{code:"ShiftLeft",bubbles:true}))');
+    await delay(480);
+    const airVy=await evalJS('window.rocketArena.cars[0].vy');
+    await evalJS('window.dispatchEvent(new KeyboardEvent("keyup",{code:"ShiftLeft",bubbles:true}))');
+    assert(airVy>1, 'Aerial boost still cannot overcome gravity: vy='+airVy);
+    assert.equal(await evalJS('!!window.rocketArena.cars[0].airQuat'),true);
+    // Q/E air roll must actually rotate the physics quaternion, not only the mesh.
+    const beforeRoll=await evalJS('window.rocketArena.cars[0].airQuat.toArray().join(",")');
+    await evalJS('window.dispatchEvent(new KeyboardEvent("keydown",{code:"KeyE",bubbles:true}))');
+    await delay(260);
+    await evalJS('window.dispatchEvent(new KeyboardEvent("keyup",{code:"KeyE",bubbles:true}))');
+    assert.notEqual(await evalJS('window.rocketArena.cars[0].airQuat.toArray().join(",")'),beforeRoll,
+      'Air roll did not change the physics orientation');
+    console.log('Air boost sustained lift and local-axis air roll passed.');
     await evalJS('document.getElementById("trainingResetBall").click()');
     const resetY=await evalJS('window.rocketArena.ball.y');
     assert(Math.abs(resetY-3.4)<.3,'Training ball did not reset');
