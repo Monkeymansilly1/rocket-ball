@@ -1958,15 +1958,22 @@ function aerialControl(c, ct, dt) {
   if (!c.airQuat) c.airQuat = getCarOrientation(c).clone();
   if (!c.airOmega) c.airOmega = { pitch:0, yaw:0, roll:0 };
   const omega = c.airOmega;
-  // Stick input approaches an angular velocity; releasing the stick damps
-  // smoothly rather than instantly snapping to a different rotation.
-  const blend = 1 - Math.exp(-12 * dt);
-  const pitchTarget = clamp(ct.throttle || 0, -1, 1) * PHYSICS_TUNING.PITCH_TORQUE_SPEED;
-  const yawTarget = -clamp(ct.steer || 0, -1, 1) * PHYSICS_TUNING.YAW_TORQUE_SPEED;
-  const rollTarget = clamp(ct.roll || 0, -1, 1) * PHYSICS_TUNING.ROLL_TORQUE_SPEED;
-  omega.pitch += (pitchTarget - omega.pitch) * blend;
-  omega.yaw += (yawTarget - omega.yaw) * blend;
-  omega.roll += (rollTarget - omega.roll) * blend;
+  // Rocket League's axis-specific angular torque/damping, measured by the
+  // RocketSim/RLGym community. These are acceleration equations, NOT an
+  // "rotate towards desired angle" animation. No input = momentum decays.
+  const pitchIn = clamp(ct.throttle || 0,-1,1);
+  const yawIn = -clamp(ct.steer || 0,-1,1);
+  const rollIn = clamp(ct.roll || 0,-1,1);
+  omega.pitch += (12.146*pitchIn - 2.798*omega.pitch) * dt;
+  omega.yaw += (8.920*yawIn - 1.886*omega.yaw) * dt;
+  omega.roll += (36.080*rollIn - 4.472*omega.roll) * dt;
+  const spin = Math.hypot(omega.pitch,omega.yaw,omega.roll);
+  if (spin > 5.5) {
+    const factor = 5.5/spin;
+    omega.pitch *= factor; omega.yaw *= factor; omega.roll *= factor;
+  }
+  // Apply torque on the car's local axes so air roll changes both the camera
+  // orientation and the direction of boost/hitbox contact, not only a mesh.
   c.airQuat.multiply(new THREE.Quaternion().setFromAxisAngle(AIR_X, omega.pitch * dt));
   c.airQuat.multiply(new THREE.Quaternion().setFromAxisAngle(AIR_Y, omega.yaw * dt));
   c.airQuat.multiply(new THREE.Quaternion().setFromAxisAngle(AIR_Z, omega.roll * dt));
@@ -2084,7 +2091,9 @@ function stepCar(c, ct, dt) {
     c.jumps = 0; c.jt = 0; c.hold = 0;
     const wallAccel = PHYSICS_TUNING.GROUND_ACCELERATION *
       (physicsStyle === 'arcade' ? 1.15 : physicsStyle === 'heavy' ? 0.8 : 1);
-    c.vy += (ct.throttle * wallAccel - PHYSICS_TUNING.GRAVITY_FORCE * 0.55) * dt;
+    // Full world gravity still acts down the vertical wall; throttle and
+    // upward-pointed boost must actively work against it.
+    c.vy += (ct.throttle * wallAccel - PHYSICS_TUNING.GRAVITY_FORCE) * dt;
     c.vy = clamp(c.vy, -20, PHYSICS_TUNING.MAX_SPEED);
     if (c.wallVerticalAxis === 'x') {
       c.x = c.wallVerticalSign * (HW - 1.3); c.vx = 0;
@@ -2142,9 +2151,17 @@ function stepCar(c, ct, dt) {
       c.vy += PHYSICS_TUNING.JUMP_HOLD_FORCE * dt;
       c.hold = Math.max(0, c.hold - dt);
     } else c.hold = 0;
-    // Air throttle is not physical forward drive: it controls pitch above.
-    // Only a little aerodynamic drag acts while the car is airborne.
-    const damp = Math.max(0, 1 - PHYSICS_TUNING.AIR_LINEAR_DRAG * dt);
+    // Rocket League retains a small forward/reverse throttle acceleration in
+    // air, separate from its pitch input. Most aerial control comes from boost.
+    if (Math.abs(ct.throttle || 0) > 0.01) {
+      const nose = getCarForward(c);
+      const accel = PHYSICS_TUNING.AIR_THROTTLE_ACCEL_REFERENCE /
+        PHYSICS_TUNING.REFERENCE_SCALE;
+      c.vx += nose.x * ct.throttle * accel * dt;
+      c.vy += nose.y * ct.throttle * accel * dt;
+      c.vz += nose.z * ct.throttle * accel * dt;
+    }
+    const damp = Math.exp(-PHYSICS_TUNING.AIR_LINEAR_DRAG * dt);
     c.vx *= damp; c.vy *= damp; c.vz *= damp;
   }
   // The nose, air roll and pitch determine the true rocket thrust vector.
