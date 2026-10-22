@@ -28,6 +28,7 @@ function extract(name) {
 const functions = [
   extract('rampProfile'), extract('arenaRampAt'),
   extract('getCarOrientation'), extract('getCarForward'),
+  extract('aerialControl'), extract('applyDirectionalBoost'),
   extract('clampBallMotion'), extract('ballSurfaceImpulse'),
   extract('resolveBallWall'), extract('stepBall'), extract('hitBall')
 ].join('\n');
@@ -35,7 +36,8 @@ const bootstrap = [
   'const THREE = arguments[0];',
   'const AIR_X=new THREE.Vector3(1,0,0),AIR_Y=new THREE.Vector3(0,1,0),AIR_Z=new THREE.Vector3(0,0,1);',
   'const BR=2.4,HW=80,HL=104,GW=15,GH=10.5,GD=14,CH=14,CEIL=44,WALL_RAMP_HEIGHT=9.5,WALL_RAMP_WIDTH=24;',
-  'const PHYSICS_TUNING = {BALL_GRAVITY_FORCE:24,BALL_DRAG_REFERENCE:.03,BALL_RESTITUTION:.82,BALL_WALL_RESTITUTION:.84,BALL_FLOOR_RESTITUTION:.78,BALL_FRICTION_REFERENCE:.35,BALL_MAX_ANGULAR_SPEED:6,MAX_BALL_SPEED:80,BALL_MASS_REFERENCE:30,CAR_MASS_REFERENCE:180,CAR_BALL_RESTITUTION:0};',
+  'const PHYSICS_TUNING_AIR={PITCH_TORQUE_SPEED:3.4,YAW_TORQUE_SPEED:2.85,ROLL_TORQUE_SPEED:4.2,AIR_BOOST_FORCE:43,BOOST_FORCE:19.83};',
+  'const PHYSICS_TUNING = {BALL_GRAVITY_FORCE:24,BALL_DRAG_REFERENCE:.03,BALL_RESTITUTION:.82,BALL_WALL_RESTITUTION:.84,BALL_FLOOR_RESTITUTION:.78,BALL_FRICTION_REFERENCE:.35,BALL_MAX_ANGULAR_SPEED:6,MAX_BALL_SPEED:80,BALL_MASS_REFERENCE:30,CAR_MASS_REFERENCE:180,CAR_BALL_RESTITUTION:0,PITCH_TORQUE_SPEED:3.4,YAW_TORQUE_SPEED:2.85,ROLL_TORQUE_SPEED:4.2,AIR_BOOST_FORCE:43,BOOST_FORCE:19.83};',
   'const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));',
   'const ball={x:0,y:12.4,z:0,vx:0,vy:-20,vz:0,wx:0,wy:0,wz:0,onRamp:false};',
   'let lastTouch=null,previousTouch=null;',
@@ -44,8 +46,8 @@ const bootstrap = [
   'const showGameEvent=()=>{},sparks=()=>{};',
   'const goal=()=>{throw Error("Unexpected goal in physics test")};',
   'const rampEase=t=>t*t*(3-2*t);'
-].join('\n') + '\n' + functions + '\nreturn {ball,stepBall,hitBall,resolveBallWall,arenaRampAt,getCarForward,cars};';
-const {ball,stepBall,hitBall,resolveBallWall,arenaRampAt,getCarForward,cars} = new Function(bootstrap)(THREE);
+].join('\n') + '\n' + functions + '\nreturn {ball,stepBall,hitBall,resolveBallWall,arenaRampAt,getCarForward,aerialControl,applyDirectionalBoost,cars};';
+const {ball,stepBall,hitBall,resolveBallWall,arenaRampAt,getCarForward,aerialControl,applyDirectionalBoost,cars} = new Function(bootstrap)(THREE);
 
 for(let i=0;i<240;i++)stepBall(1/120);
 assert(ball.y >= 2.399 && ball.y < 20 && Number.isFinite(ball.y),'Floor contact unstable');
@@ -86,4 +88,20 @@ assert(ball.vy>6,'Pitched-up car failed to register a real aerial collision');
 const pitchedNose=getCarForward({pitch:Math.PI/2,yaw:Math.PI/2,roll:0,airQuat:null});
 assert(pitchedNose.y>.99 && Math.abs(pitchedNose.x)<.01,
   'Rendered nose did not face upward while pitched against the side wall');
+
+// True air boost at a 45-60 degree pitch has to overcome gravity. In previous
+// builds a car mathematically could not sustain flight, even at full boost.
+const flyer={x:0,y:16,z:0,vx:0,vy:0,vz:0,pitch:Math.PI/3,yaw:0,
+  roll:0,airQuat:null,airOmega:null};
+for(let i=0;i<120;i++){
+  flyer.vy-=28/120;
+  applyDirectionalBoost(flyer,1/120,false);
+}
+assert(flyer.vy>7,'Nose-up aerial boost cannot counter gravity');
+const before=getCarForward(flyer);
+for(let i=0;i<70;i++)aerialControl(flyer,{throttle:-.5,steer:.2,roll:1},1/120);
+assert(flyer.airQuat && Math.abs(flyer.airQuat.length()-1)<1e-6,
+  'Air rotation lost normalized physical orientation');
+assert(getCarForward(flyer).distanceTo(before)>.1,
+  'Pitch/yaw inputs failed to change the actual boost direction');
 console.log('PASS: syntax, training controls, floor, walls, ball speed cap, car-ball impacts');
