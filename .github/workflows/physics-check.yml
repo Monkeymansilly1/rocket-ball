@@ -17,3 +17,5 @@ jobs:
         run: node --check game.js
       - name: Physics regression checks
         run: node tests/physics-smoke.js
+      - name: Browser gameplay smoke check
+        run: node tests/browser-smoke.js
