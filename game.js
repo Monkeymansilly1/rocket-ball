@@ -1401,15 +1401,15 @@ function drawMini() {
 }
 
 // ---------- input ----------
-const CONTROL_ACTIONS = ['forward', 'reverse', 'left', 'right', 'jump', 'boost', 'hand', 'rollLeft', 'rollRight'];
+const CONTROL_ACTIONS = ['forward', 'reverse', 'left', 'right', 'jump', 'boost', 'hand', 'rollLeft', 'rollRight', 'camera'];
 const DEFAULT_CONTROL_BINDINGS = {
   p1: {
-    keyboard: { forward:'KeyW', reverse:'KeyS', left:'KeyA', right:'KeyD', jump:'Space', boost:'ShiftLeft', hand:'KeyE', rollLeft:'KeyQ', rollRight:'KeyE' },
-    pad: { forward:7, reverse:6, left:null, right:null, jump:0, boost:2, hand:4, rollLeft:null, rollRight:5 }
+    keyboard: { forward:'KeyW', reverse:'KeyS', left:'KeyA', right:'KeyD', jump:'Space', boost:'ShiftLeft', hand:'KeyE', rollLeft:'KeyQ', rollRight:'KeyE', camera:'KeyC' },
+    pad: { forward:7, reverse:6, left:null, right:null, jump:0, boost:2, hand:4, rollLeft:null, rollRight:5, camera:3 }
   },
   p2: {
-    keyboard: { forward:'ArrowUp', reverse:'ArrowDown', left:'ArrowLeft', right:'ArrowRight', jump:'Enter', boost:'ShiftRight', hand:'Slash', rollLeft:'Numpad1', rollRight:'Numpad3' },
-    pad: { forward:7, reverse:6, left:null, right:null, jump:0, boost:2, hand:4, rollLeft:null, rollRight:5 }
+    keyboard: { forward:'ArrowUp', reverse:'ArrowDown', left:'ArrowLeft', right:'ArrowRight', jump:'Enter', boost:'ShiftRight', hand:'Slash', rollLeft:'Numpad1', rollRight:'Numpad3', camera:'KeyC' },
+    pad: { forward:7, reverse:6, left:null, right:null, jump:0, boost:2, hand:4, rollLeft:null, rollRight:5, camera:3 }
   }
 };
 const controlBindings = JSON.parse(JSON.stringify(DEFAULT_CONTROL_BINDINGS));
@@ -1554,6 +1554,30 @@ function pollControllers() {
   if (!captured && !pendingPadCapture) {
     const first = connectedGamepads[0];
     if (first) {
+      const cameraIndex = controlBindings.p1.pad.camera;
+      const cameraId = first.index + ':' + cameraIndex;
+      // Y/Triangle toggles ball cam once per press, not every physics frame.
+      if (state === 'play' && !paused && !pendingKeyCapture &&
+          Number.isInteger(cameraIndex) && current[cameraId] && !previousPadButtons[cameraId]) {
+        ballCam = !ballCam;
+        if ($('cam')) $('cam').textContent = ballCam ? 'BALL CAM · Y / △' : 'CAR CAM · Y / △';
+        if ($('viewToggle')) $('viewToggle').innerHTML = ballCam
+          ? '◉ <span>BALL CAM</span>' : '◉ <span>PLAYER VIEW</span>';
+      }
+      // Options/Start: start from garage or pause/resume a running match.
+      const optionsId = first.index + ':9';
+      if (!pendingKeyCapture && current[optionsId] && !previousPadButtons[optionsId] &&
+          !Object.values(controlBindings.p1.pad).includes(9) &&
+          !($('controlsSettings') && $('controlsSettings').open)) {
+        if (state === 'menu' || state === 'over') start();
+        else if (state === 'play') {
+          paused = !paused;
+          if ($('msg')) {
+            $('msg').textContent = paused ? 'PAUSED · PRESS OPTIONS TO RESUME' : '';
+            $('msg').style.color = '#fff';
+          }
+        }
+      }
       const jumpIndex = controlBindings.p1.pad.jump;
       if (state === 'play' && !paused && Number.isInteger(jumpIndex) && current[first.index + ':' + jumpIndex] && !previousPadButtons[first.index + ':' + jumpIndex]) padJumpQueued.p1 = true;
     }
@@ -1608,7 +1632,12 @@ addEventListener('keydown', e => {
     if (!e.repeat && e.code === 'KeyH') loadTrainingShot(($('trainingPreset') && $('trainingPreset').value) || 'dribble');
     if (!e.repeat && e.code === 'Backspace') { resetTrainingCar(); e.preventDefault(); }
   }
-  if (!keys[e.code] && e.code === 'KeyC') { ballCam = !ballCam; $('cam').textContent = ballCam ? 'Ball cam (C)' : 'Chase cam (C)'; }
+  if (!keys[e.code] && e.code === controlBindings.p1.keyboard.camera) {
+    ballCam = !ballCam;
+    if ($('cam')) $('cam').textContent = ballCam ? 'BALL CAM · C' : 'CAR CAM · C';
+    if ($('viewToggle')) $('viewToggle').innerHTML = ballCam
+      ? '◉ <span>BALL CAM</span>' : '◉ <span>PLAYER VIEW</span>';
+  }
   if (e.code === 'Enter' && (state === 'menu' || state === 'over') && document.activeElement !== $('name')) start();
   if (state === 'menu' || state === 'over') {
     const n = { Digit1: 1, Digit2: 2, Digit3: 3 }[e.code], d = { Digit4: 0, Digit5: 1, Digit6: 2 }[e.code];
@@ -1853,6 +1882,8 @@ function playerActions(who) {
     // W / up pitches the nose down; S / stick down pitches the nose up.
     // Pulling the left stick back also gives a backward directional dodge.
     pitch: clamp(keyForward - keyReverse - axisY, -1, 1),
+    // Neutral stick + RT + double-jump stays neutral; the left stick chooses flips.
+    dodge: [clamp(keyForward - keyReverse - axisY, -1, 1), steer],
     airYaw: airRollModifier ? clamp(keyRight - keyLeft + padRight - padLeft, -1, 1) : steer,
     // Hold LB/L1 + move left stick horizontally to air roll. RB/R1 also rolls right.
     roll: clamp((keys[binding.rollRight] ? 1 : 0) - (keys[binding.rollLeft] ? 1 : 0) +
