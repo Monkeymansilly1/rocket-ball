@@ -179,10 +179,21 @@
           <h3>Controller</h3>
           <div class="setting-row">
             <label for="settingDeadZone">Stick dead zone</label>
-            <input id="settingDeadZone" type="range" min="0.05" max="0.40" step="0.01" value="0.16">
-            <output id="settingDeadZoneValue" for="settingDeadZone">16%</output>
+            <input id="settingDeadZone" type="range" min="0.05" max="0.40" step="0.01" value="0.12">
+            <output id="settingDeadZoneValue" for="settingDeadZone">12%</output>
           </div>
-          <p class="setting-help">Lower values make steering react to smaller stick movements. Increase it if the car steers by itself.</p>
+          <p class="setting-help">Lower dead zones react to smaller stick movements. Increase it if the car steers by itself.</p>
+          <div class="setting-row">
+            <label for="settingSteeringSensitivity">Steering sensitivity</label>
+            <input id="settingSteeringSensitivity" type="range" min="1" max="2.5" step="0.05" value="1.25">
+            <output id="settingSteeringSensitivityValue" for="settingSteeringSensitivity">1.25×</output>
+          </div>
+          <div class="setting-row">
+            <label for="settingAerialSensitivity">Aerial sensitivity</label>
+            <input id="settingAerialSensitivity" type="range" min="1" max="2.5" step="0.05" value="1.35">
+            <output id="settingAerialSensitivityValue" for="settingAerialSensitivity">1.35×</output>
+          </div>
+          <p class="setting-help">Steering sensitivity affects ground turns; aerial sensitivity affects left-stick pitch, yaw and free air roll. Both settings save automatically.</p>
         </section>
         <div class="controls-toolbar">
           <label for="controlsPlayer">Configure</label>
