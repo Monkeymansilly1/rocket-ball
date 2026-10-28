@@ -59,6 +59,7 @@ const TEAM_COLOR_PRESETS = {
 let BLUE = 0x2fb8ff, ORANGE = 0xff8a1f;
 let gameVolume = 0.75, colourVisionMode = 'normal', controllerDeadZone = 0.12;
 let controllerSteeringSensitivity = 1.25, controllerAerialSensitivity = 1.35;
+let controllerVibrationEnabled = true;
 let graphicsQuality = 'balanced';
 const cameraSettings = { fov: 105, distance: 8, height: 3.5, stiffness: 10, shake: false };
 try {
@@ -68,6 +69,7 @@ try {
   if (Number.isFinite(savedSettings.deadZone)) controllerDeadZone = Math.max(0.05, Math.min(0.4, savedSettings.deadZone));
   if (Number.isFinite(savedSettings.steeringSensitivity)) controllerSteeringSensitivity = Math.max(1, Math.min(2.5, savedSettings.steeringSensitivity));
   if (Number.isFinite(savedSettings.aerialSensitivity)) controllerAerialSensitivity = Math.max(1, Math.min(2.5, savedSettings.aerialSensitivity));
+  if (typeof savedSettings.controllerVibration === 'boolean') controllerVibrationEnabled = savedSettings.controllerVibration;
   if (savedSettings.camera && typeof savedSettings.camera === 'object') {
     for (const key of ['fov', 'distance', 'height', 'stiffness']) {
       if (Number.isFinite(savedSettings.camera[key])) cameraSettings[key] = savedSettings.camera[key];
@@ -1522,6 +1524,28 @@ function beginPadCapture(action) {
   setControllerStatus('Press a button or trigger on the controller you want to assign.');
   renderControlBindings();
 }
+// Optional Gamepad API haptics: meaningful impact feedback, no rumble on unsupported pads.
+function rumbleCar(car, strength = 0.2, duration = 90) {
+  if (!controllerVibrationEnabled || !car || car.ai || !connectedGamepads.length) return;
+  const who = car === cars[0] ? 'p1' : localTwoPlayer && car === cars[mode] ? 'p2' : null;
+  if (!who) return;
+  const pad = controllerForPlayer(who);
+  if (!pad) return;
+  const intensity = clamp(strength, 0, 1);
+  try {
+    if (pad.vibrationActuator && typeof pad.vibrationActuator.playEffect === 'function') {
+      const result = pad.vibrationActuator.playEffect('dual-rumble', {
+        duration: Math.max(30, Math.min(400, duration)), startDelay: 0,
+        strongMagnitude: intensity, weakMagnitude: intensity * 0.6
+      });
+      if (result && typeof result.catch === 'function') result.catch(() => {});
+    } else if (pad.hapticActuators && pad.hapticActuators[0] &&
+               typeof pad.hapticActuators[0].pulse === 'function') {
+      const result = pad.hapticActuators[0].pulse(intensity, duration);
+      if (result && typeof result.catch === 'function') result.catch(() => {});
+    }
+  } catch (_) { /* Unsupported controller vibration must never interrupt the match. */ }
+}
 function controllerForPlayer(who) {
   if (who === 'p2') return localTwoPlayer && connectedGamepads.length > 1 ? connectedGamepads[1] : null;
   return connectedGamepads[0] || null;
@@ -1698,6 +1722,7 @@ function saveGeneralSettings() {
     localStorage.setItem('rocketArenaSettingsV1', JSON.stringify({
       volume: gameVolume, colourVisionMode, deadZone: controllerDeadZone,
       steeringSensitivity: controllerSteeringSensitivity, aerialSensitivity: controllerAerialSensitivity,
+      controllerVibration: controllerVibrationEnabled,
       camera: cameraSettings, graphicsQuality
     }));
   } catch (_) {}
@@ -1776,6 +1801,14 @@ for (const [name, id, out] of [
     if (name === 'steering') controllerSteeringSensitivity = sensitivity;
     else controllerAerialSensitivity = sensitivity;
     if (output) output.value = sensitivity.toFixed(2) + '×';
+    saveGeneralSettings();
+  });
+}
+const vibrationSetting = $('settingControllerVibration');
+if (vibrationSetting) {
+  vibrationSetting.checked = controllerVibrationEnabled;
+  vibrationSetting.addEventListener('change', () => {
+    controllerVibrationEnabled = vibrationSetting.checked;
     saveGeneralSettings();
   });
 }
@@ -2511,6 +2544,8 @@ function tryDemolish(attacker, victim, dirX, dirZ) {
       0.6 + Math.random() * 0.4, color[0], color[1], color[2]);
   }
   showGameEvent('DEMOLITION!', '#ffca64');
+  rumbleCar(attacker, 0.9, 280);
+  rumbleCar(victim, 0.95, 320);
   return true;
 }
 function bump() {
@@ -2545,6 +2580,7 @@ function bump() {
         if (a.y > 0.7 || a.wallRide) a.vy += pop * 0.5;
         if (b.y > 0.7 || b.wallRide) b.vy += pop * 0.5;
         showGameEvent('BIG BUMP!', '#ffca64');
+        rumbleCar(a, 0.5, 115); rumbleCar(b, 0.5, 115);
       } else {
         showGameEvent('BUMP!', '#d9eaff');
       }
@@ -2635,6 +2671,10 @@ function hitBall(c) {
     stat.saves++; eventCooldown['save' + index] = t + 3; showGameEvent('SAVE!', '#37f2c0');
   }
   if (closing > 5) sparks(-closing);
+  if (closing > 2.5 && (c.nextRumbleAt || 0) <= t) {
+    rumbleCar(c, Math.min(0.65, 0.12 + closing * 0.018), Math.min(170, 60 + closing * 3));
+    c.nextRumbleAt = t + 0.15;
+  }
 
   const inverseBallMass = 1 / PHYSICS_TUNING.BALL_MASS_REFERENCE;
   const inverseCarMass = 1 / PHYSICS_TUNING.CAR_MASS_REFERENCE;
