@@ -112,8 +112,8 @@
     <div class="opts"><span>Bots</span><button data-diff="0">Easy</button><button data-diff="1">Medium</button><button data-diff="2">Hard</button></div>
 
     <p>Keyboard defaults — P1: <b>W A S D</b>, jump <b>Space</b>, boost <b>Left Shift</b>, drift <b>E</b>, air roll <b>Q/E</b>. Change any binding above.</p>
-    <p>Controller defaults — steer with the <b>left stick</b>, accelerate <b>RT/R2</b>, reverse <b>LT/L2</b>, jump <b>A/✕</b>, boost <b>X/□</b>, drift <b>LB/L1</b>. Enable Local 2-player to use a second controller. Camera <b>C</b> · Mute <b>M</b> · Pause <b>P</b></p>
-    <p><b>Controller aerials:</b> Pull the left stick <b>down</b> to lift the nose, push <b>up</b> to point down. Move it left/right to yaw, or hold <b>LB/L1 + left stick</b> to air roll. Jump again with a direction to dodge.</p>
+    <p>Controller defaults — steer with the <b>left stick</b>, accelerate <b>RT/R2</b>, reverse <b>LT/L2</b>, jump <b>A/✕</b>, boost <b>X/□</b>, drift/air roll <b>LB/L1</b>, ball cam <b>Y/△</b>, and pause <b>Options/Start</b>. Enable Local 2-player to use a second controller. Keyboard camera <b>C</b> · Mute <b>M</b> · Pause <b>P</b></p>
+    <p><b>Controller aerials:</b> Pull the left stick <b>down</b> to lift the nose, push <b>up</b> to point down. Move it left/right to yaw, or hold <b>LB/L1 + left stick</b> to air roll. Jump again while moving the stick to dodge, or keep it centred for a neutral double jump. RT/R2 does not control aerial pitch.</p>
     <div class="start-actions">
       <button id="playBtn" class="play-btn" type="button">▶ PLAY MATCH</button>
       <button id="freePlayBtn" class="free-play-btn" type="button">⚽ FREE PLAY</button>
@@ -201,6 +201,7 @@
         <div class="control-bind-row"><strong>Drift / Air roll</strong><button type="button" data-bind-key="hand">E</button><button type="button" data-bind-pad="hand">Button 5 (LB / L1)</button></div>
         <div class="control-bind-row"><strong>Air roll left</strong><button type="button" data-bind-key="rollLeft">Q</button><button type="button" data-bind-pad="rollLeft">LB/L1 + stick ←</button></div>
         <div class="control-bind-row"><strong>Air roll right</strong><button type="button" data-bind-key="rollRight">E</button><button type="button" data-bind-pad="rollRight">Button 6 (RB / R1)</button></div>
+        <div class="control-bind-row"><strong>Ball camera</strong><button type="button" data-bind-key="camera">C</button><button type="button" data-bind-pad="camera">Y / △</button></div>
       </div>
     </details>
   <canvas id="mini" width="120" height="156"></canvas>
