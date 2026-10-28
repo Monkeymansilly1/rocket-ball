@@ -137,3 +137,59 @@ const lowCurve=groundSteeringCurvature(500,0);
 const highCurve=groundSteeringCurvature(2300,0);
 assert(lowCurve>highCurve*3,'Steering should have larger curvature at low speed');
 console.log('PASS: syntax, training controls, floor, walls, ball speed cap, car-ball impacts');
+
+
+// Regression: a controller's left-stick Y must independently control aerial
+// pitch and dodge while RT/R2 keeps accelerating. It previously ignored Y
+// completely, so jumping and pulling the stick down did nothing.
+{
+  const defaults = {
+    p1: {
+      keyboard: {
+        forward:'KeyW', reverse:'KeyS', left:'KeyA', right:'KeyD', jump:'Space',
+        boost:'ShiftLeft', hand:'KeyE', rollLeft:'KeyQ', rollRight:'KeyE'
+      },
+      pad: {forward:7, reverse:6, left:null, right:null, jump:0,
+        boost:2, hand:4, rollLeft:null, rollRight:5}
+    }
+  };
+  const pressed = new Set();
+  const gamepad = {
+    axes:[0,0,0,0],
+    buttons:Array.from({length:18},()=>({pressed:false,value:0}))
+  };
+  const keyStates = {};
+  const getButton = (pad, action, who) => {
+    const index=defaults[who].pad[action];
+    return Number.isInteger(index) && pad.buttons[index]?.pressed ? 1 : 0;
+  };
+  const readPlayer = new Function(
+    'controlBindings','controllerForPlayer','keys','buttonValue',
+    'controllerDeadZone','controllerSteeringSensitivity',
+    'controllerAerialSensitivity','clamp',
+    extract('playerActions')+'\nreturn playerActions;'
+  )(defaults,()=>gamepad,keyStates,getButton,.12,1,1,
+    (value,min,max)=>Math.max(min,Math.min(max,value)));
+  const read = (x,y,accelerating=false,drifting=false) => {
+    gamepad.axes[0]=x; gamepad.axes[1]=y;
+    gamepad.buttons[7].pressed=accelerating;
+    gamepad.buttons[4].pressed=drifting;
+    return readPlayer('p1');
+  };
+  const noseUp=read(0,1);
+  assert(noseUp.pitch<-.95 && noseUp.dodge[0]<-.95,
+    'Pulling left stick down must pitch nose UP / allow a backflip');
+  const noseDown=read(0,-1);
+  assert(noseDown.pitch>.95 && noseDown.dodge[0]>.95,
+    'Pushing left stick up must pitch nose DOWN / allow a front flip');
+  const boostlessThrottle=read(0,1,true);
+  assert(boostlessThrottle.throttle>.95 && boostlessThrottle.pitch<-.95,
+    'Holding RT/R2 must not cancel stick-down aerial pitch');
+  const neutral=read(0,0,true);
+  assert(Math.abs(neutral.dodge[0])<.01,
+    'RT/R2 alone must not cause an accidental front flip on double-jump');
+  const airRoll=read(-1,0,false,true);
+  assert(airRoll.roll<-.95 && Math.abs(airRoll.airYaw)<.01,
+    'LB/L1 plus left stick must control aerial roll, not yaw');
+}
+console.log('PASS: controller aerial pitch, independent throttle and analog directional dodge');
