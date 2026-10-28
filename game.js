@@ -1405,11 +1405,11 @@ const CONTROL_ACTIONS = ['forward', 'reverse', 'left', 'right', 'jump', 'boost',
 const DEFAULT_CONTROL_BINDINGS = {
   p1: {
     keyboard: { forward:'KeyW', reverse:'KeyS', left:'KeyA', right:'KeyD', jump:'Space', boost:'ShiftLeft', hand:'KeyE', rollLeft:'KeyQ', rollRight:'KeyE' },
-    pad: { forward:7, reverse:6, left:null, right:null, jump:0, boost:2, hand:4, rollLeft:4, rollRight:5 }
+    pad: { forward:7, reverse:6, left:null, right:null, jump:0, boost:2, hand:4, rollLeft:null, rollRight:5 }
   },
   p2: {
     keyboard: { forward:'ArrowUp', reverse:'ArrowDown', left:'ArrowLeft', right:'ArrowRight', jump:'Enter', boost:'ShiftRight', hand:'Slash', rollLeft:'Numpad1', rollRight:'Numpad3' },
-    pad: { forward:7, reverse:6, left:null, right:null, jump:0, boost:2, hand:4, rollLeft:4, rollRight:5 }
+    pad: { forward:7, reverse:6, left:null, right:null, jump:0, boost:2, hand:4, rollLeft:null, rollRight:5 }
   }
 };
 const controlBindings = JSON.parse(JSON.stringify(DEFAULT_CONTROL_BINDINGS));
@@ -1494,9 +1494,12 @@ document.querySelectorAll('[data-bind-key]').forEach(button => {
   });
   document.querySelectorAll('[data-bind-pad]').forEach(button => {
     const action = button.dataset.bindPad;
-    const defaults = { forward:'RT / R2', reverse:'LT / L2', left:'Left stick ←', right:'Left stick →' };
+    const defaults = { forward:'RT / R2', reverse:'LT / L2', left:'Left stick ←', right:'Left stick →', rollLeft:'LB/L1 + stick ←' };
     button.textContent = pendingPadCapture === action ? 'Press a button…' :
-      (binding.pad[action] === null || binding.pad[action] === undefined ? (defaults[action] || 'Not set') : padButtonLabel(binding.pad[action]));
+      (action === 'rollLeft' && binding.pad.rollLeft === binding.pad.hand ?
+        'LB/L1 + stick ←' :
+        (binding.pad[action] === null || binding.pad[action] === undefined ?
+          (defaults[action] || 'Not set') : padButtonLabel(binding.pad[action])));
     button.classList.toggle('capture-active', pendingPadCapture === action);
   });
 }
@@ -1825,21 +1828,39 @@ function playerActions(who) {
   const padReverse = buttonValue(pad, 'reverse', who);
   const padLeft = buttonValue(pad, 'left', who);
   const padRight = buttonValue(pad, 'right', who);
-  let axisX = 0;
-  if (pad && pad.axes && Number.isFinite(pad.axes[0])) {
-    const raw = pad.axes[0], dead = controllerDeadZone;
-    axisX = Math.abs(raw) < dead ? 0 : Math.sign(raw) * (Math.abs(raw) - dead) / (1 - dead);
-  }
+  // Gamepad API: left stick X = steering / airborne yaw, Y = airborne pitch.
+  // Triggers accelerate and reverse independently. Do not use the triggers to
+  // pitch the car: Rocket League uses the left stick for this in the air.
+  const stick = raw => {
+    if (!Number.isFinite(raw)) return 0;
+    const value = clamp(raw, -1, 1), magnitude = Math.abs(value);
+    return magnitude <= controllerDeadZone ? 0 :
+      Math.sign(value) * (magnitude - controllerDeadZone) / (1 - controllerDeadZone);
+  };
+  const axisX = pad && pad.axes ? stick(pad.axes[0]) : 0;
+  const axisY = pad && pad.axes ? stick(pad.axes[1]) : 0;
+  const airRollModifier = buttonValue(pad, 'hand', who) > 0.55;
+  // Legacy defaults used the same LB button for both drift and left air roll.
+  // Treat LB as an air-roll modifier rather than continuously spinning left.
+  const leftRollIsShared = controlBindings[who].pad.rollLeft === controlBindings[who].pad.hand;
+  const leftRollPressed = !leftRollIsShared && buttonValue(pad, 'rollLeft', who) > 0.55;
+  const rightRollPressed = buttonValue(pad, 'rollRight', who) > 0.55;
+  const steer = clamp(keyRight - keyLeft + axisX + padRight - padLeft, -1, 1);
   const jumpButton = buttonValue(pad, 'jump', who) > 0.55;
   return {
-    throttle: Math.max(-1, Math.min(1, keyForward - keyReverse + padForward - padReverse)),
-    steer: Math.max(-1, Math.min(1, keyRight - keyLeft + axisX + padRight - padLeft)),
-    roll: (keys[binding.rollRight] ? 1 : 0) - (keys[binding.rollLeft] ? 1 : 0) +
-      (buttonValue(pad, 'rollRight', who) > 0.55 ? 1 : 0) -
-      (buttonValue(pad, 'rollLeft', who) > 0.55 ? 1 : 0),
+    throttle: clamp(keyForward - keyReverse + padForward - padReverse, -1, 1),
+    steer,
+    // W / up pitches the nose down; S / stick down pitches the nose up.
+    // Pulling the left stick back also gives a backward directional dodge.
+    pitch: clamp(keyForward - keyReverse - axisY, -1, 1),
+    airYaw: airRollModifier ? clamp(keyRight - keyLeft + padRight - padLeft, -1, 1) : steer,
+    // Hold LB/L1 + move left stick horizontally to air roll. RB/R1 also rolls right.
+    roll: clamp((keys[binding.rollRight] ? 1 : 0) - (keys[binding.rollLeft] ? 1 : 0) +
+      (rightRollPressed ? 1 : 0) - (leftRollPressed ? 1 : 0) +
+      (airRollModifier ? axisX : 0), -1, 1),
     jumpHeld: !!keys[binding.jump] || jumpButton,
     jump: false,
-    hand: !!keys[binding.hand] || buttonValue(pad, 'hand', who) > 0.55,
+    hand: !!keys[binding.hand] || airRollModifier,
     boost: !!keys[binding.boost] || buttonValue(pad, 'boost', who) > 0.55
   };
 }
@@ -1995,8 +2016,8 @@ function aerialControl(c, ct, dt) {
   // Rocket League's axis-specific angular torque/damping, measured by the
   // RocketSim/RLGym community. These are acceleration equations, NOT an
   // "rotate towards desired angle" animation. No input = momentum decays.
-  const pitchIn = clamp(ct.throttle || 0,-1,1);
-  const yawIn = -clamp(ct.steer || 0,-1,1);
+  const pitchIn = clamp(Number.isFinite(ct.pitch) ? ct.pitch : (ct.throttle || 0), -1, 1);
+  const yawIn = -clamp(Number.isFinite(ct.airYaw) ? ct.airYaw : (ct.steer || 0), -1, 1);
   const rollIn = clamp(ct.roll || 0,-1,1);
   omega.pitch += (12.146*pitchIn - 2.798*omega.pitch) * dt;
   omega.yaw += (8.920*yawIn - 1.886*omega.yaw) * dt;
@@ -2264,7 +2285,7 @@ function stepCar(c, ct, dt) {
       c.hold = PHYSICS_TUNING.JUMP_HOLD_DURATION; c.y += 0.08;
     } else if (c.jumps === 1 && c.jt < PHYSICS_TUNING.DOUBLE_JUMP_WINDOW) {
       c.jumps = 2;
-      const f = ct.dodge ? ct.dodge[0] : ct.throttle, s = ct.dodge ? ct.dodge[1] : ct.steer;
+      const f = ct.dodge ? ct.dodge[0] : (Number.isFinite(ct.pitch) ? ct.pitch : ct.throttle), s = ct.dodge ? ct.dodge[1] : ct.steer;
       if (Math.abs(f)+Math.abs(s) > 0.1) {
         const dir=Math.hypot(f,s);
         const nose=getCarForward(c);
