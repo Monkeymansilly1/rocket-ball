@@ -57,7 +57,8 @@ const TEAM_COLOR_PRESETS = {
   'high-contrast': { blue: 0x00a6ff, orange: 0xff3b30 }
 };
 let BLUE = 0x2fb8ff, ORANGE = 0xff8a1f;
-let gameVolume = 0.75, colourVisionMode = 'normal', controllerDeadZone = 0.16;
+let gameVolume = 0.75, colourVisionMode = 'normal', controllerDeadZone = 0.12;
+let controllerSteeringSensitivity = 1.25, controllerAerialSensitivity = 1.35;
 let graphicsQuality = 'balanced';
 const cameraSettings = { fov: 105, distance: 8, height: 3.5, stiffness: 10, shake: false };
 try {
@@ -65,6 +66,8 @@ try {
   if (Number.isFinite(savedSettings.volume)) gameVolume = Math.max(0, Math.min(1, savedSettings.volume));
   if (['low', 'balanced', 'high'].includes(savedSettings.graphicsQuality)) graphicsQuality = savedSettings.graphicsQuality;
   if (Number.isFinite(savedSettings.deadZone)) controllerDeadZone = Math.max(0.05, Math.min(0.4, savedSettings.deadZone));
+  if (Number.isFinite(savedSettings.steeringSensitivity)) controllerSteeringSensitivity = Math.max(1, Math.min(2.5, savedSettings.steeringSensitivity));
+  if (Number.isFinite(savedSettings.aerialSensitivity)) controllerAerialSensitivity = Math.max(1, Math.min(2.5, savedSettings.aerialSensitivity));
   if (savedSettings.camera && typeof savedSettings.camera === 'object') {
     for (const key of ['fov', 'distance', 'height', 'stiffness']) {
       if (Number.isFinite(savedSettings.camera[key])) cameraSettings[key] = savedSettings.camera[key];
@@ -1693,7 +1696,9 @@ function hexCss(hex) { return '#' + Number(hex).toString(16).padStart(6, '0'); }
 function saveGeneralSettings() {
   try {
     localStorage.setItem('rocketArenaSettingsV1', JSON.stringify({
-      volume: gameVolume, colourVisionMode, deadZone: controllerDeadZone, camera: cameraSettings, graphicsQuality
+      volume: gameVolume, colourVisionMode, deadZone: controllerDeadZone,
+      steeringSensitivity: controllerSteeringSensitivity, aerialSensitivity: controllerAerialSensitivity,
+      camera: cameraSettings, graphicsQuality
     }));
   } catch (_) {}
 }
@@ -1753,6 +1758,24 @@ if (deadZoneSetting) {
   deadZoneSetting.addEventListener('input', () => {
     controllerDeadZone = clamp(Number(deadZoneSetting.value) || 0.16, 0.05, 0.4);
     if (deadZoneSettingValue) deadZoneSettingValue.value = Math.round(controllerDeadZone * 100) + '%';
+    saveGeneralSettings();
+  });
+}
+// Separate stick sensitivity sliders match Rocket League's controller options.
+for (const [name, id, out] of [
+  ['steering', 'settingSteeringSensitivity', 'settingSteeringSensitivityValue'],
+  ['aerial', 'settingAerialSensitivity', 'settingAerialSensitivityValue']
+]) {
+  const input = $(id), output = $(out);
+  if (!input) continue;
+  const getValue = () => name === 'steering' ? controllerSteeringSensitivity : controllerAerialSensitivity;
+  input.value = String(getValue());
+  if (output) output.value = getValue().toFixed(2) + '×';
+  input.addEventListener('input', () => {
+    const sensitivity = clamp(Number(input.value) || 1, 1, 2.5);
+    if (name === 'steering') controllerSteeringSensitivity = sensitivity;
+    else controllerAerialSensitivity = sensitivity;
+    if (output) output.value = sensitivity.toFixed(2) + '×';
     saveGeneralSettings();
   });
 }
@@ -1868,8 +1891,11 @@ function playerActions(who) {
     return magnitude <= controllerDeadZone ? 0 :
       Math.sign(value) * (magnitude - controllerDeadZone) / (1 - controllerDeadZone);
   };
-  const axisX = pad && pad.axes ? stick(pad.axes[0]) : 0;
-  const axisY = pad && pad.axes ? stick(pad.axes[1]) : 0;
+  const rawAxisX = pad && pad.axes ? stick(pad.axes[0]) : 0;
+  const rawAxisY = pad && pad.axes ? stick(pad.axes[1]) : 0;
+  const axisX = clamp(rawAxisX * controllerSteeringSensitivity, -1, 1);
+  const airAxisX = clamp(rawAxisX * controllerAerialSensitivity, -1, 1);
+  const airAxisY = clamp(rawAxisY * controllerAerialSensitivity, -1, 1);
   const airRollModifier = buttonValue(pad, 'hand', who) > 0.55;
   // Legacy defaults used the same LB button for both drift and left air roll.
   // Treat LB as an air-roll modifier rather than continuously spinning left.
@@ -1883,14 +1909,14 @@ function playerActions(who) {
     steer,
     // W / up pitches the nose down; S / stick down pitches the nose up.
     // Pulling the left stick back also gives a backward directional dodge.
-    pitch: clamp(keyForward - keyReverse - axisY, -1, 1),
+    pitch: clamp(keyForward - keyReverse - airAxisY, -1, 1),
     // Neutral stick + RT + double-jump stays neutral; the left stick chooses flips.
-    dodge: [clamp(keyForward - keyReverse - axisY, -1, 1), steer],
-    airYaw: airRollModifier ? clamp(keyRight - keyLeft + padRight - padLeft, -1, 1) : steer,
+    dodge: [clamp(keyForward - keyReverse - rawAxisY, -1, 1), clamp(keyRight - keyLeft + rawAxisX + padRight - padLeft, -1, 1)],
+    airYaw: clamp(keyRight - keyLeft + (airRollModifier ? 0 : airAxisX) + padRight - padLeft, -1, 1),
     // Hold LB/L1 + move left stick horizontally to air roll. RB/R1 also rolls right.
     roll: clamp((keys[binding.rollRight] ? 1 : 0) - (keys[binding.rollLeft] ? 1 : 0) +
       (rightRollPressed ? 1 : 0) - (leftRollPressed ? 1 : 0) +
-      (airRollModifier ? axisX : 0), -1, 1),
+      (airRollModifier ? airAxisX : 0), -1, 1),
     jumpHeld: !!keys[binding.jump] || jumpButton,
     jump: false,
     hand: !!keys[binding.hand] || airRollModifier,
