@@ -3155,6 +3155,24 @@ function updateCam(dt, carIndex = 0, targetCamera = camera, camState = cam) {
     const length = Math.hypot(awayX, awayZ);
     if (length > 0.6) { backX = awayX / length; backZ = awayZ / length; }
   }
+  // Standard controller right stick: look around without steering the car.
+  // Release the stick to smoothly return to ball cam or the chase camera.
+  const lookingPad = controllerForPlayer(localTwoPlayer && carIndex === mode ? 'p2' : 'p1');
+  const lookStick = raw => {
+    if (!Number.isFinite(raw)) return 0;
+    const magnitude = Math.abs(clamp(raw, -1, 1));
+    return magnitude <= controllerDeadZone ? 0 :
+      Math.sign(raw) * (magnitude - controllerDeadZone) / (1 - controllerDeadZone);
+  };
+  const swivelX = lookingPad && lookingPad.axes ? lookStick(lookingPad.axes[2]) : 0;
+  const swivelY = lookingPad && lookingPad.axes ? lookStick(lookingPad.axes[3]) : 0;
+  const lookingAround = Math.abs(swivelX) > 0.06 || Math.abs(swivelY) > 0.06;
+  if (lookingAround && Math.abs(swivelX) > 0.02) {
+    const turn = swivelX * 1.25, cos = Math.cos(turn), sin = Math.sin(turn);
+    const oldX = backX, oldZ = backZ;
+    backX = oldX * cos + oldZ * sin;
+    backZ = oldZ * cos - oldX * sin;
+  }
   const k = 1 - Math.exp(-cameraSettings.stiffness * dt);
   let tx = clamp(car.x + backX * cameraSettings.distance, -HW + 2, HW - 2);
   let tz = clamp(car.z + backZ * cameraSettings.distance, -HL + 2, HL - 2);
@@ -3178,9 +3196,12 @@ function updateCam(dt, carIndex = 0, targetCamera = camera, camState = cam) {
   camState.x += (tx - camState.x) * k;
   camState.y += (ty - camState.y) * k;
   camState.z += (tz - camState.z) * k;
-  const lookX = ballCam ? ball.x : car.x - backX * 9;
-  const lookY = ballCam ? ball.y : car.y + (wallView ? 4.0 : 1.0);
-  const lookZ = ballCam ? ball.z : car.z - backZ * 9;
+  // Temporary right-stick look overrides the ball target; normal ball cam
+  // returns as soon as the right stick is released.
+  const trackBall = ballCam && !lookingAround;
+  const lookX = trackBall ? ball.x : car.x - backX * 9;
+  const lookY = trackBall ? ball.y : car.y + (wallView ? 4.0 : 1.0) - swivelY * 3.2;
+  const lookZ = trackBall ? ball.z : car.z - backZ * 9;
   camState.lx += (lookX - camState.lx) * k;
   camState.ly += (lookY - camState.ly) * k;
   camState.lz += (lookZ - camState.lz) * k;
