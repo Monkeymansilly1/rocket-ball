@@ -1448,6 +1448,23 @@ function padButtonLabel(index) {
 function renderControlBindings() {
   const who = activeControlPlayer(), binding = controlBindings[who];
   
+document.querySelectorAll('[data-bind-key]').forEach(button => {
+    const action = button.dataset.bindKey;
+    button.textContent = pendingKeyCapture === action ? 'Press a key…' : keyLabel(binding.keyboard[action]);
+    button.classList.toggle('capture-active', pendingKeyCapture === action);
+  });
+  document.querySelectorAll('[data-bind-pad]').forEach(button => {
+    const action = button.dataset.bindPad;
+    const defaults = { forward:'RT / R2', reverse:'LT / L2', left:'Left stick ←', right:'Left stick →', rollLeft:'LB/L1 + stick ←' };
+    button.textContent = pendingPadCapture === action ? 'Press a button…' :
+      (action === 'rollLeft' && binding.pad.rollLeft === binding.pad.hand ?
+        'LB/L1 + stick ←' :
+        (binding.pad[action] === null || binding.pad[action] === undefined ?
+          (defaults[action] || 'Not set') : padButtonLabel(binding.pad[action])));
+    button.classList.toggle('capture-active', pendingPadCapture === action);
+  });
+}
+
 /* Corner HUD controls inspired by modern car-soccer interfaces. */
 const garageToggle = $('garageToggle');
 if (garageToggle) garageToggle.addEventListener('click', () => {
@@ -1487,22 +1504,7 @@ if (skipReplayButton) skipReplayButton.addEventListener('click', () => {
   if (state === 'replay') replayIndex = Math.max(0, replayFrames.length - 1);
 });
 
-document.querySelectorAll('[data-bind-key]').forEach(button => {
-    const action = button.dataset.bindKey;
-    button.textContent = pendingKeyCapture === action ? 'Press a key…' : keyLabel(binding.keyboard[action]);
-    button.classList.toggle('capture-active', pendingKeyCapture === action);
-  });
-  document.querySelectorAll('[data-bind-pad]').forEach(button => {
-    const action = button.dataset.bindPad;
-    const defaults = { forward:'RT / R2', reverse:'LT / L2', left:'Left stick ←', right:'Left stick →', rollLeft:'LB/L1 + stick ←' };
-    button.textContent = pendingPadCapture === action ? 'Press a button…' :
-      (action === 'rollLeft' && binding.pad.rollLeft === binding.pad.hand ?
-        'LB/L1 + stick ←' :
-        (binding.pad[action] === null || binding.pad[action] === undefined ?
-          (defaults[action] || 'Not set') : padButtonLabel(binding.pad[action])));
-    button.classList.toggle('capture-active', pendingPadCapture === action);
-  });
-}
+
 function setControllerStatus(message) {
   const node = $('controllerStatus');
   if (node) node.textContent = message;
@@ -3223,7 +3225,7 @@ function render(dt) {
     ' ' + (b * 3.6) + 'deg, rgba(12,29,59,.65) ' + (b * 3.6) + 'deg)';
   const p2 = cars[mode];
   const bf2 = $('bf2'), bt2 = $('bt2');
-  if (bf2 && bt2) { const b2 = p2 ? p2.boost : 0; bf2.style.width = (2.1 * b2) + 'px'; bt2.textContent = Math.round(b2); bf2.style.background = b2 > 66 ? '#ffd35a' : '#ff8a1f'; }
+  if (bf2 && bt2) { const b2 = p2 ? p2.boost : 0; bf2.style.width = Math.round(clamp(b2, 0, 100)) + '%'; bt2.textContent = Math.round(b2); bf2.style.background = b2 > 66 ? '#ffd35a' : '#ff8a1f'; }
   const pHUD = $('player'); if (pHUD) pHUD.textContent = playerName;
   const p2Tag = $('p2Tag'); if (p2Tag) p2Tag.textContent = player2Name.toUpperCase();
   if (splitActive) {
