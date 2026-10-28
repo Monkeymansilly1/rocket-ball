@@ -635,3 +635,14 @@ body.split-screen #boost2 {
   body.split-screen #bt { top: 16px; font-size: 19px; }
   body.split-screen #boost::after { top: 45px; font-size: 7px; }
 }
+
+/* Controller-friendly compact boost gauge, away from the centre of play. */
+#boost { width:106px!important; height:106px!important; right:18px!important; bottom:104px!important; border-width:3px!important; }
+#bt { top:25px!important; font-size:25px!important; }
+#boost::after { top:62px!important; font-size:10px!important; }
+#bf { left:10%!important; top:10%!important; width:80%!important; height:80%!important; }
+@media(max-width:850px) {
+  #boost { width:84px!important; height:84px!important; right:10px!important; bottom:85px!important; }
+  #bt { top:17px!important; font-size:20px!important; }
+  #boost::after { top:49px!important; font-size:8px!important; }
+}
