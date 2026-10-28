@@ -113,7 +113,7 @@
 
     <p>Keyboard defaults — P1: <b>W A S D</b>, jump <b>Space</b>, boost <b>Left Shift</b>, drift <b>E</b>, air roll <b>Q/E</b>. Change any binding above.</p>
     <p>Controller defaults — steer with the <b>left stick</b>, accelerate <b>RT/R2</b>, reverse <b>LT/L2</b>, jump <b>A/✕</b>, boost <b>X/□</b>, drift <b>LB/L1</b>. Enable Local 2-player to use a second controller. Camera <b>C</b> · Mute <b>M</b> · Pause <b>P</b></p>
-    <p>In the air, steer and tilt to line up aerials. Press jump again with a direction to flip.</p>
+    <p><b>Controller aerials:</b> Pull the left stick <b>down</b> to lift the nose, push <b>up</b> to point down. Move it left/right to yaw, or hold <b>LB/L1 + left stick</b> to air roll. Jump again with a direction to dodge.</p>
     <div class="start-actions">
       <button id="playBtn" class="play-btn" type="button">▶ PLAY MATCH</button>
       <button id="freePlayBtn" class="free-play-btn" type="button">⚽ FREE PLAY</button>
@@ -190,7 +190,7 @@
           <button id="resetControls" type="button">Reset defaults</button>
         </div>
         <div id="controllerStatus" role="status" aria-live="polite">Searching for controller…</div>
-        <p class="controls-tip">Connect a controller before starting. Keyboard and controller can both be used. Click a binding, then press the key or controller button you want.</p>
+        <p class="controls-tip">Connect a controller before starting. Left stick moves the car on the ground, and pitches/yaws the car in the air. Hold LB/L1 and move the stick sideways for air roll; triggers accelerate/reverse. Select a binding to remap its button.</p>
         <div class="control-bind-head"><span>Action</span><span>Keyboard</span><span>Controller</span></div>
         <div class="control-bind-row"><strong>Accelerate</strong><button type="button" data-bind-key="forward">W</button><button type="button" data-bind-pad="forward">Left stick ↑</button></div>
         <div class="control-bind-row"><strong>Reverse</strong><button type="button" data-bind-key="reverse">S</button><button type="button" data-bind-pad="reverse">Left stick ↓</button></div>
@@ -199,7 +199,7 @@
         <div class="control-bind-row"><strong>Jump / Dodge</strong><button type="button" data-bind-key="jump">Space</button><button type="button" data-bind-pad="jump">Button 1 (A / ✕)</button></div>
         <div class="control-bind-row"><strong>Boost</strong><button type="button" data-bind-key="boost">Left Shift</button><button type="button" data-bind-pad="boost">Button 3 (X / □)</button></div>
         <div class="control-bind-row"><strong>Drift / Air roll</strong><button type="button" data-bind-key="hand">E</button><button type="button" data-bind-pad="hand">Button 5 (LB / L1)</button></div>
-        <div class="control-bind-row"><strong>Air roll left</strong><button type="button" data-bind-key="rollLeft">Q</button><button type="button" data-bind-pad="rollLeft">Button 5 (LB / L1)</button></div>
+        <div class="control-bind-row"><strong>Air roll left</strong><button type="button" data-bind-key="rollLeft">Q</button><button type="button" data-bind-pad="rollLeft">LB/L1 + stick ←</button></div>
         <div class="control-bind-row"><strong>Air roll right</strong><button type="button" data-bind-key="rollRight">E</button><button type="button" data-bind-pad="rollRight">Button 6 (RB / R1)</button></div>
       </div>
     </details>
