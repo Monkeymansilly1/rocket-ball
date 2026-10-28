@@ -55,7 +55,7 @@ const bootstrap = [
   'const trainingMode=false; const updateTrainingCounters=()=>{};',
   'const playerStats=[{goals:0,assists:0,shots:0,saves:0,clears:0}];',
   'const cars=[]; const eventCooldown={}; const t=0,state="play";',
-  'const showGameEvent=()=>{},sparks=()=>{};',
+  'const showGameEvent=()=>{},sparks=()=>{},rumbleCar=()=>{};',
   'const goal=()=>{throw Error("Unexpected goal in physics test")};',
   'const rampEase=t=>t*t*(3-2*t);'
 ].join('\n') + '\n' + functions + '\nreturn {ball,stepBall,hitBall,resolveBallWall,arenaRampAt,getCarForward,aerialControl,applyDirectionalBoost,stepGroundForward,groundSteeringCurvature,cars};';
