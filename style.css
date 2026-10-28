@@ -568,3 +568,70 @@ body.free-play #boost #bt { font-size:30px; }
   letter-spacing:.045em;
 }
 .settings-preset-button:hover { filter:brightness(1.15); }
+
+/* Controller gameplay HUD: keep the pitch and ball in view.
+   The old 164px circular boost and 190px Play button covered too much of
+   the bottom-right corner during live matches. */
+#boost {
+  right: 17px;
+  bottom: 17px;
+  width: 94px;
+  height: 94px;
+  border: 3px solid #081933;
+  border-radius: 50%;
+  box-shadow: 0 5px 16px #0007;
+  background: radial-gradient(circle, #112f5f 0 60%, #d7e8ff 63% 71%, #0b2247 73%);
+  overflow: hidden;
+}
+#bf {
+  left: 8%;
+  top: 8%;
+  width: 84%;
+  height: 84%;
+  border-radius: 50%;
+  -webkit-mask-image: radial-gradient(circle, transparent 0 57%, #000 60% 100%);
+  mask-image: radial-gradient(circle, transparent 0 57%, #000 60% 100%);
+}
+#bt {
+  top: 24px;
+  right: 0;
+  left: 0;
+  font-size: 24px;
+  line-height: 1;
+  text-align: center;
+  text-shadow: 0 1px 3px #000a;
+}
+#boost::after {
+  top: 60px;
+  font-size: 9px;
+  letter-spacing: .1em;
+}
+body:has(#menu[style*="display: none"]) #quickPlayButton {
+  display: none !important;
+}
+/* In matches the existing GARAGE button opens match setup, so a second
+   large Play button is unnecessary. The Play button inside Garage remains. */
+#skipReplayButton { right: 132px; bottom: 18px; }
+body.split-screen #boost {
+  left: 14px;
+  right: auto;
+  bottom: 15px;
+  width: 85px;
+  height: 85px;
+}
+body.split-screen #bt { top: 21px; font-size: 21px; }
+body.split-screen #boost::after { top: 55px; font-size: 8px; }
+body.split-screen #boost2 {
+  right: 14px;
+  bottom: 16px;
+  width: min(170px, 28vw);
+}
+@media (max-width: 850px) {
+  #boost { right: 9px; bottom: 9px; width: 78px; height: 78px; border-width: 2px; }
+  #bt { top: 19px; font-size: 20px; }
+  #boost::after { top: 49px; font-size: 8px; }
+  #skipReplayButton { right: 102px; bottom: 10px; }
+  body.split-screen #boost { left: 8px; bottom: 8px; width: 70px; height: 70px; }
+  body.split-screen #bt { top: 16px; font-size: 19px; }
+  body.split-screen #boost::after { top: 45px; font-size: 7px; }
+}
