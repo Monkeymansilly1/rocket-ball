@@ -2443,10 +2443,10 @@ function stepCar(c, ct, dt) {
     const noseOut = Math.sin(c.yaw) * sx;
     if (c.wallVerticalAxis === 'x') {
       c.vx = 0;
-    } else if (!ct.jump && !c.wallVerticalAxis && c.wallRide && edgeRamp.height > WALL_RAMP_HEIGHT * 0.62 && noseOut > 0.42 && outwardSpeed > 5) {
+    } else if (!ct.jump && !c.wallVerticalAxis && c.wallRide && edgeRamp.height > WALL_RAMP_HEIGHT * 0.25 && noseOut > 0.28 && outwardSpeed > 3) {
       c.wallVerticalAxis = 'x'; c.wallVerticalSign = sx;
       c.y = Math.max(c.y, edgeRamp.height + 0.55);
-      c.vy = Math.max(c.vy, Math.max(7, outwardSpeed * 0.62));
+      c.vy = Math.max(c.vy, Math.max(3, Math.min(23, outwardSpeed) * 0.6));
       c.vx = 0; c.pitch = Math.atan(edgeRamp.dx * Math.sin(c.yaw) + edgeRamp.dz * Math.cos(c.yaw)); c.roll = 0;
       c.wallRide = true;
     } else c.vx *= -0.2;
@@ -2458,18 +2458,31 @@ function stepCar(c, ct, dt) {
     const noseOut = Math.cos(c.yaw) * sz;
     if (c.wallVerticalAxis === 'z') {
       c.vz = 0;
-    } else if (!ct.jump && !c.wallVerticalAxis && c.wallRide && Math.abs(c.x) > GW + 2 && edgeRamp.height > WALL_RAMP_HEIGHT * 0.62 && noseOut > 0.42 && outwardSpeed > 5) {
+    } else if (!ct.jump && !c.wallVerticalAxis && c.wallRide && Math.abs(c.x) > GW + 2 && edgeRamp.height > WALL_RAMP_HEIGHT * 0.25 && noseOut > 0.28 && outwardSpeed > 3) {
       c.wallVerticalAxis = 'z'; c.wallVerticalSign = sz;
       c.y = Math.max(c.y, edgeRamp.height + 0.55);
-      c.vy = Math.max(c.vy, Math.max(7, outwardSpeed * 0.62));
+      c.vy = Math.max(c.vy, Math.max(3, Math.min(23, outwardSpeed) * 0.6));
       c.vz = 0; c.pitch = Math.atan(edgeRamp.dx * Math.sin(c.yaw) + edgeRamp.dz * Math.cos(c.yaw)); c.roll = 0;
       c.wallRide = true;
     } else c.vz *= -0.2;
   }
-  const ov = Math.abs(c.x) + Math.abs(c.z) - (HW + HL - CH - 2.5); // rounded corners
-  if (ov > 0) {
-    const sx = Math.sign(c.x), sz = Math.sign(c.z), vn = (c.vx * sx + c.vz * sz) * 0.7071;
-    c.x -= sx * ov / 2; c.z -= sz * ov / 2; if (vn > 0) { c.vx -= sx * vn * 0.7071 * 1.2; c.vz -= sz * vn * 0.7071 * 1.2; }
+  // A radial contact normal matches the new circular corner geometry.
+  // Preserve tangential momentum instead of reflecting through a diagonal wall.
+  const corner = arenaCornerContact(c.x,c.z,1.45);
+  if(corner){
+    c.x -= corner.nx * corner.penetration;
+    c.z -= corner.nz * corner.penetration;
+    const outward = c.vx*corner.nx + c.vz*corner.nz;
+    if(outward>0){
+      c.vx -= corner.nx*outward;
+      c.vz -= corner.nz*outward;
+    }
+    // Side-wall constraints cannot stay locked to X/Z around an arc.
+    if(c.wallVerticalAxis){
+      c.wallVerticalAxis=null;
+      c.wallVerticalSign=0;
+      c.wallRide=false;
+    }
   }
   const rampNow = arenaRampAt(c.x, c.z);
   const rampSupportY = rampNow.height + 0.55;
@@ -2867,19 +2880,18 @@ function stepBall(dt) {
     ball.onGround = false;
   }
 
-  if (az <= HL + BR) {
-    // Rounded diagonal corners. A normal impulse preserves tangential speed.
-    const edge = HW + HL - CH - BR * Math.SQRT2;
-    const over = Math.abs(ball.x) + Math.abs(ball.z) - edge;
-    if (over > 0 && Math.abs(ball.x) > HW - CH - BR && Math.abs(ball.z) > HL - CH - BR) {
-      const correction = over * 0.5;
-      ball.x -= sx * correction;
-      ball.z -= sz * correction;
-      ballSurfaceImpulse(-sx * Math.SQRT1_2, 0, -sz * Math.SQRT1_2, p.BALL_WALL_RESTITUTION);
-    }
+  // Circular corner wall collision: exact normal from the new arc, not
+  // the old 45-degree invisible diagonal that kicked balls unexpectedly.
+  const corner = arenaCornerContact(ball.x,ball.z,BR);
+  if(corner){
+    ball.x -= corner.nx*corner.penetration;
+    ball.z -= corner.nz*corner.penetration;
+    ballSurfaceImpulse(-corner.nx,0,-corner.nz,p.BALL_WALL_RESTITUTION);
+    ball.onWall=true;
   }
 
-  if (Math.abs(ball.x) > HW - BR && az <= HL + BR) {
+  if (Math.abs(ball.x) > HW - BR && az <= HL + BR &&
+      !(Math.abs(ball.x)>HW-CH && Math.abs(ball.z)>HL-CH)) {
     const sign = Math.sign(ball.x);
     ball.x = sign * (HW - BR);
     resolveBallWall('x', sign, surface);
@@ -2901,6 +2913,7 @@ function stepBall(dt) {
       ballSurfaceImpulse(0, 0, -sign, 0.4);
     }
   } else if (Math.abs(ball.z) > HL - BR &&
+      !(Math.abs(ball.x)>HW-CH && Math.abs(ball.z)>HL-CH) &&
       !(Math.abs(ball.x) < GW - BR && ball.y < GH - BR)) {
     const sign = Math.sign(ball.z);
     ball.z = sign * (HL - BR);
