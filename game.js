@@ -97,20 +97,36 @@ function rampProfile(distance, outerEdge) {
     (span * Math.sqrt(Math.max(1e-4, 1-t*t))));
   return { height, slope };
 }
-function arenaRampAt(x, z) {
-  const ax = Math.abs(x), az = Math.abs(z);
-  const side = ax > HW - WALL_RAMP_WIDTH ? rampProfile(ax, HW - 0.5) : { height: 0, slope: 0 };
-  // Keep the goal mouth open; end ramps and side ramps merge continuously in all four corners.
-  const end = ax > GW + 2 && az > HL - WALL_RAMP_WIDTH
-    ? rampProfile(az, HL - 0.5) : { height: 0, slope: 0 };
-  const a = side.height, b = end.height;
-  if (a <= 0 && b <= 0) return { height: 0, dx: 0, dz: 0, side: false };
-  // Smooth maximum: matches each straight ramp at its seam, but rounds the corner between them.
-  const height = Math.pow(a * a * a * a + b * b * b * b, 0.25);
-  const den = Math.max(1e-6, height * height * height);
-  const dx = Math.sign(x) * side.slope * a * a * a / den;
-  const dz = Math.sign(z) * end.slope * b * b * b / den;
-  return { height, dx, dz, side: a >= b };
+// A single rounded-rectangle boundary is shared by the stadium mesh and
+// collision system; no diagonal invisible corner walls.
+function arenaCornerContact(x,z,clearance) {
+  const ax=Math.abs(x), az=Math.abs(z), cx=HW-CH, cz=HL-CH;
+  if(ax<=cx||az<=cz)return null;
+  const dx=ax-cx,dz=az-cz,dist=Math.hypot(dx,dz);
+  const penetration=dist-(CH-clearance);
+  if(penetration<=0||dist<1e-6)return null;
+  return {penetration,nx:(Math.sign(x)||1)*dx/dist,nz:(Math.sign(z)||1)*dz/dist};
+}
+function arenaRampAt(x,z) {
+  const ax=Math.abs(x),az=Math.abs(z),cx=HW-CH,cz=HL-CH;
+  if(ax>cx&&az>cz) {
+    const dx=ax-cx,dz=az-cz,radius=Math.hypot(dx,dz);
+    const distanceToWall=CH-radius;
+    const profile=rampProfile(WALL_RAMP_WIDTH-distanceToWall,WALL_RAMP_WIDTH);
+    if(profile.height<=0||radius<1e-6) return {height:0,dx:0,dz:0,side:false};
+    return {height:profile.height,
+      dx:(Math.sign(x)||1)*profile.slope*dx/radius,
+      dz:(Math.sign(z)||1)*profile.slope*dz/radius,side:dx>=dz};
+  }
+  if(ax>cx) {
+    const p=rampProfile(ax,HW);
+    return {height:p.height,dx:(Math.sign(x)||1)*p.slope,dz:0,side:true};
+  }
+  if(az>cz&&ax>GW+2) {
+    const p=rampProfile(az,HL);
+    return {height:p.height,dx:0,dz:(Math.sign(z)||1)*p.slope,side:false};
+  }
+  return {height:0,dx:0,dz:0,side:false};
 }
 let pitchMesh = null, skyMesh = null, rampMeshMaterial = null;
 const wrap = a => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
@@ -218,9 +234,9 @@ function buildArena() {
   const pos = surfaceGeo.attributes.position;
   for (let i=0;i<pos.count;i++) {
     const z=pos.getZ(i);
-    // Clip the ground's four corners into the SAME octagonal perimeter as the
-    // playable walls. The boundary now meets the diagonal glass exactly.
-    const maxX=HW-Math.max(0,Math.abs(z)-(HL-CH));
+    // Quarter-circle floor edge meets the curved glass without triangular gaps.
+    const overZ=Math.max(0,Math.abs(z)-(HL-CH));
+    const maxX=overZ>0 ? HW-CH+Math.sqrt(Math.max(0,CH*CH-overZ*overZ)) : HW;
     const x=pos.getX(i)*maxX/HW;
     pos.setX(i,x);
     pos.setY(i,arenaRampAt(x,z).height);
@@ -234,7 +250,7 @@ function buildArena() {
   const concourse = new THREE.Mesh(new THREE.PlaneGeometry(2400,2400),stone);
   concourse.rotation.x = -Math.PI/2; concourse.position.y = -.28; scene.add(concourse);
 
-  const wallBottom = 9.5;
+  const wallBottom = WALL_RAMP_HEIGHT + 0.28;
   const glass = new THREE.MeshPhysicalMaterial({
     color:0xa8deef,roughness:.12,metalness:.04,transparent:true,opacity:.095,
     depthWrite:false,side:THREE.DoubleSide
@@ -271,14 +287,16 @@ function buildArena() {
     return new THREE.LineSegments(geom,hexWire[side]);
   };
   const segments=[];
-  // Every perimeter segment shares endpoints: corners are sealed physically
-  // and visually, with an actual opening through both goal mouths.
-  for(const sign of [-1,1]){
-    for(const side of [-1,1]){
-      segments.push([[side*HW,sign*(HL-CH)],[side*HW,0],sign]);
-      segments.push([[side*HW,0],[side*HW,-sign*(HL-CH)],-sign]);
-      segments.push([[side*HW,sign*(HL-CH)],[side*(HW-CH),sign*HL],sign]);
-      segments.push([[side*(GW+.4),sign*HL],[side*(HW-CH),sign*HL],sign]);
+  // Straight walls and tangent, circular corner sections share exact endpoints.
+  // Goal mouths remain open between the two end-wall segments.
+  const cornerSlices=10;
+  for(const sign of [-1,1])for(const side of [-1,1]){
+    segments.push([[side*HW,0],[side*HW,sign*(HL-CH)],sign]);
+    segments.push([[side*(GW+.4),sign*HL],[side*(HW-CH),sign*HL],sign]);
+    for(let i=0;i<cornerSlices;i++){
+      const a=i/cornerSlices*Math.PI/2,b=(i+1)/cornerSlices*Math.PI/2;
+      const point=t=>[side*(HW-CH+CH*Math.cos(t)),sign*(HL-CH+CH*Math.sin(t))];
+      segments.push([point(a),point(b),sign]);
     }
   }
   // Remove mirrored duplicate half-wall sections while preserving geometry.
@@ -294,13 +312,15 @@ function buildArena() {
       const o=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);
       o.position.y=y;wallGroup.add(o);return o;
     };
-    makeBox(length,wallBottom,.42,wallBottom/2,barrier);
-    const upper=new THREE.Mesh(new THREE.PlaneGeometry(length,CEIL-wallBottom),glass);
+    // Overlap adjacent curved sections slightly to avoid light-leaking seams.
+    const sealedLength=length+0.18;
+    makeBox(sealedLength,wallBottom,.42,wallBottom/2,barrier);
+    const upper=new THREE.Mesh(new THREE.PlaneGeometry(sealedLength,CEIL-wallBottom),glass);
     upper.position.y=wallBottom+(CEIL-wallBottom)/2;wallGroup.add(upper);
-    wallGroup.add(hexPanels(length,CEIL-wallBottom,side));
-    makeBox(length,.8,.7,.4,trim);
-    makeBox(length,.34,.7,wallBottom,rail[side]);
-    makeBox(length,.3,.7,CEIL,trim);
+    if(length>7)wallGroup.add(hexPanels(length,CEIL-wallBottom,side));
+    makeBox(sealedLength,.8,.7,.4,trim);
+    makeBox(sealedLength,.34,.7,wallBottom,rail[side]);
+    makeBox(sealedLength,.3,.7,CEIL,trim);
     const slats=Math.max(1,Math.round(length/11));
     for(let i=1;i<slats;i++){
       const bar=makeBox(.28,CEIL-wallBottom,.45,(CEIL+wallBottom)/2,trim);
@@ -387,12 +407,16 @@ function buildArena() {
     }
   }
   // Transparent upper enclosure rim under the coliseum seating.
-  const borderPoints=[
-    [HW-CH,HL],[HW,HL-CH],[HW,-HL+CH],[HW-CH,-HL],
-    [-HW+CH,-HL],[-HW,-HL+CH],[-HW,HL-CH],[-HW+CH,HL]
+  const borderPoints=[];
+  const corners=[
+    [HW-CH,HL-CH,0],[-HW+CH,HL-CH,Math.PI/2],
+    [-HW+CH,-HL+CH,Math.PI],[HW-CH,-HL+CH,Math.PI*1.5]
   ];
-  const rim=new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(
-    borderPoints.map(p=>new THREE.Vector3(p[0],CEIL,p[1]))),
+  for(const [cx,cz,angle] of corners)for(let i=0;i<=10;i++){
+    const a=angle+(i/10)*Math.PI/2;
+    borderPoints.push(new THREE.Vector3(cx+CH*Math.cos(a),CEIL,cz+CH*Math.sin(a)));
+  }
+  const rim=new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(borderPoints),
     new THREE.LineBasicMaterial({color:0xc5dfff,transparent:true,opacity:.38}));
   scene.add(rim);
 }
@@ -401,14 +425,15 @@ function buildStadium() {
   // The bowl sits OUTSIDE the glass playable enclosure. Stadium structure is
   // decorative only and cannot cause rogue collisions or interrupt wall riding.
   const stadium = new THREE.Group();
-  stadium.name='Coliseum Stadium';
+  stadium.name='Rocket Ball Championship Arena';
   scene.add(stadium);
-  const stone = new THREE.MeshStandardMaterial({color:0xd3c6ae,roughness:.84,metalness:.06});
-  const oldStone = new THREE.MeshStandardMaterial({color:0x938c82,roughness:.9});
-  const ivory = new THREE.MeshStandardMaterial({color:0xe9d9ba,roughness:.76});
-  const dark = new THREE.MeshStandardMaterial({color:0x132338,metalness:.36,roughness:.53});
-  const gold = new THREE.MeshBasicMaterial({color:0xffd48c});
-  const roofTrim = new THREE.MeshStandardMaterial({color:0xc7b69b,metalness:.2,roughness:.73});
+  // Metallic arena gantries replace the sandstone-coloured structures.
+  const stone = new THREE.MeshStandardMaterial({color:0x2a4158,roughness:.51,metalness:.56});
+  const oldStone = new THREE.MeshStandardMaterial({color:0x263745,roughness:.68,metalness:.42});
+  const ivory = new THREE.MeshStandardMaterial({color:0xb7d9e9,roughness:.33,metalness:.65});
+  const dark = new THREE.MeshStandardMaterial({color:0x101f36,metalness:.58,roughness:.44});
+  const gold = new THREE.MeshBasicMaterial({color:0xffe2a3});
+  const roofTrim = new THREE.MeshStandardMaterial({color:0x5a829e,metalness:.75,roughness:.34});
   const blueCloth = new THREE.MeshStandardMaterial({
     color:0x125bb6,roughness:.88,side:THREE.DoubleSide
   });
