@@ -2856,7 +2856,9 @@ function resolveBallWall(axis, sign, rampSurfaceY) {
   // At the lip, the rounded ramp has ALREADY converted most outward
   // velocity to upward motion. Do not require a large remaining outward speed
   // or inject another vertical "pop" every frame.
-  if (atWallLip && outward > 1.1 && ball.vy > 1.5) {
+  // A fast outward ball at the lip can roll upward even when its initial
+  // vertical velocity is small. Avoid popping genuinely falling wall hits.
+  if (atWallLip && outward > 1.1 && ball.vy > -0.5) {
     ball.vy = Math.max(ball.vy, Math.hypot(outward, ball.vy) * 0.93);
     if (axis === 'x') ball.vx = 0;
     else ball.vz = 0;
