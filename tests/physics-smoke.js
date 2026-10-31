@@ -35,7 +35,7 @@ function extract(name) {
   throw Error('Incomplete function ' + name);
 }
 const functions = [
-  extract('rampProfile'), extract('arenaRampAt'),
+  extract('rampProfile'), extract('arenaCornerContact'), extract('arenaRampAt'),
   extract('getCarOrientation'), extract('getCarForward'),
   extract('aerialControl'), extract('applyDirectionalBoost'),
   extract('groundThrottleAcceleration'), extract('stepGroundForward'),
