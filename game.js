@@ -2371,7 +2371,7 @@ function stepCar(c, ct, dt) {
     const turn=steer*Math.min(5.5,yawRate)*(vf>=0?1:-1)*dt;
     c.surfaceForward.applyAxisAngle(normal,turn).normalize();
     const frame=updateCarSurfaceFrame(c,normal);
-    const v=frame.forward.multiplyScalar(vf).addScaledVector(frame.right,vs);
+    const v=frame.forward.clone().multiplyScalar(vf).addScaledVector(frame.right,vs);
     c.vx=v.x;c.vy=v.y;c.vz=v.z;
   } else {
     const gravityScale = physicsStyle === 'floaty' ? 0.72 : physicsStyle === 'heavy' ? 1.2 : 1;
@@ -2464,7 +2464,7 @@ function stepCar(c, ct, dt) {
     if(after){
       snapCarToContact(c,after);
       const frame=updateCarSurfaceFrame(c,after.normal);
-      const aligned=frame.forward.multiplyScalar(previousForwardSpeed)
+      const aligned=frame.forward.clone().multiplyScalar(previousForwardSpeed)
         .addScaledVector(frame.right,previousSideSpeed);
       c.vx=aligned.x;c.vy=aligned.y;c.vz=aligned.z;
       c.ground=true;c.wallRide=after.kind!=='floor';
