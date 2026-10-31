@@ -1093,7 +1093,7 @@ const SKILL = [
 function mkCar(team, k, ai, modelName) {
   const model = modelName || CAR_MODELS[(k) % CAR_MODELS.length].name;
   const col = new THREE.Color(!ai && k === 0 ? (team ? player2Paint : playerPaint) : (team ? ORANGE : BLUE)).offsetHSL(0, 0, -0.09 * k);
-  const car = { team, k, x: 0, y: 0.55, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, pitch: 0, roll: 0, airQuat: null, airOmega: null, wallRide: false, wallVerticalAxis: null, wallVerticalSign: 0, ai, aiCd: 0, boost: 34, jumps: 0, jt: 0, flip: 0, fx: 0, fz: 0, fl: 0, ground: true, demoTimer: 0, demoCooldown: 0, boostImpactTimer: 0 };
+  const car = { team, k, x: 0, y: 0.55, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, pitch: 0, roll: 0, airQuat: null, airOmega: null, surfaceQuat: null, surfaceNormal: null, surfaceForward: null, wallRide: false, wallVerticalAxis: null, wallVerticalSign: 0, ai, aiCd: 0, boost: 34, jumps: 0, jt: 0, flip: 0, fx: 0, fz: 0, fl: 0, ground: true, demoTimer: 0, demoCooldown: 0, boostImpactTimer: 0 };
   car.mesh = carMesh(col, model);
   car.model = model;
   car.displayName = ai ? (team ? 'ORANGE BOT ' : 'BLUE BOT ') + (k + 1) : playerName;
@@ -1179,7 +1179,7 @@ function kickoff() {
   lastTouch = null;
   for (const c of cars) {
     const f = FORM[c.k], s = c.team ? 1 : -1;
-    Object.assign(c, { x: f[0] * (c.team ? -1 : 1), y: 0.55, z: s * f[1] * HL, vx: 0, vy: 0, vz: 0, yaw: c.team ? Math.PI : 0, pitch: 0, roll: 0, airQuat: null, airOmega: null, flipAxis:null, wallDetachTimer: 0, wallRide: false, wallVerticalAxis: null, wallVerticalSign: 0, boost: 34, jumps: 0, jt: 0, flip: 0, fl: 0, ground: true, aiCd: 0, wait: SKILL[diff].wait });
+    Object.assign(c, { x: f[0] * (c.team ? -1 : 1), y: 0.55, z: s * f[1] * HL, vx: 0, vy: 0, vz: 0, yaw: c.team ? Math.PI : 0, pitch: 0, roll: 0, airQuat: null, airOmega: null, surfaceQuat:null, surfaceNormal:null, surfaceForward:null, flipAxis:null, wallDetachTimer: 0, wallRide: false, wallVerticalAxis: null, wallVerticalSign: 0, boost: 34, jumps: 0, jt: 0, flip: 0, fl: 0, ground: true, aiCd: 0, wait: SKILL[diff].wait });
   }
 }
 function start(freePlay = false) {
@@ -1241,7 +1241,7 @@ function resetTrainingCar() {
     yaw: 0, pitch: 0, roll: 0, jumps: 0, jt: 0,
     flip: 0, fl: 0, hold: 0, ground: true,
     wallRide: false, wallVerticalAxis: null, wallVerticalSign: 0, wallDetachTimer: 0,
-    airQuat: null, airOmega: null, flipAxis:null, demoTimer: 0, boost: 100, ballHitCooldown: 0, airTouchCooldown: 0
+    airQuat: null, airOmega: null, surfaceQuat:null, surfaceNormal:null, surfaceForward:null, flipAxis:null, demoTimer: 0, boost: 100, ballHitCooldown: 0, airTouchCooldown: 0
   });
   car.wallDetachTimer = 0;
   car.mesh.root.visible = true;
@@ -2120,7 +2120,7 @@ const AIR_X = new THREE.Vector3(1,0,0);
 const AIR_Y = new THREE.Vector3(0,1,0);
 const AIR_Z = new THREE.Vector3(0,0,1);
 function getCarOrientation(c) {
-  return c.airQuat || new THREE.Quaternion().setFromEuler(
+  return c.airQuat || (c.ground && c.surfaceQuat) || new THREE.Quaternion().setFromEuler(
     new THREE.Euler(-(c.pitch || 0), c.yaw || 0, c.roll || 0, 'YXZ'));
 }
 function getCarForward(c) {
@@ -2213,6 +2213,89 @@ function surfaceWheelAxes(yaw, surface) {
   right.addScaledVector(forward,-right.dot(forward)).normalize();
   return {forward,right};
 }
+// Continuous wheel-contact model for floor, round ramp, side wall and curved
+// corner wall. Both steering and the car's visual/physical attitude use the
+// SAME surface normal. A car can steer sideways on a vertical wall.
+const CAR_CLEARANCE = 0.55;
+function carSurfaceContact(c, broad = false) {
+  if ((c.wallDetachTimer || 0) > 0) return null;
+  const ax=Math.abs(c.x), az=Math.abs(c.z), cx=HW-CH, cz=HL-CH;
+  const radius=Math.hypot(Math.max(0,ax-cx),Math.max(0,az-cz));
+  const atCorner=ax>cx&&az>cz&&radius>CH-1.85;
+  const onSide=ax>HW-1.85 && az<=HL-CH+1.9;
+  const onEnd=az>HL-1.85 && ax>GW+2 && ax<=HW-CH+1.9;
+  const nearUpperWall=c.y>=WALL_RAMP_HEIGHT-0.75;
+  if(nearUpperWall && (atCorner||onSide||onEnd) &&
+      (broad || c.ground || c.wallRide || c.wallVerticalAxis)) {
+    let n,kind='wall',axis=null,sign=0;
+    if(atCorner) {
+      const dx=ax-cx,dz=az-cz;
+      n=new THREE.Vector3(-(Math.sign(c.x)||1)*dx/radius,0,
+                              -(Math.sign(c.z)||1)*dz/radius);
+    } else if(onSide) {
+      axis='x';sign=Math.sign(c.x)||1;
+      n=new THREE.Vector3(-sign,0,0);
+    } else {
+      axis='z';sign=Math.sign(c.z)||1;
+      n=new THREE.Vector3(0,0,-sign);
+    }
+    return {kind,normal:n,axis,sign};
+  }
+  const ramp=arenaRampAt(c.x,c.z);
+  const support=ramp.height+CAR_CLEARANCE;
+  if(c.y<=support+(broad?1.35:0.67) && (broad || c.vy<=3 ||
+     c.ground || c.wallRide)) {
+    const normal=new THREE.Vector3(-ramp.dx,1,-ramp.dz).normalize();
+    return {kind:ramp.height>0.04?'ramp':'floor',normal,
+      height:support,axis:null,sign:0};
+  }
+  return null;
+}
+function updateCarSurfaceFrame(c,normal) {
+  const n=normal.clone().normalize();
+  let forward;
+  if(c.surfaceForward && c.surfaceNormal) {
+    // Parallel transport the nose as the normal rotates from pitch to wall.
+    const transport=new THREE.Quaternion().setFromUnitVectors(c.surfaceNormal,n);
+    forward=c.surfaceForward.clone().applyQuaternion(transport);
+  } else if(c.wallVerticalAxis) {
+    // Training drills start already on the wall.
+    forward=new THREE.Vector3(0,1,0);
+  } else {
+    const start=new THREE.Vector3(Math.sin(c.yaw),0,Math.cos(c.yaw));
+    forward=start.applyQuaternion(
+      new THREE.Quaternion().setFromUnitVectors(AIR_Y,n));
+  }
+  forward.addScaledVector(n,-forward.dot(n));
+  if(forward.lengthSq()<1e-6) {
+    forward=new THREE.Vector3(0,0,1).addScaledVector(n,-n.z);
+    if(forward.lengthSq()<1e-6)forward.set(1,0,0);
+  }
+  forward.normalize();
+  const right=new THREE.Vector3().crossVectors(n,forward).normalize();
+  const q=new THREE.Quaternion().setFromRotationMatrix(
+    new THREE.Matrix4().makeBasis(right,n,forward));
+  c.surfaceNormal=n;c.surfaceForward=forward;c.surfaceQuat=q;
+  const planar=Math.hypot(forward.x,forward.z);
+  if(planar>0.2)c.yaw=Math.atan2(forward.x,forward.z);
+  const e=new THREE.Euler().setFromQuaternion(q,'YXZ');
+  c.pitch=-e.x;c.roll=e.z;
+  return {forward,right,normal:n,quaternion:q};
+}
+function snapCarToContact(c,contact) {
+  if(contact.kind==='wall') {
+    if(contact.axis==='x') c.x=contact.sign*(HW-CAR_CLEARANCE);
+    else if(contact.axis==='z') c.z=contact.sign*(HL-CAR_CLEARANCE);
+    else {
+      const cx=HW-CH,cz=HL-CH,dx=Math.abs(c.x)-cx,dz=Math.abs(c.z)-cz;
+      const scale=(CH-CAR_CLEARANCE)/Math.max(0.01,Math.hypot(dx,dz));
+      c.x=(Math.sign(c.x)||1)*(cx+dx*scale);
+      c.z=(Math.sign(c.z)||1)*(cz+dz*scale);
+    }
+  } else {
+    c.y=contact.height;
+  }
+}
 function stepCar(c, ct, dt) {
   c.demoCooldown = Math.max(0, (c.demoCooldown || 0) - dt);
   c.ballHitCooldown = Math.max(0, (c.ballHitCooldown || 0) - dt);
@@ -2223,6 +2306,8 @@ function stepCar(c, ct, dt) {
     if (c.demoTimer <= 0) {
       c.x = 0; c.z = c.team ? HL - 14 : -HL + 14; c.yaw = c.team ? Math.PI : 0;
       c.pitch = 0; c.roll = 0; c.wallRide = false; c.wallVerticalAxis = null; c.wallVerticalSign = 0;
+      c.surfaceQuat=null;c.surfaceNormal=null;c.surfaceForward=null;
+      c.airQuat=null;c.airOmega=null;
       c.boost = 34; c.jumps = 0; c.jt = 0; c.ground = true; c.boostImpactTimer = 0;
       c.mesh.root.visible = true;
     } else {
@@ -2235,42 +2320,21 @@ function stepCar(c, ct, dt) {
   // Brief separation grace after a wall/ramp jump. Otherwise the same ramp
   // snaps the car back onto its surface in the next physics step.
   c.wallDetachTimer = Math.max(0, (c.wallDetachTimer || 0) - dt);
-  const sy = Math.sin(c.yaw), cy = Math.cos(c.yaw);
-  const startingRamp = arenaRampAt(c.x, c.z);
-  if (c.wallVerticalAxis) {
-    c.wallRide = true;
-    if (c.wallVerticalAxis === 'x') c.x = c.wallVerticalSign * (HW - 1.3);
-    else c.z = c.wallVerticalSign * (HL - 1.9);
-    // Align the bonnet with the upward wall direction without hard-snapping.
-    const wallYaw = c.wallVerticalAxis === 'x'
-      ? c.wallVerticalSign * Math.PI / 2
-      : c.wallVerticalSign > 0 ? 0 : Math.PI;
-    c.yaw += wrap(wallYaw - c.yaw) * clamp(6 * dt, 0, 1);
-    c.pitch += wrap(Math.PI / 2 - c.pitch) * clamp(9 * dt, 0, 1);
-    c.roll = 0;
-  } else {
-    const touchingRamp = c.y <= startingRamp.height + 1.05;
-    // Keep adhesion while accelerating UP a slope. The former vy<=0.5
-    // check incorrectly marked upward-moving ramp cars as airborne.
-    c.wallRide = c.wallDetachTimer <= 0 && startingRamp.height > 0.03 &&
-      touchingRamp && (c.wallRide || c.vy <= 0.5);
-    if (c.wallRide) {
-      const targetY = startingRamp.height + 0.55;
-      if (c.y < targetY) c.y += (targetY - c.y) * clamp(45 * dt, 0, 1);
-      if (c.vy < 0) c.vy = 0;
-      const slopeAlongNose = startingRamp.dx * sy + startingRamp.dz * cy;
-      const pitchTarget = Math.atan(slopeAlongNose);
-      c.pitch += wrap(pitchTarget - c.pitch) * clamp(9 * dt, 0, 1);
-      c.roll += (0 - c.roll) * clamp(9 * dt, 0, 1);
-    } else if (c.y <= 0.56) {
-      c.roll += (0 - c.roll) * clamp(7 * dt, 0, 1);
-    }
+  const contact=carSurfaceContact(c);
+  const ground=!!contact;
+  // When tyres lose contact, preserve the last ground/wall orientation.
+  if(!ground && c.ground && c.surfaceQuat) {
+    c.airQuat=c.surfaceQuat.clone();
+    c.airOmega=null;
   }
-  const ground = c.wallDetachTimer <= 0 && (c.y <= 0.56 || c.wallRide); c.ground = ground;
-  if (ground) {
-    c.airQuat = null;
-    c.airOmega = null;
-    c.flipAxis = null;
+  c.ground=ground;
+  c.wallRide=ground && contact.kind!=='floor';
+  c.wallVerticalAxis=ground ? contact.axis : null;
+  c.wallVerticalSign=ground ? contact.sign : 0;
+  if(ground) {
+    c.airQuat=null;c.airOmega=null;c.flipAxis=null;
+    snapCarToContact(c,contact);
+    updateCarSurfaceFrame(c,contact.normal);
   }
   const bo = !!ct.boost && c.boost > 0;
   // Keep a very short grace window so a clean boost collision still counts if boost
@@ -2279,64 +2343,36 @@ function stepCar(c, ct, dt) {
   if (trainingMode && !c.ai) c.boost = 100;
   if (bo) { c.boost = Math.max(0, c.boost - PHYSICS_TUNING.BOOST_DRAIN_PER_SECOND * dt); emitBoost(c); }
   c.fl = bo ? 1 : 0;
-  if (c.wallVerticalAxis) {
-    // On the vertical wall, throttle drives along the wall's vertical axis.
-    // Steering moves laterally across the wall so the player can aim along it.
-    c.jumps = 0; c.jt = 0; c.hold = 0;
-    const wallAccel = PHYSICS_TUNING.GROUND_ACCELERATION *
-      (physicsStyle === 'arcade' ? 1.15 : physicsStyle === 'heavy' ? 0.8 : 1);
-    // Full world gravity still acts down the vertical wall; throttle and
-    // upward-pointed boost must actively work against it.
-    c.vy += (ct.throttle * wallAccel - PHYSICS_TUNING.GRAVITY_FORCE) * dt;
-    c.vy = clamp(c.vy, -20, PHYSICS_TUNING.MAX_SPEED);
-    if (c.wallVerticalAxis === 'x') {
-      c.x = c.wallVerticalSign * (HW - 1.3); c.vx = 0;
-      c.vz = clamp((c.vz + ct.steer * 16 * dt) * Math.max(0, 1 - 3.5 * dt), -24, 24);
-    } else {
-      c.z = c.wallVerticalSign * (HL - 1.9); c.vz = 0;
-      c.vx = clamp((c.vx - ct.steer * 16 * dt) * Math.max(0, 1 - 3.5 * dt), -24, 24);
-    }
-    c.pitch += wrap(Math.PI / 2 - c.pitch) * clamp(9 * dt, 0, 1);
-    c.roll = 0;
-  } else if (ground) {
-    c.jumps = 0; c.jt = 0; c.hold = 0;
-    if (c.wallRide) {
-      const currentRamp = arenaRampAt(c.x, c.z);
-      const pitchTarget = Math.atan(currentRamp.dx * sy + currentRamp.dz * cy);
-      c.pitch += wrap(pitchTarget - c.pitch) * clamp(9 * dt, 0, 1);
-    } else c.pitch *= Math.max(0, 1 - 10 * dt);
-    const surface = c.wallRide ? arenaRampAt(c.x,c.z) : {dx:0,dz:0};
-    const basis = surfaceWheelAxes(c.yaw,surface);
-    let vf=c.vx*basis.forward.x+c.vy*basis.forward.y+c.vz*basis.forward.z;
-    let vs=c.vx*basis.right.x+c.vy*basis.right.y+c.vz*basis.right.z;
-    c.powerslide = clamp((c.powerslide || 0) +
-      (ct.hand ? PHYSICS_TUNING.POWERSLIDE_RISE_RATE : -PHYSICS_TUNING.POWERSLIDE_FALL_RATE) * dt, 0, 1);
-    const hb = c.powerslide;
-    const physicalScale = physicsStyle === 'arcade' ? 1.2 : physicsStyle === 'heavy' ? 0.85 : 1;
-    const effectiveThrottle = ct.throttle || (bo ? 1 : 0);
-    vf = stepGroundForward(vf, effectiveThrottle, bo, dt * physicalScale);
-    // Project gravity along BOTH surface tangents. The normal component is
-    // resisted by wheel support, as with a tyre suspension/contact solver.
-    if (c.wallRide) {
-      vf -= PHYSICS_TUNING.GRAVITY_FORCE*basis.forward.y*dt;
-      vs -= PHYSICS_TUNING.GRAVITY_FORCE*basis.right.y*dt;
-    }
-    const lateralFriction = PHYSICS_TUNING.NORMAL_LATERAL_FRICTION *
-      (1 - hb * (1 - PHYSICS_TUNING.POWERSLIDE_FRICTION_MULTIPLIER));
-    vs *= Math.exp(-lateralFriction * dt);
-    // Use curvature rather than arbitrary turn-rate interpolation. Fast cars
-    // naturally take wider arcs; handbrake breaks the rear grip.
-    const yawRate = Math.abs(vf) * PHYSICS_TUNING.REFERENCE_SCALE *
+  if(ground) {
+    c.jumps=0;c.jt=0;c.hold=0;
+    const normal=c.surfaceNormal;
+    const forward=c.surfaceForward;
+    const right=new THREE.Vector3().crossVectors(normal,forward).normalize();
+    const velocity=new THREE.Vector3(c.vx,c.vy,c.vz);
+    let vf=velocity.dot(forward),vs=velocity.dot(right);
+    c.powerslide=clamp((c.powerslide||0) +
+      (ct.hand ? PHYSICS_TUNING.POWERSLIDE_RISE_RATE :
+        -PHYSICS_TUNING.POWERSLIDE_FALL_RATE)*dt,0,1);
+    const hb=c.powerslide;
+    const physicalScale=physicsStyle==='arcade'?1.2:physicsStyle==='heavy'?0.85:1;
+    vf=stepGroundForward(vf,ct.throttle || (bo?1:0),bo,dt*physicalScale);
+    // Gravity is projected onto the tangent plane. On vertical walls it
+    // naturally pulls the car down; throttle must overcome it.
+    vf-=PHYSICS_TUNING.GRAVITY_FORCE*forward.y*dt;
+    vs-=PHYSICS_TUNING.GRAVITY_FORCE*right.y*dt;
+    const lateralFriction=PHYSICS_TUNING.NORMAL_LATERAL_FRICTION *
+      (1-hb*(1-PHYSICS_TUNING.POWERSLIDE_FRICTION_MULTIPLIER));
+    vs*=Math.exp(-lateralFriction*dt);
+    const yawRate=Math.abs(vf)*PHYSICS_TUNING.REFERENCE_SCALE*
       groundSteeringCurvature(Math.abs(vf)*PHYSICS_TUNING.REFERENCE_SCALE,hb);
-    c.yaw -= (ct.steer || 0) * Math.min(5.5,yawRate) *
-      (vf >= 0 ? 1 : -1) * dt;
-    // Recombine true 3D velocity from tangent tyre directions; it keeps the
-    // same magnitude when turning onto steep slopes instead of generating
-    // huge free vertical speed and getting clamped by the global speed cap.
-    const nextAxes=surfaceWheelAxes(c.yaw,surface);
-    c.vx=nextAxes.forward.x*vf + nextAxes.right.x*vs;
-    c.vy=nextAxes.forward.y*vf + nextAxes.right.y*vs;
-    c.vz=nextAxes.forward.z*vf + nextAxes.right.z*vs;
+    // Turn around the CONTACT NORMAL, not world up; this also makes
+    // steering work on a wall and around the rounded vertical corners.
+    const steer=clamp(ct.steer||0,-1,1);
+    const turn=steer*Math.min(5.5,yawRate)*(vf>=0?1:-1)*dt;
+    c.surfaceForward.applyAxisAngle(normal,turn).normalize();
+    const frame=updateCarSurfaceFrame(c,normal);
+    const v=frame.forward.multiplyScalar(vf).addScaledVector(frame.right,vs);
+    c.vx=v.x;c.vy=v.y;c.vz=v.z;
   } else {
     const gravityScale = physicsStyle === 'floaty' ? 0.72 : physicsStyle === 'heavy' ? 1.2 : 1;
     c.vy -= PHYSICS_TUNING.GRAVITY_FORCE * gravityScale * dt;
@@ -2363,43 +2399,19 @@ function stepCar(c, ct, dt) {
   }
   // The nose, air roll and pitch determine the true rocket thrust vector.
   if (bo) applyDirectionalBoost(c, dt, ground);
-  if (ct.jump) {
-    if (c.wallVerticalAxis) {
-      const wallAxis = c.wallVerticalAxis, wallSign = c.wallVerticalSign;
-      c.wallVerticalAxis = null; c.wallVerticalSign = 0; c.wallRide = false;
-      c.wallDetachTimer = 0.32;
-      // Surface-normal impulse goes INTO the arena, not through the wall.
-      // Preserve upward wall momentum and bonnet pitch so boost can follow
-      // the ball immediately instead of launching horizontally.
-      c.vy = Math.max(c.vy, 8.5);
-      if (wallAxis === 'x') {
-        c.vx = -wallSign * 12;
-        c.x -= wallSign * 0.12;
-      } else {
-        c.vz = -wallSign * 12;
-        c.z -= wallSign * 0.12;
-      }
-      c.pitch = Math.max(0.75, c.pitch);
-      c.airQuat = null; c.airOmega = null;
-      c.jumps = 1; c.jt = 0;
-      c.hold = PHYSICS_TUNING.JUMP_HOLD_DURATION;
-      c.y += 0.08;
-    } else if (ground) {
-      if (c.wallRide) {
-        const slope = arenaRampAt(c.x, c.z);
-        const norm = Math.hypot(slope.dx, 1, slope.dz);
-        const launch = PHYSICS_TUNING.JUMP_IMPULSE;
-        c.vx += -slope.dx / norm * launch * 0.9;
-        c.vz += -slope.dz / norm * launch * 0.9;
-        c.vy = Math.max(c.vy, launch / norm);
-        c.wallRide = false;
-        c.wallDetachTimer = 0.28;
-        c.airQuat = null; c.airOmega = null;
-      } else {
-        c.vy = PHYSICS_TUNING.JUMP_IMPULSE;
-      }
-      c.jumps = 1; c.jt = 0;
-      c.hold = PHYSICS_TUNING.JUMP_HOLD_DURATION; c.y += 0.08;
+  if(ct.jump) {
+    if(ground) {
+      // Jump along tyre contact normal, preserving the last wall attitude
+      // and wall-tangent momentum for real wall-to-air dribble control.
+      const n=contact.normal;
+      const launch=PHYSICS_TUNING.JUMP_IMPULSE;
+      c.airQuat=c.surfaceQuat.clone();
+      c.airOmega=null;
+      c.vx+=n.x*launch;c.vy+=n.y*launch;c.vz+=n.z*launch;
+      c.x+=n.x*0.16;c.y+=n.y*0.16;c.z+=n.z*0.16;
+      c.ground=false;c.wallRide=false;c.wallVerticalAxis=null;
+      c.wallVerticalSign=0;c.wallDetachTimer=0.30;
+      c.jumps=1;c.jt=0;c.hold=PHYSICS_TUNING.JUMP_HOLD_DURATION;
     } else if (c.jumps === 1 && c.jt < PHYSICS_TUNING.DOUBLE_JUMP_WINDOW) {
       c.jumps = 2;
       const f = ct.dodge ? ct.dodge[0] : (Number.isFinite(ct.pitch) ? ct.pitch : ct.throttle), s = ct.dodge ? ct.dodge[1] : ct.steer;
@@ -2433,90 +2445,60 @@ function stepCar(c, ct, dt) {
     const scale = absoluteLimit / carSpeed;
     c.vx *= scale; c.vy *= scale; c.vz *= scale;
   }
-  c.x += c.vx * dt; c.y += c.vy * dt; c.z += c.vz * dt;
-  if (c.y < 0.55) { c.y = 0.55; if (c.vy < 0) c.vy = 0; }
-  if (c.y > CEIL - 0.6) { c.y = CEIL - 0.6; if (c.vy > 0) c.vy = 0; }
-  if (Math.abs(c.x) > HW - 1.3) {
-    const sx = Math.sign(c.x); c.x = sx * (HW - 1.3);
-    const edgeRamp = arenaRampAt(c.x, c.z);
-    const outwardSpeed = c.vx * sx;
-    const noseOut = Math.sin(c.yaw) * sx;
-    if (c.wallVerticalAxis === 'x') {
-      c.vx = 0;
-    } else if (!ct.jump && !c.wallVerticalAxis && c.wallRide && edgeRamp.height > WALL_RAMP_HEIGHT * 0.25 && noseOut > 0.28 && outwardSpeed > 3) {
-      c.wallVerticalAxis = 'x'; c.wallVerticalSign = sx;
-      c.y = Math.max(c.y, edgeRamp.height + 0.55);
-      c.vy = Math.max(c.vy, Math.max(3, Math.min(23, outwardSpeed) * 0.6));
-      c.vx = 0; c.pitch = Math.atan(edgeRamp.dx * Math.sin(c.yaw) + edgeRamp.dz * Math.cos(c.yaw)); c.roll = 0;
-      c.wallRide = true;
-    } else c.vx *= -0.2;
-  }
-  if (Math.abs(c.z) > HL - 1.9) {
-    const sz = Math.sign(c.z); c.z = sz * (HL - 1.9);
-    const edgeRamp = arenaRampAt(c.x, c.z);
-    const outwardSpeed = c.vz * sz;
-    const noseOut = Math.cos(c.yaw) * sz;
-    if (c.wallVerticalAxis === 'z') {
-      c.vz = 0;
-    } else if (!ct.jump && !c.wallVerticalAxis && c.wallRide && Math.abs(c.x) > GW + 2 && edgeRamp.height > WALL_RAMP_HEIGHT * 0.25 && noseOut > 0.28 && outwardSpeed > 3) {
-      c.wallVerticalAxis = 'z'; c.wallVerticalSign = sz;
-      c.y = Math.max(c.y, edgeRamp.height + 0.55);
-      c.vy = Math.max(c.vy, Math.max(3, Math.min(23, outwardSpeed) * 0.6));
-      c.vz = 0; c.pitch = Math.atan(edgeRamp.dx * Math.sin(c.yaw) + edgeRamp.dz * Math.cos(c.yaw)); c.roll = 0;
-      c.wallRide = true;
-    } else c.vz *= -0.2;
-  }
-  // A radial contact normal matches the new circular corner geometry.
-  // Preserve tangential momentum instead of reflecting through a diagonal wall.
-  const corner = arenaCornerContact(c.x,c.z,1.45);
-  if(corner){
-    c.x -= corner.nx * corner.penetration;
-    c.z -= corner.nz * corner.penetration;
-    const outward = c.vx*corner.nx + c.vz*corner.nz;
-    if(outward>0){
-      c.vx -= corner.nx*outward;
-      c.vz -= corner.nz*outward;
+  const beforeMovement=ground ?
+    {normal:c.surfaceNormal.clone(),forward:c.surfaceForward.clone()} : null;
+  const previousForwardSpeed=beforeMovement ?
+    c.vx*beforeMovement.forward.x+c.vy*beforeMovement.forward.y+
+    c.vz*beforeMovement.forward.z : 0;
+  const previousRight=beforeMovement ?
+    new THREE.Vector3().crossVectors(beforeMovement.normal,beforeMovement.forward) : null;
+  const previousSideSpeed=previousRight ?
+    c.vx*previousRight.x+c.vy*previousRight.y+c.vz*previousRight.z : 0;
+  c.x+=c.vx*dt;c.y+=c.vy*dt;c.z+=c.vz*dt;
+  c.y=clamp(c.y,CAR_CLEARANCE,CEIL-CAR_CLEARANCE);
+  // Wheel suspension brings the car to its nearest curved surface without
+  // deleting its speed along that surface. Contact normal is updated every
+  // physics tick, so the ramp-wall boundary is not a mode-switch teleport.
+  if(ground && c.wallDetachTimer<=0){
+    const after=carSurfaceContact(c,true);
+    if(after){
+      snapCarToContact(c,after);
+      const frame=updateCarSurfaceFrame(c,after.normal);
+      const aligned=frame.forward.multiplyScalar(previousForwardSpeed)
+        .addScaledVector(frame.right,previousSideSpeed);
+      c.vx=aligned.x;c.vy=aligned.y;c.vz=aligned.z;
+      c.ground=true;c.wallRide=after.kind!=='floor';
+      c.wallVerticalAxis=after.axis;c.wallVerticalSign=after.sign;
+    }else {
+      c.ground=false;c.wallRide=false;
+      c.wallVerticalAxis=null;c.wallVerticalSign=0;
+      c.airQuat=c.surfaceQuat?c.surfaceQuat.clone():getCarOrientation(c);
+      c.airOmega=null;
     }
-    // Side-wall constraints cannot stay locked to X/Z around an arc.
-    if(c.wallVerticalAxis){
-      c.wallVerticalAxis=null;
-      c.wallVerticalSign=0;
-      c.wallRide=false;
+  }else {
+    // Airborne body contact with the enclosure does not silently reattach the
+    // tyres. Players must touch down again or steer back onto the ramp.
+    const corner=arenaCornerContact(c.x,c.z,CAR_CLEARANCE);
+    if(corner){
+      c.x-=corner.nx*corner.penetration;
+      c.z-=corner.nz*corner.penetration;
+      const outbound=c.vx*corner.nx+c.vz*corner.nz;
+      if(outbound>0){
+        c.vx-=corner.nx*outbound*1.25;
+        c.vz-=corner.nz*outbound*1.25;
+      }
     }
-  }
-  const rampNow = arenaRampAt(c.x, c.z);
-  const rampSupportY = rampNow.height + 0.55;
-  if (c.wallVerticalAxis) {
-    c.wallRide = true; c.roll = 0;
-    // If the car runs out of upward momentum, settle back onto the curved ramp.
-    if (c.y <= rampSupportY + 0.45 && c.vy < 0) {
-      c.wallVerticalAxis = null; c.wallVerticalSign = 0;
-      c.y += (rampSupportY - c.y) * clamp(38 * dt, 0, 1);
-    c.vy = c.vx * rampNow.dx + c.vz * rampNow.dz;
-    c.wallRide = true;
-      c.pitch = Math.atan(rampNow.dx * Math.sin(c.yaw) + rampNow.dz * Math.cos(c.yaw));
-    } else if (c.y >= CEIL - 1.5 || c.vy < -8) {
-      c.wallVerticalAxis = null; c.wallVerticalSign = 0;
-      c.wallRide = false; c.pitch = 0; c.vy = Math.min(c.vy, 0);
-    } else {
-      c.pitch += wrap(Math.PI / 2 - c.pitch) * clamp(9 * dt, 0, 1);
+    if(Math.abs(c.x)>HW-CAR_CLEARANCE){
+      const sign=Math.sign(c.x);
+      c.x=sign*(HW-CAR_CLEARANCE);
+      if(c.vx*sign>0)c.vx*=-0.25;
     }
-  } else if (c.wallDetachTimer <= 0 && rampNow.height > 0.03 &&
-      ((c.wallRide && !ct.jump) || c.y < rampSupportY - 0.05 ||
-       (c.y <= rampSupportY + 0.22 && c.vy <= 0.5))) {
-    // Maintain tangent velocity on the curved mesh rather than killing y
-    // velocity / snapping the car each frame. Support is positional only.
-    c.y += (rampSupportY - c.y) * clamp(35 * dt, 0, 1);
-    c.vy = c.vx * rampNow.dx + c.vz * rampNow.dz;
-    c.wallRide = true;
-    const slopeAlongNose = rampNow.dx * Math.sin(c.yaw) + rampNow.dz * Math.cos(c.yaw);
-    const pitchTarget = Math.atan(slopeAlongNose);
-    c.pitch += wrap(pitchTarget - c.pitch) * clamp(10 * dt, 0, 1);
-    c.roll += (0 - c.roll) * clamp(10 * dt, 0, 1);
-  } else {
-    c.wallRide = false;
-    if (c.y <= 0.56) c.roll += (0 - c.roll) * clamp(7 * dt, 0, 1);
-    else c.roll = wrap(c.roll);
+    if(Math.abs(c.z)>HL-CAR_CLEARANCE &&
+       !(Math.abs(c.x)<GW && c.y<GH)){
+      const sign=Math.sign(c.z);
+      c.z=sign*(HL-CAR_CLEARANCE);
+      if(c.vz*sign>0)c.vz*=-0.25;
+    }
   }
   // Supersonic has hysteresis: enter at 2200 reference units/s, retain to 2100,
   // and keep the state for at most one second after dropping below the entry threshold.
@@ -3275,8 +3257,8 @@ function render(dt) {
   for (const c of cars) {
     const m = c.mesh;
     m.root.position.set(c.x, c.y, c.z);
-    if (c.airQuat && state !== 'menu' && state !== 'over') {
-      m.root.quaternion.copy(c.airQuat);
+    if ((c.airQuat || (c.ground && c.surfaceQuat)) && state !== 'menu' && state !== 'over') {
+      m.root.quaternion.copy(c.airQuat || c.surfaceQuat);
     } else {
       m.root.rotation.set(-c.pitch, c.yaw, c.roll || 0, 'YXZ');
     }
