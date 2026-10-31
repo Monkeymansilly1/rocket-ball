@@ -2850,7 +2850,9 @@ function goalExplosion(team) {
 // this the ball hits a flat invisible barrier at the ramp lip and rebounds.
 function resolveBallWall(axis, sign, rampSurfaceY) {
   const outward = (axis === 'x' ? ball.vx : ball.vz) * sign;
-  const atWallLip = rampSurfaceY > WALL_RAMP_HEIGHT * 0.78 &&
+  // The ball centre meets the vertical boundary before the ramp reaches its
+  // full height, because the ball radius offsets it inward from the wall.
+  const atWallLip = rampSurfaceY > BR + WALL_RAMP_HEIGHT * 0.25 &&
     ball.y > rampSurfaceY - 2.2 &&
     ball.y < rampSurfaceY + 4.2;
   // At the lip, the rounded ramp has ALREADY converted most outward
