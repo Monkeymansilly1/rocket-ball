@@ -43,7 +43,11 @@ const PHYSICS_TUNING = {
   PITCH_TORQUE_SPEED: 3.4, YAW_TORQUE_SPEED: 2.85, ROLL_TORQUE_SPEED: 4.2,
   // Tuned to the existing arena's actual scale for predictable, playable ball movement.
   BALL_GRAVITY_FORCE: 650 / 50, MAX_BALL_SPEED: 6000 / 50, BALL_MAX_ANGULAR_SPEED: 6,
-  BALL_RESTITUTION: 0.6, BALL_FLOOR_RESTITUTION: 0.6, BALL_WALL_RESTITUTION: 0.6,
+  BALL_RESTITUTION: 0.6, BALL_FLOOR_RESTITUTION: 0.64, BALL_WALL_RESTITUTION: 0.6,
+  // Material friction is not the same as rolling resistance. Keeping them
+  // separate prevents a grounded ball losing speed too quickly.
+  BALL_ROLLING_RESISTANCE: 0.14, BALL_RAMP_IMPACT_RESTITUTION: 0.48,
+  BALL_RAMP_ROLL_RESTITUTION: 0.18, BALL_BOUNCE_CUTOFF_SPEED: 0.7,
   BALL_SURFACE_FRICTION: 0.35, BALL_HIT_MULTIPLIER: 1.0,
   BALL_HIT_FORWARD_FORCE: 6, BALL_FORWARD_SPEED_FACTOR: 0.34,
   BALL_FLIP_HIT_BONUS: 8, BALL_BOOST_HIT_BONUS: 5,
@@ -2027,8 +2031,8 @@ function predict() {
       x += vx * h; y += vy * h; z += vz * h;
       if (y < BR) {
         y = BR; vy = -vy * PHYSICS_TUNING.BALL_FLOOR_RESTITUTION;
-        if (Math.abs(vy) < 1.5) vy = 0;
-        const groundDrag = Math.max(0, 1 - 0.35 * h); vx *= groundDrag; vz *= groundDrag;
+        if (Math.abs(vy) < PHYSICS_TUNING.BALL_BOUNCE_CUTOFF_SPEED) vy = 0;
+        const groundDrag = Math.max(0, 1 - PHYSICS_TUNING.BALL_ROLLING_RESISTANCE * h); vx *= groundDrag; vz *= groundDrag;
       }
       if (y > CEIL - BR) { y = CEIL - BR; vy = -Math.abs(vy) * PHYSICS_TUNING.BALL_RESTITUTION; }
 
@@ -2792,7 +2796,8 @@ function clampBallMotion() {
 function ballSurfaceImpulse(nx, ny, nz, restitution) {
   const vn = ball.vx * nx + ball.vy * ny + ball.vz * nz;
   if (vn >= 0) return;
-  const e = vn < -1.5 ? restitution : 0;
+  // Ignore only near-rest micro impacts; light drops should still bounce.
+  const e = vn < -PHYSICS_TUNING.BALL_BOUNCE_CUTOFF_SPEED ? restitution : 0;
   ball.vx -= (1 + e) * vn * nx;
   ball.vy -= (1 + e) * vn * ny;
   ball.vz -= (1 + e) * vn * nz;
@@ -2895,8 +2900,13 @@ function stepBall(dt) {
   const touching = ball.y <= surface + 0.035 && normalSpeed <= 0.2;
   if (ball.y < surface || (ball.onRamp && touching)) {
     ball.y = Math.max(ball.y, surface);
-    ballSurfaceImpulse(nx, ny, nz, ramp.height > 0.1 ? 0.18 : p.BALL_FLOOR_RESTITUTION);
-    const groundFriction = Math.max(0, 1 - p.BALL_FRICTION_REFERENCE * dt);
+    // Keep a shallow, low-bounce ramp contact for smooth upward wall rolls,
+    // but let a ball dropped onto a ramp bounce instead of sticking to it.
+    const rampImpact = ramp.height > 0.1 && ball.vy < -2 && normalSpeed < -2;
+    const restitution = ramp.height <= 0.1 ? p.BALL_FLOOR_RESTITUTION :
+      (rampImpact ? p.BALL_RAMP_IMPACT_RESTITUTION : p.BALL_RAMP_ROLL_RESTITUTION);
+    ballSurfaceImpulse(nx, ny, nz, restitution);
+    const groundFriction = Math.max(0, 1 - p.BALL_ROLLING_RESISTANCE * dt);
     ball.vx *= groundFriction;
     ball.vz *= groundFriction;
     ball.onRamp = ramp.height > 0.1;
