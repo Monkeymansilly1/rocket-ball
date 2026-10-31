@@ -63,6 +63,28 @@ const {ball,stepBall,hitBall,resolveBallWall,arenaRampAt,getCarForward,aerialCon
 
 for(let i=0;i<240;i++)stepBall(1/120);
 assert(ball.y >= scaledBallRadius-.001 && ball.y < 20 && Number.isFinite(ball.y),'Floor contact unstable');
+
+// Light ground touches must still bounce instead of clinging to the floor.
+Object.assign(ball,{x:0,y:scaledBallRadius+0.003,z:0,vx:0,vy:-1.15,vz:0,
+  wx:0,wy:0,wz:0,onRamp:false,onGround:false});
+stepBall(1/120);
+assert(ball.vy>0.6,'Small ground impacts are being killed instead of bouncing');
+
+// Rolling resistance must stay below material friction.
+Object.assign(ball,{x:0,y:scaledBallRadius,z:0,vx:20,vy:0,vz:0,
+  wx:0,wy:0,wz:0,onRamp:false,onGround:true});
+for(let i=0;i<120;i++)stepBall(1/120);
+assert(ball.vx>16&&ball.vx<20,'Grounded ball loses too much momentum');
+
+// Falling onto a curved ramp should bounce; shallow uphill touches stay smooth.
+const dropX=76,dropRamp=arenaRampAt(dropX,0);
+Object.assign(ball,{x:dropX,y:scaledBallRadius+dropRamp.height+0.005,z:0,
+  vx:0,vy:-8,vz:0,wx:0,wy:0,wz:0,onRamp:false,onGround:false});
+stepBall(1/120);
+const dropNormalLength=Math.hypot(-dropRamp.dx,1,-dropRamp.dz);
+const reboundNormalSpeed=(-dropRamp.dx*ball.vx+ball.vy-dropRamp.dz*ball.vz)/dropNormalLength;
+assert(reboundNormalSpeed>3,'Ball is sticking to ramp after a downward impact');
+
 Object.assign(ball,{x:77.45,y:20,z:0,vx:38,vy:0,vz:0,onRamp:false});
 for(let i=0;i<10;i++)stepBall(1/120);
 assert(ball.x<=80-scaledBallRadius+.01&&ball.vx<=0,'Side-wall bounce failed');
