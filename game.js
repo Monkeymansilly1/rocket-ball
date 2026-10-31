@@ -3415,7 +3415,7 @@ window.rocketArena = {
   get score() { return score; },
   get state() { return state; },
   // Read-only references for browser-level stadium regression checks.
-  get stadium() { return scene.getObjectByName('Coliseum Stadium'); },
+  get stadium() { return scene.getObjectByName('Rocket Ball Championship Arena'); },
   get pitch() { return pitchMesh; },
   get pads() { return pads; }
 };
