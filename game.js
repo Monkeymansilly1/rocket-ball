@@ -251,6 +251,28 @@ function buildArena() {
   concourse.rotation.x = -Math.PI/2; concourse.position.y = -.28; scene.add(concourse);
 
   const wallBottom = WALL_RAMP_HEIGHT + 0.28;
+  // A faint overhead net shows where the drivable ceiling actually is.
+  // Without this surface a car appeared to drive upside-down on open sky.
+  const roofGlass = new THREE.Mesh(
+    new THREE.PlaneGeometry(HW*2,HL*2),
+    new THREE.MeshBasicMaterial({color:0x91c9f4,transparent:true,
+      opacity:0.035,depthWrite:false,side:THREE.DoubleSide}));
+  roofGlass.rotation.x=-Math.PI/2;
+  roofGlass.position.y=CEIL+0.05;
+  roofGlass.renderOrder=1;
+  scene.add(roofGlass);
+  const roofLines=[];
+  for(let x=-HW;x<=HW+0.01;x+=10){
+    roofLines.push(x,CEIL, -HL, x,CEIL, HL);
+  }
+  for(let z=-HL;z<=HL+0.01;z+=10){
+    roofLines.push(-HW,CEIL,z, HW,CEIL,z);
+  }
+  const roofMesh=new THREE.BufferGeometry();
+  roofMesh.setAttribute('position',new THREE.Float32BufferAttribute(roofLines,3));
+  scene.add(new THREE.LineSegments(roofMesh,
+    new THREE.LineBasicMaterial({color:0x77bae9,transparent:true,
+      opacity:0.14,depthWrite:false})));
   const glass = new THREE.MeshPhysicalMaterial({
     color:0xa8deef,roughness:.12,metalness:.04,transparent:true,opacity:.095,
     depthWrite:false,side:THREE.DoubleSide
