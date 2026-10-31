@@ -1093,7 +1093,7 @@ const SKILL = [
 function mkCar(team, k, ai, modelName) {
   const model = modelName || CAR_MODELS[(k) % CAR_MODELS.length].name;
   const col = new THREE.Color(!ai && k === 0 ? (team ? player2Paint : playerPaint) : (team ? ORANGE : BLUE)).offsetHSL(0, 0, -0.09 * k);
-  const car = { team, k, x: 0, y: 0.55, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, pitch: 0, roll: 0, airQuat: null, airOmega: null, surfaceQuat: null, surfaceNormal: null, surfaceForward: null, wallRide: false, wallVerticalAxis: null, wallVerticalSign: 0, ai, aiCd: 0, boost: 34, jumps: 0, jt: 0, flip: 0, fx: 0, fz: 0, fl: 0, ground: true, demoTimer: 0, demoCooldown: 0, boostImpactTimer: 0 };
+  const car = { team, k, x: 0, y: 0.55, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, pitch: 0, roll: 0, airQuat: null, airOmega: null, surfaceQuat: null, surfaceNormal: null, surfaceForward: null, ceilingRide:false, wallRide: false, wallVerticalAxis: null, wallVerticalSign: 0, ai, aiCd: 0, boost: 34, jumps: 0, jt: 0, flip: 0, fx: 0, fz: 0, fl: 0, ground: true, demoTimer: 0, demoCooldown: 0, boostImpactTimer: 0 };
   car.mesh = carMesh(col, model);
   car.model = model;
   car.displayName = ai ? (team ? 'ORANGE BOT ' : 'BLUE BOT ') + (k + 1) : playerName;
@@ -1179,7 +1179,7 @@ function kickoff() {
   lastTouch = null;
   for (const c of cars) {
     const f = FORM[c.k], s = c.team ? 1 : -1;
-    Object.assign(c, { x: f[0] * (c.team ? -1 : 1), y: 0.55, z: s * f[1] * HL, vx: 0, vy: 0, vz: 0, yaw: c.team ? Math.PI : 0, pitch: 0, roll: 0, airQuat: null, airOmega: null, surfaceQuat:null, surfaceNormal:null, surfaceForward:null, flipAxis:null, wallDetachTimer: 0, wallRide: false, wallVerticalAxis: null, wallVerticalSign: 0, boost: 34, jumps: 0, jt: 0, flip: 0, fl: 0, ground: true, aiCd: 0, wait: SKILL[diff].wait });
+    Object.assign(c, { x: f[0] * (c.team ? -1 : 1), y: 0.55, z: s * f[1] * HL, vx: 0, vy: 0, vz: 0, yaw: c.team ? Math.PI : 0, pitch: 0, roll: 0, airQuat: null, airOmega: null, surfaceQuat:null, surfaceNormal:null, surfaceForward:null, ceilingRide:false, flipAxis:null, wallDetachTimer: 0, wallRide: false, wallVerticalAxis: null, wallVerticalSign: 0, boost: 34, jumps: 0, jt: 0, flip: 0, fl: 0, ground: true, aiCd: 0, wait: SKILL[diff].wait });
   }
 }
 function start(freePlay = false) {
@@ -1241,7 +1241,7 @@ function resetTrainingCar() {
     yaw: 0, pitch: 0, roll: 0, jumps: 0, jt: 0,
     flip: 0, fl: 0, hold: 0, ground: true,
     wallRide: false, wallVerticalAxis: null, wallVerticalSign: 0, wallDetachTimer: 0,
-    airQuat: null, airOmega: null, surfaceQuat:null, surfaceNormal:null, surfaceForward:null, flipAxis:null, demoTimer: 0, boost: 100, ballHitCooldown: 0, airTouchCooldown: 0
+    airQuat: null, airOmega: null, surfaceQuat:null, surfaceNormal:null, surfaceForward:null, ceilingRide:false, flipAxis:null, demoTimer: 0, boost: 100, ballHitCooldown: 0, airTouchCooldown: 0
   });
   car.wallDetachTimer = 0;
   car.mesh.root.visible = true;
@@ -2219,12 +2219,22 @@ function surfaceWheelAxes(yaw, surface) {
 const CAR_CLEARANCE = 0.55;
 function carSurfaceContact(c, broad = false) {
   if ((c.wallDetachTimer || 0) > 0) return null;
+  // Drive around the ceiling edge instead of pinning a wall-climbing car
+  // at maximum height with an upward velocity.
+  if(c.y>=CEIL-0.87 && (c.ceilingRide ||
+       (c.ground && c.wallRide && c.vy>=0))) {
+    return {kind:'ceiling',normal:new THREE.Vector3(0,-1,0),
+      height:CEIL-CAR_CLEARANCE,axis:null,sign:0};
+  }
   const ax=Math.abs(c.x), az=Math.abs(c.z), cx=HW-CH, cz=HL-CH;
   const radius=Math.hypot(Math.max(0,ax-cx),Math.max(0,az-cz));
   const atCorner=ax>cx&&az>cz&&radius>CH-1.85;
   const onSide=ax>HW-1.85 && az<=HL-CH+1.9;
   const onEnd=az>HL-1.85 && ax>GW+2 && ax<=HW-CH+1.9;
-  const nearUpperWall=c.y>=WALL_RAMP_HEIGHT-0.75;
+  // Descending wall-to-ramp transitions at the true fillet lip instead of
+  // snapping the car upwards from below the ramp.
+  const nearUpperWall=c.y>=WALL_RAMP_HEIGHT+CAR_CLEARANCE+0.10 ||
+    (c.y>=WALL_RAMP_HEIGHT+0.3 && c.vy>1.5);
   if(nearUpperWall && (atCorner||onSide||onEnd) &&
       (broad || c.ground || c.wallRide || c.wallVerticalAxis)) {
     let n,kind='wall',axis=null,sign=0;
@@ -2306,7 +2316,7 @@ function stepCar(c, ct, dt) {
     if (c.demoTimer <= 0) {
       c.x = 0; c.z = c.team ? HL - 14 : -HL + 14; c.yaw = c.team ? Math.PI : 0;
       c.pitch = 0; c.roll = 0; c.wallRide = false; c.wallVerticalAxis = null; c.wallVerticalSign = 0;
-      c.surfaceQuat=null;c.surfaceNormal=null;c.surfaceForward=null;
+      c.surfaceQuat=null;c.surfaceNormal=null;c.surfaceForward=null;c.ceilingRide=false;
       c.airQuat=null;c.airOmega=null;
       c.boost = 34; c.jumps = 0; c.jt = 0; c.ground = true; c.boostImpactTimer = 0;
       c.mesh.root.visible = true;
@@ -2320,7 +2330,17 @@ function stepCar(c, ct, dt) {
   // Brief separation grace after a wall/ramp jump. Otherwise the same ramp
   // snaps the car back onto its surface in the next physics step.
   c.wallDetachTimer = Math.max(0, (c.wallDetachTimer || 0) - dt);
-  const contact=carSurfaceContact(c);
+  let contact=carSurfaceContact(c);
+  if(contact && contact.kind==='ceiling') {
+    // Tyre suction on the inverted surface only lasts while accelerating;
+    // releasing the throttle drops the car after a short transition.
+    const gripDrive=Math.abs(ct.throttle||0)>0.05 || !!ct.boost;
+    c.ceilingRelease=gripDrive ? 0 : (c.ceilingRelease||0)+dt;
+    if(c.ceilingRelease>0.30) {
+      c.wallDetachTimer=0.28;c.ceilingRide=false;
+      contact=null;
+    }
+  } else c.ceilingRelease=0;
   const ground=!!contact;
   // When tyres lose contact, preserve the last ground/wall orientation.
   if(!ground && c.ground && c.surfaceQuat) {
@@ -2329,6 +2349,7 @@ function stepCar(c, ct, dt) {
   }
   c.ground=ground;
   c.wallRide=ground && contact.kind!=='floor';
+  c.ceilingRide=ground && contact.kind==='ceiling';
   c.wallVerticalAxis=ground ? contact.axis : null;
   c.wallVerticalSign=ground ? contact.sign : 0;
   if(ground) {
@@ -2409,7 +2430,7 @@ function stepCar(c, ct, dt) {
       c.airOmega=null;
       c.vx+=n.x*launch;c.vy+=n.y*launch;c.vz+=n.z*launch;
       c.x+=n.x*0.16;c.y+=n.y*0.16;c.z+=n.z*0.16;
-      c.ground=false;c.wallRide=false;c.wallVerticalAxis=null;
+      c.ground=false;c.wallRide=false;c.ceilingRide=false;c.wallVerticalAxis=null;
       c.wallVerticalSign=0;c.wallDetachTimer=0.30;
       c.jumps=1;c.jt=0;c.hold=PHYSICS_TUNING.JUMP_HOLD_DURATION;
     } else if (c.jumps === 1 && c.jt < PHYSICS_TUNING.DOUBLE_JUMP_WINDOW) {
@@ -2468,9 +2489,10 @@ function stepCar(c, ct, dt) {
         .addScaledVector(frame.right,previousSideSpeed);
       c.vx=aligned.x;c.vy=aligned.y;c.vz=aligned.z;
       c.ground=true;c.wallRide=after.kind!=='floor';
+      c.ceilingRide=after.kind==='ceiling';
       c.wallVerticalAxis=after.axis;c.wallVerticalSign=after.sign;
     }else {
-      c.ground=false;c.wallRide=false;
+      c.ground=false;c.wallRide=false;c.ceilingRide=false;
       c.wallVerticalAxis=null;c.wallVerticalSign=0;
       c.airQuat=c.surfaceQuat?c.surfaceQuat.clone():getCarOrientation(c);
       c.airOmega=null;
