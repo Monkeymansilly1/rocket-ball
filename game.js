@@ -1331,10 +1331,14 @@ function loadTrainingShot(scenario = 'dribble') {
       car.wallRide = true;
       car.wallVerticalAxis = 'x'; car.wallVerticalSign = sideSign;
       car.ground = true;
+      // Launch with the ball JUST ahead of the upright car's roof.
+      // The previous preset sent it inward at 12 units/s, while a wall
+      // jump starts near 6: it raced away before the driver could catch it.
+      // Use a real reachable 3D contact rather than a scripted fake touch.
       const ballX = sideSign * (HW - 3.5);
       Object.assign(ball, {
-        x: ballX, z: car.z + 1.3, y: car.y + 5.8,
-        vx: -sideSign * 12, vy: 11.8, vz: 3,
+        x: ballX, z: car.z + 1.3, y: car.y + 4.0,
+        vx: -sideSign * 3.5, vy: 11.8, vz: 3,
         wx: 0, wy: 0, wz: 0,
         onRamp: false, onGround: false, onWall: false
       });
