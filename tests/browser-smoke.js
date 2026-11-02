@@ -126,6 +126,14 @@ async function main() {
     assert.equal(await evalJS('window.rocketArena.state'),'menu');
     // Verify the NEW arena exists as playable 3D geometry, not just an image.
     assert.equal(await evalJS('window.rocketArena.stadium.name'), 'Rocket Ball Championship Arena');
+    assert.equal(await evalJS('window.rocketArena.miniCrowd.bodies.count'),2400,
+      'Mini potato spectators were not created');
+    assert.equal(await evalJS('window.rocketArena.miniCrowd.faces.count'),2400,
+      'Mini crowd faces missing');
+    assert.equal(await evalJS('window.rocketArena.miniCrowd.flagData.length'),100,
+      'Team flags missing');
+    assert.equal(await evalJS('window.rocketArena.miniCrowd.bodies.geometry.type'),'SphereGeometry',
+      'Crowd must be potato characters, not the old box audience');
     assert.equal(await evalJS('window.rocketArena.stadium.children.length > 40'), true);
     assert.equal(await evalJS('window.rocketArena.stadium.children.filter(x => x.isInstancedMesh).length >= 7'),true);
     assert.equal(await evalJS('window.rocketArena.pitch.geometry.attributes.position.count > 15000'),true);
@@ -193,6 +201,15 @@ async function main() {
     await evalJS('(function(){const b=window.rocketArena.ball;Object.assign(b,{x:0,y:2,z:105,vx:0,vy:0,vz:32});})()');
     await eventually(()=>evalJS('document.getElementById("trainingGoalCount").textContent.includes("1") && window.rocketArena.goalEffectCount>0'),6000)
       .catch(err=>{throw new Error('Free Play scoring explosion: '+err.message);});
+    assert.equal(await evalJS('window.rocketArena.miniCrowd.cheerTeam'),0,
+      'Scoring blue side did not trigger crowd celebration');
+    assert.equal(await evalJS('window.rocketArena.miniCrowd.cheerTime>0'),true,
+      'Crowd cheering not activated');
+    assert.equal(await evalJS('window.rocketArena.miniCrowd.faces.material.map===window.rocketArena.miniCrowd.cheerFace'),true,
+      'Mini spectators did not switch to cheering faces');
+    await eventually(()=>evalJS('window.rocketArena.miniCrowd.cheerTime===0'),6000);
+    assert.equal(await evalJS('window.rocketArena.miniCrowd.faces.material.map===window.rocketArena.miniCrowd.calmFace'),true,
+      'Mini spectators did not return to their normal happy faces');
     await evalJS('document.getElementById("trainingExit").click()');
     assert.equal(await evalJS('window.rocketArena.state'),'menu');
 

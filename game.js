@@ -485,6 +485,210 @@ function buildArena() {
   scene.add(rim);
 }
 buildArena();
+
+// -----------------------------------------------------------------------
+// Mini crowd: rounded colourful potato characters with happy little faces.
+// Two instanced draw calls render 2,400 characters + 3 for waving flags.
+// Animation is deliberately throttled for low-power browsers.
+let miniCrowd = null;
+const CROWD_CHEER_LENGTH=3.1;
+function makeCrowdFaceTexture(cheering=false) {
+  const cv=document.createElement('canvas');
+  cv.width=cv.height=128;
+  const c=cv.getContext('2d');
+  c.clearRect(0,0,128,128);
+  c.fillStyle='#0c1d2c';
+  const eyeY=44;
+  for(const x of [42,86]){
+    c.beginPath();c.ellipse(x,eyeY,7.2,9.2,0,0,Math.PI*2);c.fill();
+    c.fillStyle='#ffffff';
+    c.beginPath();c.arc(x-2.4,eyeY-3,2.2,0,Math.PI*2);c.fill();
+    c.fillStyle='#0c1d2c';
+  }
+  c.fillStyle='rgba(255,120,147,.65)';
+  for(const x of [21,107]){c.beginPath();c.ellipse(x,70,10,5,0,0,Math.PI*2);c.fill();}
+  c.strokeStyle='#17202e';c.lineWidth=5.8;c.lineCap='round';
+  if(cheering){
+    c.fillStyle='#17202e';
+    c.beginPath();c.ellipse(64,78,12,17,0,0,Math.PI*2);c.fill();
+    c.fillStyle='#ef839d';
+    c.beginPath();c.ellipse(64,88,8,4,0,0,Math.PI*2);c.fill();
+    c.strokeStyle='#0c1d2c';
+    c.beginPath();c.arc(32,29,10,Math.PI*1.1,Math.PI*1.9);c.stroke();
+    c.beginPath();c.arc(96,29,10,Math.PI*1.1,Math.PI*1.9);c.stroke();
+  } else {
+    c.beginPath();c.arc(64,63,17,.15,Math.PI-.15);c.stroke();
+  }
+  const tex=new THREE.CanvasTexture(cv);
+  tex.colorSpace=THREE.SRGBColorSpace || undefined;
+  tex.needsUpdate=true;
+  return tex;
+}
+function buildMiniCrowd(stadium, ringPoint) {
+  const rows=16,perRow=150,count=rows*perRow;
+  const palette=[0xff8c83,0xffc36a,0xffe889,0x91eb90,0x82dfff,
+    0x82a8ff,0xbc94ff,0xffa2dc,0xf2f5f9,0xa57e59,0x63d4b6,0xf5bca2];
+  // Subtly deform the sphere's lower half to make a bean-shaped potato
+  // silhouette without the cost of a unique geometry for each character.
+  const bodyGeometry=new THREE.SphereGeometry(.72,12,9);
+  const a=bodyGeometry.attributes.position;
+  for(let i=0;i<a.count;i++){
+    const y=a.getY(i),x=a.getX(i);
+    const shape= y < 0 ? 1-0.17*Math.abs(y)/.72 : 1+0.06*(y/.72);
+    a.setXYZ(i,x*shape,y,a.getZ(i)*shape);
+  }
+  a.needsUpdate=true;
+  bodyGeometry.computeVertexNormals();
+  const bodies=new THREE.InstancedMesh(bodyGeometry,
+    new THREE.MeshStandardMaterial({color:0xffffff,roughness:.8,
+      metalness:0,emissive:0x10222e,emissiveIntensity:.08}),count);
+  const calmFace=makeCrowdFaceTexture(false);
+  const cheerFace=makeCrowdFaceTexture(true);
+  const faces=new THREE.InstancedMesh(new THREE.PlaneGeometry(.85,.85),
+    new THREE.MeshBasicMaterial({map:calmFace,transparent:true,
+      side:THREE.DoubleSide,depthWrite:false,alphaTest:.08}),count);
+  bodies.frustumCulled=false;faces.frustumCulled=false;
+  bodies.name='Mini Potato Crowd';faces.name='Mini Potato Faces';
+  stadium.add(bodies,faces);
+
+  const flagData=[];
+  const flagGeometry=new THREE.PlaneGeometry(.92,.65);
+  const flags=new THREE.InstancedMesh(flagGeometry,
+    new THREE.MeshBasicMaterial({color:0xffffff,side:THREE.DoubleSide}),Math.ceil(count/24));
+  const poles=new THREE.InstancedMesh(new THREE.CylinderGeometry(.045,.045,1.1,5),
+    new THREE.MeshBasicMaterial({color:0xdcecf4}),Math.ceil(count/24));
+  flags.frustumCulled=false;poles.frustumCulled=false;
+  stadium.add(flags,poles);
+  const fans=[];
+  const mtx=new THREE.Matrix4(),pos=new THREE.Vector3();
+  const rot=new THREE.Quaternion(),scale=new THREE.Vector3();
+  const up=new THREE.Vector3(0,1,0);
+  const forwardAxis=new THREE.Vector3(0,0,1);
+  const tint=new THREE.Color(),qTemp=new THREE.Quaternion();
+  const temp=new THREE.Object3D();
+  for(let row=0;row<rows;row++){
+    for(let col=0;col<perRow;col++){
+      const i=row*perRow+col;
+      const angle=(col+(row%2)*.5)/perRow*Math.PI*2;
+      const point=ringPoint(angle,100.65+row*2.65,125.7+row*2.55,
+        10.0+row*1.83);
+      const towardPitch=new THREE.Vector3(-point.x,0,-point.z).normalize();
+      rot.setFromUnitVectors(forwardAxis,towardPitch);
+      const team=point.z<0?0:1;
+      const hue=(i*37+row*17)%palette.length;
+      tint.setHex(palette[hue]).lerp(
+        new THREE.Color(team===0?0x4397f6:0xf69b55),.22);
+      bodies.setColorAt(i,tint);
+      fans.push({
+        base:point.clone().add(new THREE.Vector3(0,.76,0)),
+        inward:towardPitch,rotation:rot.clone(),team,row,col,
+        phase:(i*2.3999632297)%(2*Math.PI),
+        heightScale:.9+((i*17)%9)*.035,
+        flagIndex: i%24===0?flagData.length:-1
+      });
+      if(i%24===0) {
+        flagData.push(i);
+        flags.setColorAt(flagData.length-1,
+          new THREE.Color(team===0?0x52adff:0xff9d4a));
+      }
+    }
+  }
+  flags.count=flagData.length;poles.count=flagData.length;
+  bodies.instanceColor.needsUpdate=true;flags.instanceColor.needsUpdate=true;
+  const crowd={fans,bodies,faces,flags,poles,flagData,calmFace,cheerFace,
+    cheerTeam:-1,cheerTime:0,elapsed:0,drawTick:0,matrix:mtx,
+    temp,position:pos,rotation:qTemp,scale,up};
+  // Set initial transforms immediately; the menu must also show the crowd.
+  updateMiniCrowdTransforms(crowd,0);
+  return crowd;
+}
+function cheerMiniCrowd(team) {
+  if (!miniCrowd) return;
+  miniCrowd.cheerTeam=team===1?1:0;
+  miniCrowd.cheerTime=CROWD_CHEER_LENGTH;
+  miniCrowd.cheerStartedAt=performance.now();
+  miniCrowd.faces.material.map=miniCrowd.cheerFace;
+  miniCrowd.faces.material.needsUpdate=true;
+  miniCrowd.drawTick=.05; // force first celebration pose next render
+}
+function updateMiniCrowdTransforms(crowd,dt) {
+  const {fans,bodies,faces,flags,poles,flagData,temp,rotation,
+    position,scale}=crowd;
+  const active=crowd.cheerTime>0;
+  const power=active?Math.min(1,crowd.cheerTime/.65,
+    (CROWD_CHEER_LENGTH-crowd.cheerTime+.25)*3):0;
+  const cheerAge=CROWD_CHEER_LENGTH-crowd.cheerTime;
+  for(let i=0;i<fans.length;i++){
+    const f=fans[i];
+    const stronger=f.team===crowd.cheerTeam?1:.4;
+    // A wave travels along the stand and across its rows after a goal.
+    const phase=crowd.elapsed*1.4+f.phase;
+    const ripple=cheerAge*11-f.row*.63-f.col*.055;
+    const jump=active?Math.pow(Math.max(0,Math.sin(ripple)),2)*
+      1.0*stronger*power:0;
+    const bob=.055*Math.sin(phase);
+    const lean=active?.21*Math.sin(ripple*1.3)*stronger*power:
+      .028*Math.sin(phase*.7);
+    rotation.copy(f.rotation).multiply(
+      temp.quaternion.setFromAxisAngle(new THREE.Vector3(0,0,1),lean));
+    position.copy(f.base);
+    position.y+=jump+bob;
+    scale.set(1.0+.08*Math.sin(phase*1.2),f.heightScale*(1+jump*.15),
+      .94-.03*Math.cos(phase));
+    temp.position.copy(position);
+    temp.quaternion.copy(rotation);
+    temp.scale.copy(scale);
+    temp.updateMatrix();
+    bodies.setMatrixAt(i,temp.matrix);
+    // Faces travel with the bodies, and point into the pitch.
+    temp.position.copy(position).addScaledVector(f.inward,.62);
+    temp.position.y+=.10;
+    temp.scale.set(.98, .98,1);
+    temp.updateMatrix();
+    faces.setMatrixAt(i,temp.matrix);
+  }
+  const orient=new THREE.Quaternion(),base=new THREE.Vector3();
+  for(let j=0;j<flagData.length;j++){
+    const f=fans[flagData[j]];
+    const wave=active?Math.sin(cheerAge*13+f.phase)*.37:
+      Math.sin(crowd.elapsed*1.7+f.phase)*.08;
+    orient.copy(f.rotation).multiply(
+      temp.quaternion.setFromAxisAngle(new THREE.Vector3(0,0,1),wave));
+    base.copy(f.base).addScaledVector(f.inward,.25);
+    base.y+=.95;
+    temp.position.copy(base);
+    temp.quaternion.copy(orient);
+    temp.scale.set(1,1,1);temp.updateMatrix();
+    poles.setMatrixAt(j,temp.matrix);
+    temp.position.y+=.42;
+    temp.position.x+=.38;
+    temp.scale.set(1,1,1);temp.updateMatrix();
+    flags.setMatrixAt(j,temp.matrix);
+  }
+  bodies.instanceMatrix.needsUpdate=true;faces.instanceMatrix.needsUpdate=true;
+  flags.instanceMatrix.needsUpdate=true;poles.instanceMatrix.needsUpdate=true;
+}
+function updateMiniCrowd(dt) {
+  if(!miniCrowd)return;
+  miniCrowd.elapsed+=Math.min(dt,.1);
+  if(miniCrowd.cheerTime>0){
+    // A celebration ends on real elapsed time, even if rendering is slow.
+    miniCrowd.cheerTime=Math.max(0,CROWD_CHEER_LENGTH-
+      (performance.now()-miniCrowd.cheerStartedAt)/1000);
+    if(miniCrowd.cheerTime===0){
+      miniCrowd.faces.material.map=miniCrowd.calmFace;
+      miniCrowd.faces.material.needsUpdate=true;
+      miniCrowd.cheerTeam=-1;
+    }
+  }
+  miniCrowd.drawTick+=dt;
+  // Animate at ~24Hz during goals and ~12Hz during idle.
+  const interval=miniCrowd.cheerTime>0?1/24:1/12;
+  if(miniCrowd.drawTick<interval)return;
+  miniCrowd.drawTick=0;
+  updateMiniCrowdTransforms(miniCrowd,dt);
+}
+
 function buildStadium() {
   // The bowl sits OUTSIDE the glass playable enclosure. Stadium structure is
   // decorative only and cannot cause rogue collisions or interrupt wall riding.
@@ -583,32 +787,9 @@ function buildStadium() {
     makeRim(101+i*2.65,126+i*2.55,9+i*1.83,.54,roofTrim);
   }
 
-  // A single GPU-instanced crowd with coloured spectator lights.
-  const audienceRows=18,perRow=160,people=audienceRows*perRow;
-  const crowd=new THREE.InstancedMesh(
-    new THREE.BoxGeometry(.78,.85,.7),
-    new THREE.MeshBasicMaterial({color:0xffffff}),people
-  );
-  const crowdMatrix=new THREE.Matrix4(),crowdColor=new THREE.Color();
-  for(let row=0;row<audienceRows;row++){
-    for(let j=0;j<perRow;j++){
-      const i=row*perRow+j;
-      const a=(j+(row%2)*.5)/perRow*Math.PI*2;
-      const pos=ringPoint(a,100.4+row*2.65,125.4+row*2.55,10+row*1.83);
-      crowdMatrix.makeScale(.87,1,1);
-      crowdMatrix.setPosition(pos.x,pos.y,pos.z);
-      crowd.setMatrixAt(i,crowdMatrix);
-      const blue=pos.z<0;
-      const palette=blue ?
-        [0x5b95de,0x1672d8,0x98cff7,0x315fa1,0x394b80,0xd2eaff] :
-        [0xffab50,0xe87937,0xf7d38f,0xc2522a,0xffdaaa,0x994b2b];
-      crowdColor.setHex(palette[Math.floor(rand(i*11)*palette.length)]);
-      crowd.setColorAt(i,crowdColor);
-    }
-  }
-  crowd.instanceMatrix.needsUpdate=true;
-  crowd.instanceColor.needsUpdate=true;
-  crowd.frustumCulled=false;stadium.add(crowd);
+  // Character spectators share body, facial expression and flag geometry.
+  // A few GPU draw calls replace thousands of separate objects.
+  miniCrowd = buildMiniCrowd(stadium, ringPoint);
 
   // Lower arcade follows the grandstand instead of floating in the distance.
   const pillarsPerTier=40;
@@ -3345,7 +3526,9 @@ function goal(team) {
     updateTrainingCounters();
     showGameEvent('FREE PLAY GOAL! · ' + trainingGoals, '#ffca64');
     // Free Play now uses the same selected 3D explosion as a real match.
-    goalExplosion(ball.z < 0 ? 1 : 0);
+    const scoringSide=ball.z<0?1:0;
+    goalExplosion(scoringSide);
+    cheerMiniCrowd(scoringSide);
     resetTrainingBall();
     return;
   }
@@ -3384,6 +3567,7 @@ function goal(team) {
 
   // fireworks + explosion
   goalExplosion(team);
+  cheerMiniCrowd(team);
 
   // legacy confetti particles (complementary)
   const cs = team ? [1, 0.54, 0.12] : [0.18, 0.72, 1];
@@ -3717,7 +3901,7 @@ function render(dt) {
     p.core.material.opacity = active ? 0.5 : 0.05;
     p.group.visible = active || p.t > 0;
   }
-  stepParts(dt); tickGoalEffects(dt); drawMini(); sfx.update(cars[0], state === 'play');
+  stepParts(dt); tickGoalEffects(dt); updateMiniCrowd(dt); drawMini(); sfx.update(cars[0], state === 'play');
   const splitActive = !trainingMode && localTwoPlayer && state !== 'menu' && state !== 'over';
   document.body.classList.toggle('split-screen', splitActive);
   // During a replay, follow the player who scored instead of always following P1.
@@ -3802,6 +3986,7 @@ window.rocketArena = {
   get goalEffectCount() { return activeGoalEffects.length; },
   get ballShadow() { return ballGroundShadow; },
   get ballTrail() { return ballTrail; },
+  get miniCrowd() { return miniCrowd; },
   previewGoalExplosion(style) {
     if(Object.hasOwn(GOAL_EFFECT_DATA,style)){
       goalExplosionStyle=style;
