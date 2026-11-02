@@ -64,3 +64,5 @@ The expanded 3D goal explosion garage has eight animated designs: **Classic Blas
 The garage now has three one-click routes: **Casual** (1v1, easy bots), **Competitive** (2v2, hard bots) and **Freestyle** (Free Play with wall-air-dribble drill). A real **MPH speedometer** appears during play, and the garage has updated visual styling. All original match, car, stadium, replay, multiplayer and training functionality is retained.
 
 Tests: run `node tests/physics-smoke.js`, `node tests/wall-physics.test.js`, `node tests/ai-regression.test.js` and `node tests/browser-smoke.js`. The browser suite verifies every explosion preview and its resource cleanup, as well as saved ball-feel selection.
+
+A dynamic ball-contact shadow and a compact 3D speed trail help you judge aerial height, the path of powerful shots and fast bounces. The trail uses a fixed 16-vertex GPU buffer rather than allocating particle geometry each frame. Goal explosions also play when you score in Free Play.
