@@ -3015,7 +3015,10 @@ function clearGoalEffect(effect) {
 function tickGoalEffects(dt) {
   for(let i=activeGoalEffects.length-1;i>=0;i--){
     const fx=activeGoalEffects[i];
-    fx.age+=Math.min(dt,0.1);
+    // Scene effects are visual and should expire by wall-clock time, even
+    // on a GPU that renders below 10 FPS (physics remains fixed at 120Hz).
+    fx.age=Math.max(fx.age+Math.min(dt,0.1),
+      (performance.now()-fx.startedAt)/1000);
     const progress=fx.age/fx.duration;
     if(progress>=1){clearGoalEffect(fx);continue;}
     const remain=Math.max(0,1-progress);
@@ -3108,7 +3111,8 @@ function goalExplosion(team, preview=false) {
   group.add(light);
   activeGoalEffects.push({
     group,core,rings,shards,light,style:data.style,
-    age:0,duration:style==='blackhole'?1.7:style==='supernova'?2.0:1.45,maxLight:7
+    age:0,startedAt:performance.now(),
+    duration:style==='blackhole'?1.7:style==='supernova'?2.0:1.45,maxLight:7
   });
   const rgb=new THREE.Color(baseColour),alt=new THREE.Color(data.accent);
   const count=Math.floor(data.n*(graphicsQuality==='low'?0.42:1));
