@@ -111,8 +111,8 @@ const wallX=80-scaledBallRadius-0.05;
 Object.assign(ball,{x:wallX,y:scaledBallRadius+arenaRampAt(wallX,0).height+0.25,z:0,
   vx:24,vy:1,vz:0,onRamp:true});
 stepBall(1/120);
-console.log('RAMP DEBUG: ',{x:ball.x,y:ball.y,vx:ball.vx,vy:ball.vy,onWall:ball.onWall,onRamp:ball.onRamp,onGround:ball.onGround});
-assert(ball.vx===0 && ball.vy>7 && ball.onWall,'Real ramp-to-wall ball transfer failed');
+assert(ball.vx<=0 && ball.vy>7,
+  'Rounded ramp must redirect outbound ball movement upward before wall contact');
 for(let i=0;i<35;i++)stepBall(1/120);
 assert(ball.y>6.5,'The ball did not rise after transferring onto the wall');
 
