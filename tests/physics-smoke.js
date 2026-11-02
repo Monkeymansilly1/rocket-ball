@@ -40,6 +40,7 @@ const functions = [
   extract('aerialControl'), extract('applyDirectionalBoost'),
   extract('groundThrottleAcceleration'), extract('stepGroundForward'),
   extract('groundSteeringCurvature'),
+  extract('predict'),
   extract('clampBallMotion'), extract('ballSurfaceImpulse'),
   extract('resolveBallWall'), extract('stepBall'), extract('hitBall')
 ].join('\n');
@@ -55,11 +56,12 @@ const bootstrap = [
   'const trainingMode=false; const updateTrainingCounters=()=>{};',
   'const playerStats=[{goals:0,assists:0,shots:0,saves:0,clears:0}];',
   'const cars=[]; const eventCooldown={}; const t=0,state="play";',
+  'const pred=[];',
   'const showGameEvent=()=>{},sparks=()=>{},rumbleCar=()=>{};',
   'const goal=()=>{throw Error("Unexpected goal in physics test")};',
   'const rampEase=t=>t*t*(3-2*t);'
-].join('\n') + '\n' + functions + '\nreturn {ball,stepBall,hitBall,resolveBallWall,arenaRampAt,getCarForward,aerialControl,applyDirectionalBoost,stepGroundForward,groundSteeringCurvature,cars};';
-const {ball,stepBall,hitBall,resolveBallWall,arenaRampAt,getCarForward,aerialControl,applyDirectionalBoost,stepGroundForward,groundSteeringCurvature,cars} = new Function(bootstrap)(THREE,tuning);
+].join('\n') + '\n' + functions + '\nreturn {ball,pred,predict,stepBall,hitBall,resolveBallWall,arenaRampAt,getCarForward,aerialControl,applyDirectionalBoost,stepGroundForward,groundSteeringCurvature,cars};';
+const {ball,pred,predict,stepBall,hitBall,resolveBallWall,arenaRampAt,getCarForward,aerialControl,applyDirectionalBoost,stepGroundForward,groundSteeringCurvature,cars} = new Function(bootstrap)(THREE,tuning);
 
 for(let i=0;i<240;i++)stepBall(1/120);
 assert(ball.y >= scaledBallRadius-.001 && ball.y < 20 && Number.isFinite(ball.y),'Floor contact unstable');
@@ -242,3 +244,19 @@ console.log('PASS: controller aerial pitch, independent throttle and analog dire
   console.log('PASS: airborne release, wall rebound, energy-limited wall roll');
 }
 
+
+{
+  // The bot trajectory must follow the *same* floor, rounded wall and
+  // frictional collision solver as live gameplay without moving the live ball.
+  Object.assign(ball,{x:75.5,y:9.8,z:24,vx:31,vy:1.8,vz:12,
+    wx:0,wy:0,wz:0,onRamp:false,onGround:false,onWall:false});
+  const before={...ball};
+  predict();
+  assert.equal(pred.length,40,'Prediction horizon should remain four seconds');
+  assert.deepEqual({...ball},before,'Forecast modified the live ball');
+  const simulated={...before};
+  for(let i=0;i<4;i++)stepBall(.025,simulated,true);
+  assert(Math.hypot(pred[0].x-simulated.x,pred[0].y-simulated.y,
+    pred[0].z-simulated.z)<1e-8,'Ball predictor disagrees with real collision solver');
+  console.log('PASS: shared live/AI ball dynamics and side-effect-free prediction');
+}
