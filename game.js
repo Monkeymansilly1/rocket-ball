@@ -1465,14 +1465,14 @@ function drawMini() {
 }
 
 // ---------- input ----------
-const CONTROL_ACTIONS = ['forward', 'reverse', 'left', 'right', 'jump', 'boost', 'hand', 'rollLeft', 'rollRight', 'camera'];
+const CONTROL_ACTIONS = ['forward', 'reverse', 'left', 'right', 'aerialUp', 'aerialDown', 'jump', 'boost', 'hand', 'rollLeft', 'rollRight', 'camera'];
 const DEFAULT_CONTROL_BINDINGS = {
   p1: {
-    keyboard: { forward:'KeyW', reverse:'KeyS', left:'KeyA', right:'KeyD', jump:'Space', boost:'ShiftLeft', hand:'KeyE', rollLeft:'KeyQ', rollRight:'KeyE', camera:'KeyC' },
+    keyboard: { forward:'KeyW', reverse:'KeyS', left:'KeyA', right:'KeyD', aerialUp:'KeyK', aerialDown:'KeyI', jump:'Space', boost:'ShiftLeft', hand:'KeyE', rollLeft:'KeyQ', rollRight:'KeyE', camera:'KeyC' },
     pad: { forward:7, reverse:6, left:null, right:null, jump:0, boost:2, hand:4, rollLeft:null, rollRight:5, camera:3 }
   },
   p2: {
-    keyboard: { forward:'ArrowUp', reverse:'ArrowDown', left:'ArrowLeft', right:'ArrowRight', jump:'Enter', boost:'ShiftRight', hand:'Slash', rollLeft:'Numpad1', rollRight:'Numpad3', camera:'KeyC' },
+    keyboard: { forward:'ArrowUp', reverse:'ArrowDown', left:'ArrowLeft', right:'ArrowRight', aerialUp:'Numpad5', aerialDown:'Numpad8', jump:'Enter', boost:'ShiftRight', hand:'Slash', rollLeft:'Numpad1', rollRight:'Numpad3', camera:'KeyC' },
     pad: { forward:7, reverse:6, left:null, right:null, jump:0, boost:2, hand:4, rollLeft:null, rollRight:5, camera:3 }
   }
 };
@@ -1996,12 +1996,20 @@ function playerActions(who) {
   const rightRollPressed = buttonValue(pad, 'rollRight', who) > 0.55;
   const steer = clamp(keyRight - keyLeft + axisX + padRight - padLeft, -1, 1);
   const jumpButton = buttonValue(pad, 'jump', who) > 0.55;
+  const keyboardPitchUp = !!keys[binding.aerialUp];
+  const keyboardPitchDown = !!keys[binding.aerialDown];
+  const manualPitch = keyboardPitchDown - keyboardPitchUp;
+  const keyboardBoostHeld = !!keys[binding.boost];
   return {
     throttle: clamp(keyForward - keyReverse + padForward - padReverse, -1, 1),
     steer,
-    // W / up pitches the nose down; S / stick down pitches the nose up.
-    // Pulling the left stick back also gives a backward directional dodge.
-    pitch: clamp(keyForward - keyReverse - airAxisY, -1, 1),
+    // Keyboard acceleration (W/S) is independent of aerial pitch.
+    // K raises the nose, I lowers it. Analogue stick pitch remains unchanged.
+    pitch: clamp(manualPitch - airAxisY, -1, 1),
+    // Holding W + Shift activates a limited nose-up flight assist while in
+    // the air, unless the player is already pitching manually. No auto-boost.
+    keyboardFlightAssist: !!(keyForward && keyboardBoostHeld &&
+      !keyboardPitchUp && !keyboardPitchDown && Math.abs(airAxisY) < 0.04),
     // Neutral stick + RT + double-jump stays neutral; the left stick chooses flips.
     dodge: [clamp(keyForward - keyReverse - rawAxisY, -1, 1), clamp(keyRight - keyLeft + rawAxisX + padRight - padLeft, -1, 1)],
     airYaw: clamp(keyRight - keyLeft + (airRollModifier ? 0 : airAxisX) + padRight - padLeft, -1, 1),
@@ -2113,7 +2121,16 @@ function aerialControl(c, ct, dt) {
   // Rocket League's axis-specific angular torque/damping, measured by the
   // RocketSim/RLGym community. These are acceleration equations, NOT an
   // "rotate towards desired angle" animation. No input = momentum decays.
-  const pitchIn = clamp(Number.isFinite(ct.pitch) ? ct.pitch : (ct.throttle || 0), -1, 1);
+  let pitchIn = clamp(Number.isFinite(ct.pitch) ? ct.pitch : (ct.throttle || 0), -1, 1);
+  if (ct.keyboardFlightAssist && Math.abs(pitchIn) < 0.04 && !(c.flip > 0)) {
+    // Keyboard players often hold W (accelerate) and Shift (boost) together.
+    // Steering pitch from throttle caused a continuous nose-down rotation.
+    // Use a damped target instead: approximately 45 degrees up, with no loop.
+    // The car keeps its physical gravity, boost direction and angular momentum.
+    const elevation=Math.asin(clamp(getCarForward(c).y,-1,1));
+    const desiredElevation=Math.PI/4;
+    pitchIn=clamp((elevation-desiredElevation)*2.6-omega.pitch*0.85,-1,1);
+  }
   const yawIn = -clamp(Number.isFinite(ct.airYaw) ? ct.airYaw : (ct.steer || 0), -1, 1);
   const rollIn = clamp(ct.roll || 0,-1,1);
   omega.pitch += (12.146*pitchIn - 2.798*omega.pitch) * dt;
