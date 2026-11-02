@@ -23,7 +23,7 @@ Open `index.html` in a browser. Three.js loads from a CDN. To play offline, save
 | Pick match size / bot level (menu) | 1 2 3 / 4 5 6, or click the buttons |
 | Start / restart | Enter or click |
 
-In the air, W/S tilt the nose and A/D turn, so you can aim boost at the ball.
+In the air, I/K pitch the nose and A/D turn. Under Settings → Flight control mode, choose Rocket-style Manual to use W/S for aerial pitch, or Assisted for W + Shift upward climbing. Boost always follows the car's nose.
 
 ## Rules
 - Pick 1v1, 2v2 or 3v3 and Easy, Medium or Hard bots. In team modes you play with bot teammates who take chaser, support and goalie roles.
@@ -48,3 +48,8 @@ Run local automated checks with `node tests/physics-smoke.js` and `node tests/wa
 
 ## Keyboard aerial controls (November 2026)
 W/S are **drive and reverse**, no longer full-time pitch controls. A/D steer and yaw, Space jumps/dodges, Shift boosts, Q/E air-roll, **K points the nose UP**, and **I points it DOWN**. During a jump, **W + Shift** now gently pitches toward a stable upward angle instead of continuously diving. Use K/I to override the assist for precise flight. Jump off the ground first; boost alone does not lift a grounded car.
+
+## Ground traction and authentic-flight option
+The ground solver now preserves *world-space momentum* through steering and applies side-slip damping as tyre traction. This creates a genuine difference between a grippy turn and low-grip powersliding, instead of moving the entire velocity vector instantly wherever the nose points. Wall and curved-ramp steering use the same model.
+
+In **Settings → Keyboard aerial handling**, switch to **Rocket-style manual** for W/S nose pitch (W noses down, S noses up); it deliberately does not auto-level or auto-climb the car, so holding W + boost while airborne can dive just as pushing the stick forward can in Rocket League. **Assisted** retains the previous W + Shift upward flight so keyboard users can fly more easily. The choice is saved locally.
