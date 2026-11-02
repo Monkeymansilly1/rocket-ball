@@ -37,6 +37,8 @@ const PHYSICS_TUNING = {
   GRAVITY_FORCE: 650 / 50, MAX_SPEED: 2300 / 50, GROUND_MAX_SPEED: 1410 / 50, REVERSE_MAX_SPEED: 24,
   BOOST_FORCE: 991.667 / 50, AIR_BOOST_FORCE: 1058.333 / 50, AIR_LINEAR_DRAG: 0.025, GROUND_ACCELERATION: 1600 / 50,
   TURN_RATE_SLOW: 3.4, TURN_RATE_FAST: 1.4, HANDBRAKE_TURN_MULTIPLIER: 1.6,
+  // Lateral tyre velocity must decay through traction, not rotate instantly
+  // when the steering wheel turns. Powerslide drops that tyre grip.
   NORMAL_LATERAL_FRICTION: 14, POWERSLIDE_FRICTION_MULTIPLIER: 0.18,
   JUMP_IMPULSE: 291.67 / 50, JUMP_HOLD_FORCE: 1458.33 / 50, JUMP_HOLD_DURATION: 0.2,
   DOUBLE_JUMP_IMPULSE: 291.67 / 50, DODGE_IMPULSE: 17,
@@ -68,6 +70,7 @@ let BLUE = 0x2fb8ff, ORANGE = 0xff8a1f;
 let gameVolume = 0.75, colourVisionMode = 'normal', controllerDeadZone = 0.12;
 let controllerSteeringSensitivity = 1.25, controllerAerialSensitivity = 1.35;
 let controllerVibrationEnabled = true;
+let keyboardFlightMode = 'assist'; // assist retains W+Shift climb; manual = RL-style W/S aerial pitch
 let graphicsQuality = 'balanced';
 const cameraSettings = { fov: 105, distance: 8, height: 3.5, stiffness: 10, shake: false };
 try {
@@ -78,6 +81,7 @@ try {
   if (Number.isFinite(savedSettings.steeringSensitivity)) controllerSteeringSensitivity = Math.max(1, Math.min(2.5, savedSettings.steeringSensitivity));
   if (Number.isFinite(savedSettings.aerialSensitivity)) controllerAerialSensitivity = Math.max(1, Math.min(2.5, savedSettings.aerialSensitivity));
   if (typeof savedSettings.controllerVibration === 'boolean') controllerVibrationEnabled = savedSettings.controllerVibration;
+  if (['assist', 'manual'].includes(savedSettings.keyboardFlightMode)) keyboardFlightMode = savedSettings.keyboardFlightMode;
   if (savedSettings.camera && typeof savedSettings.camera === 'object') {
     for (const key of ['fov', 'distance', 'height', 'stiffness']) {
       if (Number.isFinite(savedSettings.camera[key])) cameraSettings[key] = savedSettings.camera[key];
@@ -1781,7 +1785,7 @@ function saveGeneralSettings() {
     localStorage.setItem('rocketArenaSettingsV1', JSON.stringify({
       volume: gameVolume, colourVisionMode, deadZone: controllerDeadZone,
       steeringSensitivity: controllerSteeringSensitivity, aerialSensitivity: controllerAerialSensitivity,
-      controllerVibration: controllerVibrationEnabled,
+      controllerVibration: controllerVibrationEnabled, keyboardFlightMode,
       camera: cameraSettings, graphicsQuality
     }));
   } catch (_) {}
@@ -1912,6 +1916,14 @@ if (cameraShakeInput) {
     cameraSettings.shake = cameraShakeInput.checked; saveGeneralSettings();
   });
 }
+const keyboardFlightSetting = $('settingKeyboardFlight');
+if (keyboardFlightSetting) {
+  keyboardFlightSetting.value = keyboardFlightMode;
+  keyboardFlightSetting.addEventListener('change', () => {
+    keyboardFlightMode = keyboardFlightSetting.value === 'manual' ? 'manual' : 'assist';
+    saveGeneralSettings();
+  });
+}
 const graphicsSetting = $('settingGraphics');
 if (graphicsSetting) {
   graphicsSetting.value = graphicsQuality;
@@ -2000,15 +2012,17 @@ function playerActions(who) {
   const keyboardPitchDown = !!keys[binding.aerialDown];
   const manualPitch = keyboardPitchDown - keyboardPitchUp;
   const keyboardBoostHeld = !!keys[binding.boost];
+  // Manual keyboard mode reproduces the familiar car-soccer mapping:
+  // W pitches down in air and S pitches up; throttle still works normally.
+  const manualFlight = typeof keyboardFlightMode !== 'undefined' && keyboardFlightMode === 'manual';
   return {
     throttle: clamp(keyForward - keyReverse + padForward - padReverse, -1, 1),
     steer,
-    // Keyboard acceleration (W/S) is independent of aerial pitch.
-    // K raises the nose, I lowers it. Analogue stick pitch remains unchanged.
-    pitch: clamp(manualPitch - airAxisY, -1, 1),
-    // Holding W + Shift activates a limited nose-up flight assist while in
-    // the air, unless the player is already pitching manually. No auto-boost.
-    keyboardFlightAssist: !!(keyForward && keyboardBoostHeld &&
+    // In assisted mode, W/S are throttle only and I/K are pitch keys.
+    // In manual Rocket-style mode, W noses down and S noses up while airborne.
+    // Controller analogue pitch remains independent of triggers.
+    pitch: clamp(manualPitch + (manualFlight ? keyForward-keyReverse : 0) - airAxisY, -1, 1),
+    keyboardFlightAssist: !!(!manualFlight && keyForward && keyboardBoostHeld &&
       !keyboardPitchUp && !keyboardPitchDown && Math.abs(airAxisY) < 0.04),
     // Neutral stick + RT + double-jump stays neutral; the left stick chooses flips.
     dodge: [clamp(keyForward - keyReverse - rawAxisY, -1, 1), clamp(keyRight - keyLeft + rawAxisX + padRight - padLeft, -1, 1)],
@@ -2412,16 +2426,25 @@ function stepCar(c, ct, dt) {
     vs-=PHYSICS_TUNING.GRAVITY_FORCE*right.y*dt;
     const lateralFriction=PHYSICS_TUNING.NORMAL_LATERAL_FRICTION *
       (1-hb*(1-PHYSICS_TUNING.POWERSLIDE_FRICTION_MULTIPLIER));
-    vs*=Math.exp(-lateralFriction*dt);
+    // Keep the velocity vector in the original surface tangent plane when
+    // the wheels steer. Before, velocity rotated FOR FREE with the car nose:
+    // no inertia, instant direction changes, and powerslides barely mattered.
+    const preSteeringVelocity=forward.clone().multiplyScalar(vf)
+      .addScaledVector(right,vs);
     const yawRate=Math.abs(vf)*PHYSICS_TUNING.REFERENCE_SCALE*
       groundSteeringCurvature(Math.abs(vf)*PHYSICS_TUNING.REFERENCE_SCALE,hb);
-    // Turn around the CONTACT NORMAL, not world up; this also makes
-    // steering work on a wall and around the rounded vertical corners.
     const steer=clamp(ct.steer||0,-1,1);
     const turn=steer*Math.min(5.5,yawRate)*(vf>=0?1:-1)*dt;
     c.surfaceForward.applyAxisAngle(normal,turn).normalize();
     const frame=updateCarSurfaceFrame(c,normal);
-    const v=frame.forward.clone().multiplyScalar(vf).addScaledVector(frame.right,vs);
+    // Tyre force is a bounded, time-continuous drag on *lateral* slip.
+    // Grip builds centripetal acceleration over time rather than magically
+    // rotating the whole velocity on every 120Hz step.
+    const longitudinal=preSteeringVelocity.dot(frame.forward);
+    const lateral=preSteeringVelocity.dot(frame.right)*
+      Math.exp(-lateralFriction*dt);
+    const v=frame.forward.clone().multiplyScalar(longitudinal)
+      .addScaledVector(frame.right,lateral);
     c.vx=v.x;c.vy=v.y;c.vz=v.z;
   } else {
     const gravityScale = physicsStyle === 'floaty' ? 0.72 : physicsStyle === 'heavy' ? 1.2 : 1;
