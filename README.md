@@ -66,3 +66,21 @@ The garage now has three one-click routes: **Casual** (1v1, easy bots), **Compet
 Tests: run `node tests/physics-smoke.js`, `node tests/wall-physics.test.js`, `node tests/ai-regression.test.js` and `node tests/browser-smoke.js`. The browser suite verifies every explosion preview and its resource cleanup, as well as saved ball-feel selection.
 
 A dynamic ball-contact shadow and a compact 3D speed trail help you judge aerial height, the path of powerful shots and fast bounces. The trail uses a fixed 16-vertex GPU buffer rather than allocating particle geometry each frame. Goal explosions also play when you score in Free Play.
+
+ 
+## Animated mini-blob stadium fans
+
+The old static box spectators in the stadium stands have been replaced with colourful,
+pastel-coloured, **three-dimensional, smiling blob/bean fans** inspired by the user's
+Potato League screenshot reference. Every spectator has two physical eyes, pink cheeks,
+a smiling mouth that switches to an excited open-mouth cheer, and some carry little
+blue/orange team flags. All elements are GPU instanced, not thousands of draw calls.
+Fans are placed on the actual 18 terrace tiers *outside* the collision walls;
+low graphics quality limits the stadium crowd population.
+
+The crowd gently sways and bobs at rest. **A goal triggers a travelling wave of jumping,
+swaying, mouth changes and waving flags**, with the scoring team's supporters
+celebrating much more strongly. This works in matches and Free Play. Update frequency
+is capped to reduce CPU/GPU load, and the system respects `prefers-reduced-motion`.
+The browser regression check validates both the rendered spectators and a real goal
+causing spectators to physically jump.
