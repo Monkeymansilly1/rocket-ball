@@ -189,6 +189,10 @@ async function main() {
     await evalJS('document.getElementById("trainingResetBall").click()');
     const resetY=await evalJS('window.rocketArena.ball.y');
     assert(Math.abs(resetY-(91.25/50+0.038))<.3,'Training ball did not reset');
+    // Actually score in Free Play and verify the chosen 3D explosion plays.
+    await evalJS('(function(){const b=window.rocketArena.ball;Object.assign(b,{x:0,y:2,z:105,vx:0,vy:0,vz:32});})()');
+    await eventually(()=>evalJS('document.getElementById("trainingGoalCount").textContent.includes("1") && window.rocketArena.goalEffectCount>0'),6000)
+      .catch(err=>{throw new Error('Free Play scoring explosion: '+err.message);});
     await evalJS('document.getElementById("trainingExit").click()');
     assert.equal(await evalJS('window.rocketArena.state'),'menu');
 
