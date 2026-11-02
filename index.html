@@ -176,6 +176,15 @@
           <label class="camera-shake-option"><input id="settingCameraShake" type="checkbox"> Goal camera shake</label>
           <button id="settingCameraCompetitive" class="settings-preset-button" type="button">USE COMPETITIVE CAMERA</button>
           <p class="setting-help">Customise your view of the pitch. Settings apply to both players and save automatically.</p>
+          <h3>Keyboard aerial handling</h3>
+          <div class="setting-row">
+            <label for="settingKeyboardFlight">Flight control mode</label>
+            <select id="settingKeyboardFlight">
+              <option value="assist">Assisted (W + Shift climbs)</option>
+              <option value="manual">Rocket-style manual (W/S pitch)</option>
+            </select>
+          </div>
+          <p class="setting-help">Manual mode: W pitches nose down, S pitches nose up in the air. Boost follows your car's nose, so keep it aimed up to climb. Assisted mode preserves the W + Shift climb control; I/K remain dedicated pitch keys in both modes.</p>
           <h3>Controller</h3>
           <div class="setting-row">
             <label for="settingDeadZone">Stick dead zone</label>
@@ -202,7 +211,7 @@
           <button id="resetControls" type="button">Reset defaults</button>
         </div>
         <div id="controllerStatus" role="status" aria-live="polite">Searching for controller…</div>
-        <p class="controls-tip">Keyboard: W/S drive without pitching the car; K tilts the nose UP, I tilts it DOWN. In an aerial, hold W + Shift for a smooth upward boost angle (Space to jump first), or use I/K to aim manually. Controller: left stick pitches/yaws the car, triggers accelerate/reverse. Select a binding to remap it.</p>
+        <p class="controls-tip">Keyboard: use Settings → Flight control mode to choose Assisted (W + Shift climbs) or Rocket-style Manual (W/S pitch in the air). I/K always pitch, A/D yaw, Q/E roll, and Space jumps/flips. Controller: left stick pitches/yaws; triggers accelerate/reverse. All bindings can be remapped.</p>
         <div class="control-bind-head"><span>Action</span><span>Keyboard</span><span>Controller</span></div>
         <div class="control-bind-row"><strong>Accelerate</strong><button type="button" data-bind-key="forward">W</button><button type="button" data-bind-pad="forward">Left stick ↑</button></div>
         <div class="control-bind-row"><strong>Reverse</strong><button type="button" data-bind-key="reverse">S</button><button type="button" data-bind-pad="reverse">Left stick ↓</button></div>

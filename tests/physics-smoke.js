@@ -326,3 +326,41 @@ console.log('PASS: controller aerial pitch, independent throttle and analog dire
     'E/right air roll should lower the right wheels, not raise them');
   console.log('PASS: consistent keyboard yaw and air-roll directions');
 }
+
+ 
+// Both keyboard flight modes must remain usable and not overwrite controller
+// stick input. The assisted mode retains the previous W+Shift climbing fix.
+{
+  const keys={};
+  const binding={p1:{keyboard:{
+    forward:'KeyW',reverse:'KeyS',left:'KeyA',right:'KeyD',
+    aerialUp:'KeyK',aerialDown:'KeyI',jump:'Space',boost:'ShiftLeft',
+    hand:'KeyE',rollLeft:'KeyQ',rollRight:'KeyE'
+  },pad:{forward:7,reverse:6,left:null,right:null,jump:0,boost:2,
+    hand:4,rollLeft:null,rollRight:5,camera:3}}};
+  const makeReader=(flightMode)=>new Function(
+   'controlBindings','controllerForPlayer','keys','buttonValue',
+   'controllerDeadZone','controllerSteeringSensitivity',
+   'controllerAerialSensitivity','clamp','keyboardFlightMode',
+   extract('playerActions')+'\nreturn playerActions;'
+  )(binding,()=>null,keys,()=>0,.12,1.25,1.35,
+    (v,a,b)=>Math.max(a,Math.min(b,v)),flightMode);
+  const assisted=makeReader('assist');
+  const manual=makeReader('manual');
+  keys.KeyW=true;keys.ShiftLeft=true;
+  assert.equal(assisted('p1').pitch,0,
+    'Assisted W+Shift must not point nose at ground');
+  assert.equal(assisted('p1').keyboardFlightAssist,true,
+    'Assisted climbing must remain enabled');
+  assert.equal(manual('p1').pitch,1,
+    'Manual W must command nose down for Rocket-style control');
+  assert.equal(manual('p1').keyboardFlightAssist,false,
+    'Manual mode must not artificially level or raise the nose');
+  delete keys.KeyW;keys.KeyS=true;
+  assert.equal(manual('p1').pitch,-1,
+    'Manual S must point nose up during aerial');
+  delete keys.KeyS;keys.KeyK=true;
+  assert.equal(manual('p1').pitch,-1,
+    'Dedicated K nose-up must work in manual mode');
+  console.log('PASS: assisted/manual keyboard aerial modes and independent inputs');
+}
