@@ -646,3 +646,93 @@ body.split-screen #boost2 {
   #bt { top:17px!important; font-size:20px!important; }
   #boost::after { top:49px!important; font-size:8px!important; }
 }
+
+/* Reloaded garage: curated quick modes and testable live VFX preview. */
+#menu .reloaded-banner {
+  display:flex; flex-wrap:wrap; align-items:center; justify-content:center;
+  gap:10px; margin:4px auto 2px; width:100%; max-width:670px;
+}
+#menu .reloaded-badge {
+  padding:5px 11px; border:1px solid #59f3cf88; border-radius:30px;
+  background:linear-gradient(110deg,#1a574f88,#0b2e5688);
+  color:#86ffe0; font:900 10px "Trebuchet MS",sans-serif;
+  letter-spacing:.18em; white-space:nowrap;
+}
+#menu .reloaded-copy {
+  color:#aac5d5; font:800 10px "Trebuchet MS",sans-serif;
+  letter-spacing:.06em; line-height:1.55;
+}
+#menu .reloaded-copy span {color:#48ebcf;margin:0 5px;}
+#menu .quickmodes {
+  display:grid; grid-template-columns:repeat(3,minmax(0,1fr));
+  width:min(100%,570px); gap:8px; justify-self:center;
+  margin:3px auto 12px;
+}
+#menu .quickmodes button {
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  min-width:0; gap:5px; min-height:63px; border-radius:10px;
+  background:linear-gradient(150deg,#153e59,#0a1d31 80%);
+  border:1px solid #4b7e9f; box-shadow:inset 0 1px #ffffff14,0 5px 13px #0006;
+  color:#edffff; cursor:pointer; transition:transform .14s,border-color .14s;
+}
+#menu .quickmodes button:nth-child(2) {
+  border-color:#35edce; background:linear-gradient(135deg,#165746,#0c2535);
+}
+#menu .quickmodes button:nth-child(3) {
+  border-color:#8b93fe; background:linear-gradient(135deg,#30235d,#141e38);
+}
+#menu .quickmodes button:hover, #menu .quickmodes button:focus-visible {
+  border-color:#b2ffeb; transform:translateY(-2px);
+}
+#menu .quickmodes button b {font:900 14px Impact,"Arial Narrow",sans-serif;letter-spacing:.1em;}
+#menu .quickmodes button small {font:700 10px "Trebuchet MS",sans-serif;color:#b1cddf;letter-spacing:.07em;}
+#menu .opts.ball-feel-row, #menu .opts.explosion-select-row {
+  padding:8px 10px; border:1px solid #28607566; border-radius:9px;
+  background:#091a2b9c; width:min(100%,600px); max-width:600px; box-sizing:border-box;
+  margin-inline:auto;
+}
+#menu .opts.ball-feel-row small, #menu .opts.explosion-select-row small {
+  flex-basis:100%; text-align:center; color:#8fdacb; font:700 11px "Trebuchet MS",sans-serif;
+}
+#menu .opts.explosion-select-row select { max-width:240px; flex:1 1 175px; }
+#menu .opts.ball-feel-row select { max-width:290px; flex:1 1 200px; }
+#menu .opts .preview-explosion {
+  border:1px solid #a5aeff; background:linear-gradient(135deg,#443378,#213259);
+  color:#fff; padding:8px 14px; font:800 13px "Trebuchet MS",sans-serif;
+  letter-spacing:.06em;
+}
+#menu .opts .preview-explosion:hover { background:#544c91; transform:translateY(-1px); }
+#speedHud {
+  position:absolute; bottom:32px; left:24px; display:flex;align-items:baseline;
+  gap:6px; min-width:92px; padding:7px 13px; z-index:3; pointer-events:none;
+  background:linear-gradient(135deg,#061827ce,#113950ce);
+  border:1px solid #5593ae90;border-radius:8px;box-shadow:0 7px 30px #0007;
+  color:white;font-family:Impact,"Arial Narrow",sans-serif;
+}
+#speedHud[hidden] {display:none!important;}
+#speedHud b {font-size:36px;line-height:1;color:#c3f8ff;font-variant-numeric:tabular-nums;}
+#speedHud small {font:800 11px "Trebuchet MS",sans-serif;color:#7debdc;letter-spacing:.1em;}
+#speedHud.supersonic {border-color:#ffbd63;background:linear-gradient(140deg,#3f1808cc,#1b2635dd);}
+#speedHud.supersonic b {color:#ffca66;}
+body.split-screen #speedHud {left:50%;transform:translateX(-50%);bottom:12px;}
+@media(max-width:720px) {
+  #menu .reloaded-banner {margin-top:6px;}
+  #menu .reloaded-copy {font-size:9px;}
+  #menu .quickmodes {width:min(100%,500px);}
+  #menu .quickmodes button {min-height:60px;}
+  #menu .quickmodes button b {font-size:12px;}
+  #menu .quickmodes button small {font-size:9px;}
+  #speedHud {left:9px;bottom:10px;padding:5px 8px;min-width:65px;}
+  #speedHud b {font-size:26px;}
+}
+@media(max-width:430px) {
+  #menu .quickmodes {gap:4px;}
+  #menu .quickmodes button b {font-size:10px;}
+  #menu .quickmodes button small {font-size:8px;}
+  #menu .opts.ball-feel-row, #menu .opts.explosion-select-row {padding:6px 4px;}
+  #menu .opts.ball-feel-row select {max-width:calc(100% - 65px);}
+}
+@media(prefers-reduced-motion:reduce) {
+  #menu .quickmodes button {transition:none;}
+  #menu .quickmodes button:hover {transform:none;}
+}

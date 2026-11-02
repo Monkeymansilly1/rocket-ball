@@ -111,7 +111,8 @@ const wallX=80-scaledBallRadius-0.05;
 Object.assign(ball,{x:wallX,y:scaledBallRadius+arenaRampAt(wallX,0).height+0.25,z:0,
   vx:24,vy:1,vz:0,onRamp:true});
 stepBall(1/120);
-assert(ball.vx===0 && ball.vy>7 && ball.onWall,'Real ramp-to-wall ball transfer failed');
+assert(ball.vx<=0 && ball.vy>7,
+  'Rounded ramp must redirect outbound ball movement upward before wall contact');
 for(let i=0;i<35;i++)stepBall(1/120);
 assert(ball.y>6.5,'The ball did not rise after transferring onto the wall');
 
@@ -363,4 +364,49 @@ console.log('PASS: controller aerial pitch, independent throttle and analog dire
   assert.equal(manual('p1').pitch,-1,
     'Dedicated K nose-up must work in manual mode');
   console.log('PASS: assisted/manual keyboard aerial modes and independent inputs');
+}
+
+ 
+// The responsive default should make the ball livelier without changing
+// the documented reference mass, capping speed or weakening Classic mode.
+{
+  assert.equal(tuning.BALL_FEEL_MODE,'responsive',
+    'New players must start with the responsive ball feel');
+  assert.equal(tuning.BALL_MASS_REFERENCE,30);
+  const saved=tuning.BALL_FEEL;
+  const classic={gravity:1,floor:1,ramp:1,rolling:1,impact:1,pop:1};
+  const responsive={gravity:.97,floor:1.1,ramp:1.13,rolling:.70,
+    impact:1.12,pop:1.22};
+  const start={x:0,y:scaledBallRadius+.002,z:0,vx:0,vy:-11,vz:0,
+    wx:0,wy:0,wz:0,onGround:false,onRamp:false,onWall:false};
+  tuning.BALL_FEEL=classic;
+  Object.assign(ball,start);
+  stepBall(1/120);
+  const classicBounce=ball.vy;
+  tuning.BALL_FEEL=responsive;
+  Object.assign(ball,start);
+  stepBall(1/120);
+  const livelyBounce=ball.vy;
+  assert(livelyBounce>classicBounce+.5,
+    'Responsive ball should bounce noticeably higher than Classic');
+  assert(livelyBounce<10,'Ball gained too much energy on a floor bounce');
+  const touchCar=cars[0];
+  const impact={x:0,y:.55,z:3.2,vx:0,vy:0,vz:0,
+    wx:0,wy:0,wz:0,onGround:false,onRamp:false,onWall:false};
+  Object.assign(touchCar,{x:0,y:.55,z:0,yaw:0,vx:0,vy:0,vz:26,
+    ground:true,wallRide:false,airQuat:null,pitch:0,roll:0,
+    ballHitCooldown:0});
+  tuning.BALL_FEEL=classic;
+  Object.assign(ball,impact);hitBall(touchCar);
+  const classicShot=ball.vz;
+  Object.assign(touchCar,{x:0,y:.55,z:0,yaw:0,vx:0,vy:0,vz:26,
+    ballHitCooldown:0});
+  tuning.BALL_FEEL=responsive;
+  Object.assign(ball,impact);hitBall(touchCar);
+  assert(ball.vz>classicShot+0.5,
+    'Responsive ground contact should produce a stronger clean touch');
+  assert(ball.vz<tuning.MAX_BALL_SPEED,
+    'Responsive touch exceeded the ball speed limit');
+  tuning.BALL_FEEL=saved;
+  console.log('PASS: live responsive ball bounce, touch power and Classic fallback');
 }

@@ -1,4 +1,4 @@
-# Rocket Arena 3D
+# Rocket Arena Reloaded (Rocket Ball)
 
 A 3D rocket-car soccer game built with plain JavaScript and [Three.js](https://threejs.org) (r149). No build step, and no 3D model files: the cars, ball, pitch and goals are all made from basic shapes in code.
 
@@ -53,3 +53,16 @@ W/S are **drive and reverse**, no longer full-time pitch controls. A/D steer and
 The ground solver now preserves *world-space momentum* through steering and applies side-slip damping as tyre traction. This creates a genuine difference between a grippy turn and low-grip powersliding, instead of moving the entire velocity vector instantly wherever the nose points. Wall and curved-ramp steering use the same model.
 
 In **Settings → Keyboard aerial handling**, switch to **Rocket-style manual** for W/S nose pitch (W noses down, S noses up); it deliberately does not auto-level or auto-climb the car, so holding W + boost while airborne can dive just as pushing the stick forward can in Rocket League. **Assisted** retains the previous W + Shift upward flight so keyboard users can fly more easily. The choice is saved locally.
+
+ 
+## Reloaded upgrade (November 2026)
+
+This build adds a **configurable ball feel** independent of car handling. The new default, **Responsive**, preserves the reference mass and nominal gravity while adding livelier car-ball first contact, slightly brighter floor/ramp bounces, controlled ball lift and less rolling drag. **Classic** restores the original ball dynamics; **Airy** is tuned for aerial practice. The selection saves to the browser and applies to live ball physics as well as AI ball predictions.
+
+The expanded 3D goal explosion garage has eight animated designs: **Classic Blast, Firestorm, Galaxy Rift, Lightning Storm, Black Hole, Supernova, Pixel Party and Aurora Pulse**. Click **Preview** to display the actual 3D goal effect in the garage before choosing it. Effects use short-lived lights, rings, glowing cores, styled particles and (on certain effects) 3D shards. Geometry and material resources are removed when each effect ends; no extra image assets required.
+
+The garage now has three one-click routes: **Casual** (1v1, easy bots), **Competitive** (2v2, hard bots) and **Freestyle** (Free Play with wall-air-dribble drill). A real **MPH speedometer** appears during play, and the garage has updated visual styling. All original match, car, stadium, replay, multiplayer and training functionality is retained.
+
+Tests: run `node tests/physics-smoke.js`, `node tests/wall-physics.test.js`, `node tests/ai-regression.test.js` and `node tests/browser-smoke.js`. The browser suite verifies every explosion preview and its resource cleanup, as well as saved ball-feel selection.
+
+A dynamic ball-contact shadow and a compact 3D speed trail help you judge aerial height, the path of powerful shots and fast bounces. The trail uses a fixed 16-vertex GPU buffer rather than allocating particle geometry each frame. Goal explosions also play when you score in Free Play.

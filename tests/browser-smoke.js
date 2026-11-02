@@ -98,6 +98,30 @@ async function main() {
     await call('Page.navigate',{url});
     await eventually(()=>evalJS('document.readyState==="complete" && !!window.rocketArena && !!window.THREE'),15000)
       .catch(err=>{throw new Error('Game startup: '+err.message+'; browser exceptions: '+JSON.stringify(errors));});
+    console.log('Game loaded; testing Reloaded menu and goal effects');
+    assert.equal(await evalJS('window.rocketArena.ballFeel'),'responsive');
+    assert.equal(await evalJS('window.rocketArena.ballShadow.isMesh'),true);
+    assert.equal(await evalJS('window.rocketArena.ballTrail.isLine'),true);
+    assert.equal(await evalJS('document.querySelectorAll("#explosion option").length'),8);
+    assert.equal(await evalJS('document.querySelectorAll("[data-quick]").length'),3);
+    // Preview every selectable goal style without scoring a real match.
+    await evalJS(`for(const style of ["classic","fire","galaxy","lightning","blackhole","supernova","pixel","aurora"])window.rocketArena.previewGoalExplosion(style)`);
+    assert((await evalJS('window.rocketArena.goalEffectCount'))>0,
+      '3D explosion preview never spawned scene objects');
+    assert((await evalJS('window.rocketArena.goalEffectCount'))<=3,
+      '3D goal explosion preview leaks unbounded meshes');
+    await eventually(()=>evalJS('window.rocketArena.goalEffectCount===0'),6500);
+    // The actual menu preview button must use the same real 3D effect path.
+    await evalJS('document.getElementById("explosion").value="pixel";document.getElementById("explosionPreview").click()');
+    assert((await evalJS('window.rocketArena.goalEffectCount'))>0,
+      'Goal explosion preview button is not wired to the renderer');
+    assert.equal(await evalJS('document.getElementById("explosionPreviewStatus").textContent.includes("PIXEL")'),true);
+    await eventually(()=>evalJS('window.rocketArena.goalEffectCount===0'),5000);
+    await evalJS('document.getElementById("ballFeel").value="airy"; document.getElementById("ballFeel").dispatchEvent(new Event("change",{bubbles:true}))');
+    assert.equal(await evalJS('window.rocketArena.ballFeel'),'airy');
+    assert.equal(await evalJS('JSON.parse(localStorage.getItem("rocketArenaSettingsV1")).ballFeelMode'),'airy');
+    await evalJS('document.getElementById("ballFeel").value="responsive";document.getElementById("ballFeel").dispatchEvent(new Event("change",{bubbles:true}))');
+    console.log('PASS: eight 3D explosions, previews, cleanup and persistent ball feel');
     console.log('Game loaded; testing Free Play');
     assert.equal(await evalJS('window.rocketArena.state'),'menu');
     // Verify the NEW arena exists as playable 3D geometry, not just an image.
@@ -165,6 +189,10 @@ async function main() {
     await evalJS('document.getElementById("trainingResetBall").click()');
     const resetY=await evalJS('window.rocketArena.ball.y');
     assert(Math.abs(resetY-(91.25/50+0.038))<.3,'Training ball did not reset');
+    // Actually score in Free Play and verify the chosen 3D explosion plays.
+    await evalJS('(function(){const b=window.rocketArena.ball;Object.assign(b,{x:0,y:2,z:105,vx:0,vy:0,vz:32});})()');
+    await eventually(()=>evalJS('document.getElementById("trainingGoalCount").textContent.includes("1") && window.rocketArena.goalEffectCount>0'),6000)
+      .catch(err=>{throw new Error('Free Play scoring explosion: '+err.message);});
     await evalJS('document.getElementById("trainingExit").click()');
     assert.equal(await evalJS('window.rocketArena.state'),'menu');
 
@@ -187,6 +215,18 @@ async function main() {
     const pos1=await evalJS('window.rocketArena.cars[0].z');
     assert(pos1>pos0+0.05,'Car did not move when accelerating: '+pos0+' -> '+pos1);
     assert.equal(await evalJS('Number.isFinite(window.rocketArena.ball.x) && Number.isFinite(window.rocketArena.ball.y) && Number.isFinite(window.rocketArena.ball.z)'),true);
+    assert.equal(await evalJS('Number.isFinite(Number(document.getElementById("speedValue").textContent))'),true,
+      'Live mph speedometer is not updating');
+    await evalJS('document.getElementById("quickPlayButton").click()');
+    assert.equal(await evalJS('window.rocketArena.state'),'menu');
+    await evalJS('document.getElementById("quickCasual").click()');
+    await eventually(()=>evalJS('window.rocketArena.state==="play" && window.rocketArena.cars.length===2'),16000)
+      .catch(err=>{throw new Error('Casual 1v1 preset failed: '+err.message);});
+    await evalJS('document.getElementById("quickPlayButton").click()');
+    await evalJS('document.getElementById("quickFreestyle").click()');
+    assert.equal(await evalJS('document.getElementById("trainingPreset").value'),'wall');
+    assert.equal(await evalJS('window.rocketArena.cars.length'),1);
+    assert.equal(await evalJS('window.rocketArena.ballFeel'),'airy');
     assert.deepEqual(errors,[],'Unexpected browser JS errors');
     console.log('PASS: WebGL startup, menu, Free Play, ball reset, camera persistence, match kickoff and driving.');
   } finally {

@@ -58,8 +58,35 @@ const PHYSICS_TUNING = {
   BALL_HIT_FORWARD_FORCE: 6, BALL_FORWARD_SPEED_FACTOR: 0.34,
   BALL_FLIP_HIT_BONUS: 8, BALL_BOOST_HIT_BONUS: 5,
   BALL_UPWARD_POP: 5.5, BALL_EXTRA_HIT_MAX_RELATIVE_SPEED: 4600 / 50,
-  BALL_CAR_MASS_RATIO: 180 / 30
+  BALL_CAR_MASS_RATIO: 180 / 30,
+  // Ball response is its own setting, independent of the car-physics preset.
+  // The reference gravity/mass above remain unchanged and documented.
+  BALL_FEEL_MODE: 'responsive',
+  BALL_FEEL: {gravity:0.97, floor:1.10, ramp:1.13, rolling:0.70,
+              impact:1.12, pop:1.22}
 };
+const BALL_FEEL_PROFILES = Object.freeze({
+  responsive: Object.freeze({gravity:0.97, floor:1.10, ramp:1.13,
+    rolling:0.70, impact:1.12, pop:1.22}),
+  classic: Object.freeze({gravity:1, floor:1, ramp:1,
+    rolling:1, impact:1, pop:1}),
+  airy: Object.freeze({gravity:0.88, floor:1.15, ramp:1.20,
+    rolling:0.65, impact:1.18, pop:1.3})
+});
+function setBallFeel(mode, persist=true) {
+  PHYSICS_TUNING.BALL_FEEL_MODE = Object.hasOwn(BALL_FEEL_PROFILES, mode)
+    ? mode : 'responsive';
+  PHYSICS_TUNING.BALL_FEEL = BALL_FEEL_PROFILES[PHYSICS_TUNING.BALL_FEEL_MODE];
+  const select = $('ballFeel');
+  if (select) select.value = PHYSICS_TUNING.BALL_FEEL_MODE;
+  const hint = $('ballFeelHint');
+  if (hint) hint.textContent = PHYSICS_TUNING.BALL_FEEL_MODE === 'classic'
+    ? 'Original bounce and touch response.'
+    : PHYSICS_TUNING.BALL_FEEL_MODE === 'airy'
+      ? 'Higher bounces and longer air time.'
+      : 'Sharper touches, brighter bounces, easier ball lifts.';
+  if (persist) saveGeneralSettings();
+}
 const MATCH = 180;
 const TEAM_COLOR_PRESETS = {
   normal: { blue: 0x2fb8ff, orange: 0xff8a1f },
@@ -81,6 +108,8 @@ try {
   if (Number.isFinite(savedSettings.steeringSensitivity)) controllerSteeringSensitivity = Math.max(1, Math.min(2.5, savedSettings.steeringSensitivity));
   if (Number.isFinite(savedSettings.aerialSensitivity)) controllerAerialSensitivity = Math.max(1, Math.min(2.5, savedSettings.aerialSensitivity));
   if (typeof savedSettings.controllerVibration === 'boolean') controllerVibrationEnabled = savedSettings.controllerVibration;
+  if (Object.hasOwn(BALL_FEEL_PROFILES, savedSettings.ballFeelMode))
+    PHYSICS_TUNING.BALL_FEEL_MODE = savedSettings.ballFeelMode;
   if (['assist', 'manual'].includes(savedSettings.keyboardFlightMode)) keyboardFlightMode = savedSettings.keyboardFlightMode;
   if (savedSettings.camera && typeof savedSettings.camera === 'object') {
     for (const key of ['fov', 'distance', 'height', 'stiffness']) {
@@ -90,6 +119,7 @@ try {
   }
   if (Object.prototype.hasOwnProperty.call(TEAM_COLOR_PRESETS, savedSettings.colourVisionMode)) colourVisionMode = savedSettings.colourVisionMode;
 } catch (_) {}
+PHYSICS_TUNING.BALL_FEEL = BALL_FEEL_PROFILES[PHYSICS_TUNING.BALL_FEEL_MODE];
 BLUE = TEAM_COLOR_PRESETS[colourVisionMode].blue;
 ORANGE = TEAM_COLOR_PRESETS[colourVisionMode].orange;
 const WALL_RAMP_WIDTH = 6.0, WALL_RAMP_HEIGHT = 256 / 50;
@@ -1007,6 +1037,66 @@ const ballTex = (() => {
 const ballMesh = new THREE.Mesh(new THREE.SphereGeometry(BR, 32, 24),
   new THREE.MeshStandardMaterial({ map: ballTex, roughness: 0.4, emissive: 0xffffff, emissiveIntensity: 0.12 }));
 ballMesh.castShadow = true; scene.add(ballMesh);
+// A readable contact shadow is important for judging a bouncing ball's
+// true height. It stays on the curved pitch rather than floating in the air.
+const ballGroundShadow=new THREE.Mesh(
+  new THREE.CircleGeometry(BR*1.4,40),
+  new THREE.MeshBasicMaterial({color:0x020916,transparent:true,opacity:0.32,
+    depthWrite:false,polygonOffset:true,polygonOffsetFactor:-2})
+);
+ballGroundShadow.rotation.x=-Math.PI/2;
+scene.add(ballGroundShadow);
+// Lightweight 3D streak for genuinely fast ball motion. Draw-range avoids
+// creating and destroying meshes each frame.
+const BALL_TRAIL_POINTS=16;
+const ballTrailGeometry=new THREE.BufferGeometry();
+ballTrailGeometry.setAttribute('position',
+  new THREE.BufferAttribute(new Float32Array(BALL_TRAIL_POINTS*3),3));
+ballTrailGeometry.setDrawRange(0,0);
+const ballTrail=new THREE.Line(ballTrailGeometry,
+  new THREE.LineBasicMaterial({color:0x75f5fb,transparent:true,
+    opacity:0.58,depthWrite:false,blending:THREE.AdditiveBlending}));
+ballTrail.frustumCulled=false;
+scene.add(ballTrail);
+const ballTrailHistory=[];
+function resetBallTrail(){
+  ballTrailHistory.length=0;
+  ballTrailGeometry.setDrawRange(0,0);
+  ballTrail.visible=false;
+}
+function updateBallVisuals(){
+  const gameActive=state==='play'||state==='goal'||state==='replay';
+  ballGroundShadow.visible=gameActive;
+  const floorY=arenaRampAt(ball.x,ball.z).height;
+  const height=Math.max(0,ball.y-(BR+floorY));
+  ballGroundShadow.position.set(ball.x,floorY+0.055,ball.z);
+  const scale=1+Math.min(20,height)*0.065;
+  ballGroundShadow.scale.setScalar(scale);
+  ballGroundShadow.material.opacity=Math.max(0.06,0.33-height*0.012);
+  const speed=Math.hypot(ball.vx,ball.vy,ball.vz);
+  if(!gameActive || speed<24 || !Number.isFinite(speed)){
+    resetBallTrail();
+    return;
+  }
+  const current=new THREE.Vector3(ball.x,ball.y,ball.z);
+  if(ballTrailHistory.length &&
+    current.distanceTo(ballTrailHistory[ballTrailHistory.length-1])>11)
+    ballTrailHistory.length=0;
+  ballTrailHistory.push(current);
+  if(ballTrailHistory.length>BALL_TRAIL_POINTS)ballTrailHistory.shift();
+  const positions=ballTrailGeometry.attributes.position;
+  // Use each point's stored world-space location; no velocity extrapolation.
+  for(let k=0;k<ballTrailHistory.length;k++){
+    const p=ballTrailHistory[k];
+    positions.setXYZ(k,p.x,p.y,p.z);
+  }
+  positions.needsUpdate=true;
+  ballTrailGeometry.setDrawRange(0,ballTrailHistory.length);
+  ballTrail.visible=ballTrailHistory.length>1;
+  const t=clamp((speed-24)/70,0,1);
+  ballTrail.material.opacity=0.25+t*0.5;
+  ballTrail.material.color.setHex(speed>65?0xffd278:0x75f5fb);
+}
 
 // ---------- state ----------
 let state = 'menu', t = 0, score = [0, 0], clock = MATCH, ot = false, cd = 0, ballCam = false, mode = 2, diff = 1, muted = false;
@@ -1086,6 +1176,11 @@ let player2Paint = '#ff8a1f', player2PaintCustom = false;
 let physicsStyle = 'standard';
 let localTwoPlayer = false;
 let goalExplosionStyle = 'classic';
+try {
+  const previous=localStorage.getItem('rocketArenaExplosionV1');
+  if(['classic','fire','galaxy','lightning','blackhole','supernova','pixel','aurora'].includes(previous))
+    goalExplosionStyle=previous;
+} catch (_) {}
 let trainingMode = false, trainingGoals = 0, trainingAttempts = 0, trainingAirTouches = 0, trainingWallArmed = false;
 let paused = false;
 let lastTouch = null;
@@ -1200,6 +1295,7 @@ const FORM = [[0, 4608 / 50 / HL], [-40.96, 2560 / 50 / HL], [40.96, 2560 / 50 /
 function kickoff() {
   previousTouch = null;
   eventCooldown = {};
+  resetBallTrail();
   const msgEl = $('msg'); if (msgEl) msgEl.classList.remove('replay-title');
   const goalByEl = $('goalBy'); if (goalByEl) goalByEl.textContent = '';
   const goalSpeedEl = $('goalSpeed'); if (goalSpeedEl) goalSpeedEl.textContent = '';
@@ -1261,6 +1357,7 @@ function start(freePlay = false) {
 // Free Play lets players practise aerials, wall shots and ground dribbles
 // without changing normal match rules or spawning opposition bots.
 function resetTrainingBall() {
+  resetBallTrail();
   Object.assign(ball, {
     x: 0, y: BR + 0.038, z: 0, vx: 0, vy: 0, vz: 0,
     wx: 0, wy: 0, wz: 0, onRamp: false, onGround: false
@@ -1759,7 +1856,20 @@ if (name2Input) name2Input.addEventListener('input', () => {
   const p2 = cars[mode]; if (p2 && localTwoPlayer) p2.displayName = player2Name;
 });
 const explosionInput = $('explosion');
-if (explosionInput) explosionInput.addEventListener('change', () => { goalExplosionStyle = explosionInput.value; });
+if(explosionInput)explosionInput.value=goalExplosionStyle;
+if (explosionInput) explosionInput.addEventListener('change', () => {
+  goalExplosionStyle = explosionInput.value;
+  try {localStorage.setItem('rocketArenaExplosionV1',goalExplosionStyle);}catch(_){}
+  const value=$('explosionName');
+  if(value)value.textContent=explosionInput.options[explosionInput.selectedIndex].text;
+});
+const explosionPreview = $('explosionPreview');
+if(explosionPreview)explosionPreview.addEventListener('click',()=>{
+  goalExplosionStyle = explosionInput?.value || 'classic';
+  goalExplosion(false,true);
+  const tip=$('explosionPreviewStatus');
+  if(tip)tip.textContent='PREVIEWING '+goalExplosionStyle.toUpperCase();
+});
 function updateGaragePreview() {
   const car = $('menuCarShowcase');
   if (!car) return;
@@ -1786,6 +1896,7 @@ function saveGeneralSettings() {
       volume: gameVolume, colourVisionMode, deadZone: controllerDeadZone,
       steeringSensitivity: controllerSteeringSensitivity, aerialSensitivity: controllerAerialSensitivity,
       controllerVibration: controllerVibrationEnabled, keyboardFlightMode,
+      ballFeelMode: PHYSICS_TUNING.BALL_FEEL_MODE,
       camera: cameraSettings, graphicsQuality
     }));
   } catch (_) {}
@@ -1942,6 +2053,11 @@ const stadiumInput = $('stadium');
 if (stadiumInput) stadiumInput.addEventListener('change', () => applyArenaStyle(stadiumInput.value));
 const physicsInput = $('physics');
 if (physicsInput) physicsInput.addEventListener('change', () => { physicsStyle = physicsInput.value || 'standard'; });
+const ballFeelInput = $('ballFeel');
+if (ballFeelInput) {
+  setBallFeel(PHYSICS_TUNING.BALL_FEEL_MODE, false);
+  ballFeelInput.addEventListener('change', () => setBallFeel(ballFeelInput.value));
+}
 const localTwoInput = $('localTwo');
 if (localTwoInput) localTwoInput.addEventListener('change', () => {
   localTwoPlayer = localTwoInput.checked;
@@ -1975,6 +2091,27 @@ function handleMenuChoice(e) {
 }
 $('menu').addEventListener('pointerdown', handleMenuChoice);
 $('menu').addEventListener('click', handleMenuChoice);
+// One-click quick modes use the real start path, not a separate fake arena.
+for(const button of document.querySelectorAll('[data-quick]')){
+  button.addEventListener('click',event=>{
+    event.stopPropagation();
+    const choice=button.dataset.quick;
+    if(choice==='freestyle'){
+      setBallFeel('airy');
+      start(true);
+      const preset=$('trainingPreset');
+      if(preset){
+        preset.value='wall';
+        preset.dispatchEvent(new Event('change',{bubbles:true}));
+      }
+      return;
+    }
+    pick('mode',choice==='competitive'?2:1);
+    pick('diff',choice==='competitive'?2:0);
+    setBallFeel('responsive');
+    start();
+  });
+}
 function playerActions(who) {
   const binding = controlBindings[who].keyboard;
   const pad = controllerForPlayer(who);
@@ -2818,11 +2955,17 @@ function hitBall(c) {
     c.nextRumbleAt = t + 0.15;
   }
 
+  const feel = PHYSICS_TUNING.BALL_FEEL;
   const inverseBallMass = 1 / PHYSICS_TUNING.BALL_MASS_REFERENCE;
   const inverseCarMass = 1 / PHYSICS_TUNING.CAR_MASS_REFERENCE;
   const impulse = closing * (1 + PHYSICS_TUNING.CAR_BALL_RESTITUTION) / (inverseBallMass + inverseCarMass);
   const ballChange = impulse * inverseBallMass, carChange = impulse * inverseCarMass;
-  ball.vx += nx * ballChange; ball.vy += ny * ballChange; ball.vz += nz * ballChange;
+  // Faster *real* initial separation; limit the assist to the impact frame.
+  // No repeated acceleration during an air-dribble or while objects overlap.
+  const responsiveness = c.ground ? feel.impact : 1+(feel.impact-1)*0.40;
+  ball.vx += nx * ballChange * responsiveness;
+  ball.vy += ny * ballChange * responsiveness;
+  ball.vz += nz * ballChange * responsiveness;
   c.vx -= nx * carChange; c.vy -= ny * carChange; c.vz -= nz * carChange;
   // Gentle tangential contact gives the driver air-dribble steering authority
   // without adding free energy or locking the sphere to the car's hitbox.
@@ -2850,11 +2993,12 @@ function hitBall(c) {
     const extra = aerial
       ? aligned * (c.flip > 0 ? Math.min(7, closing*0.18+3) :
           Math.min(1.35, closing*0.055 + forwardSpeed*0.012))
-      : aligned * Math.min(13, closing*0.12 + forwardSpeed*0.05 +
-          (c.flip > 0 ? 5 : 0) + (c.fl ? 2.2 : 0));
+      : aligned * Math.min(14.5, closing*0.13 + forwardSpeed*0.055 +
+          (c.flip > 0 ? 5 : 0) + (c.fl ? 2.2 : 0)) * feel.impact;
     ball.vx += fx * extra; ball.vy += fy * extra; ball.vz += fz * extra;
     if (ny > 0.2 && forward > -0.4) {
-      ball.vy += Math.min(aerial ? 0.4 : 2.2, closing * (aerial ? 0.035 : 0.1));
+      ball.vy += Math.min(aerial ? 0.4 : 2.7*feel.pop,
+        closing * (aerial ? 0.035 : 0.125*feel.pop));
     }
     c.ballHitCooldown = aerial ? 0.11 : 0.085;
   }
@@ -2905,45 +3049,154 @@ function ballSurfaceImpulse(nx, ny, nz, restitution, body=ball) {
 
 // goal explosion helpers
 let camShakeTime = 0;
-function goalExplosion(team) {
-  const cx = ball.x, cy = Math.max(ball.y, 2.5), cz = ball.z;
-  // color palette
-  const palettes = {
-    classic: team ? [1, 0.54, 0.12] : [0.18, 0.72, 1],
-    fire: [1, 0.18 + Math.random() * 0.25, 0.025],
-    galaxy: [0.62, 0.2, 1],
-    lightning: [0.55, 0.9, 1]
-  };
-  const cs = palettes[goalExplosionStyle] || palettes.classic;
-  const burstCount = goalExplosionStyle === 'galaxy' ? 520 : goalExplosionStyle === 'lightning' ? 260 : 400;
-  // large particle burst
-  for (let i = 0; i < burstCount; i++) {
-    const a = Math.random() * Math.PI * 2, e = Math.random() * 1.6, s = 12 + Math.random() * 32;
-    const r = i % 6 ? (goalExplosionStyle === 'galaxy' && i % 3 === 0 ? [0.15, 0.65, 1] : cs) : [1, 0.9, 0.6];
-    emit(cx, cy, cz, Math.cos(a) * Math.cos(e) * s, Math.sin(e) * s + 6, Math.sin(a) * Math.cos(e) * s, 1.6 + Math.random() * 0.8, r[0], r[1], r[2]);
+
+const activeGoalEffects = [];
+const GOAL_EFFECT_DATA = Object.freeze({
+  classic: {colour:0x36bfff, accent:0xffffff, n:340, style:'burst'},
+  fire: {colour:0xff5b18, accent:0xffeb6c, n:425, style:'flames'},
+  galaxy: {colour:0xa45bff, accent:0x22e9ff, n:420, style:'spiral'},
+  lightning: {colour:0x61d8ff, accent:0xf6fbff, n:400, style:'sparks'},
+  blackhole: {colour:0x7b37ff, accent:0xff57cb, n:450, style:'implosion'},
+  supernova: {colour:0xffdd69, accent:0xffffff, n:500, style:'nova'},
+  pixel: {colour:0x3efaac, accent:0xff54be, n:290, style:'pixels'},
+  aurora: {colour:0x48f5c5, accent:0xb48cff, n:390, style:'spiral'}
+});
+// This is scene geometry, not a flat particle colour swap. Each style has
+// expanding torus shockwaves, a light source, a glowing 3D core and optionally
+// individually animated shards. Every object is disposed after the explosion.
+function clearGoalEffect(effect) {
+  scene.remove(effect.group);
+  effect.group.traverse(object => {
+    if (object.geometry) object.geometry.dispose();
+    const materials=Array.isArray(object.material) ? object.material : [object.material];
+    for (const mat of materials) if(mat && mat.dispose)mat.dispose();
+  });
+  const index=activeGoalEffects.indexOf(effect);
+  if(index>=0)activeGoalEffects.splice(index,1);
+}
+function tickGoalEffects(dt) {
+  for(let i=activeGoalEffects.length-1;i>=0;i--){
+    const fx=activeGoalEffects[i];
+    // Scene effects are visual and should expire by wall-clock time, even
+    // on a GPU that renders below 10 FPS (physics remains fixed at 120Hz).
+    fx.age=Math.max(fx.age+Math.min(dt,0.1),
+      (performance.now()-fx.startedAt)/1000);
+    const progress=fx.age/fx.duration;
+    if(progress>=1){clearGoalEffect(fx);continue;}
+    const remain=Math.max(0,1-progress);
+    fx.light.intensity=fx.maxLight*remain*remain;
+    if(fx.core){
+      const scale=fx.style==='implosion' ? 1.4-1.3*progress :
+        fx.style==='nova' ? 1+3*progress : 1+1.8*progress;
+      fx.core.scale.setScalar(Math.max(0.04,scale));
+      fx.core.material.opacity=fx.style==='implosion'?Math.min(0.9,remain):remain*0.8;
+      fx.core.rotation.y+=dt*2.2;
+    }
+    fx.rings.forEach((ring,index)=>{
+      ring.scale.setScalar(1+(index+1)*0.2+progress*(fx.style==='nova'?8:5));
+      ring.rotation.z+=dt*(index%2?1.8:-1.2);
+      ring.material.opacity=Math.max(0,remain*remain*0.8);
+    });
+    for(const shard of fx.shards){
+      shard.mesh.position.addScaledVector(shard.velocity,dt);
+      shard.velocity.y-=dt*(fx.style==='pixels'?5:9);
+      shard.mesh.rotation.x+=dt*shard.spin;
+      shard.mesh.rotation.y+=dt*shard.spin*1.3;
+      shard.mesh.material.opacity=remain;
+    }
   }
-  // confetti shards (heavier)
-  for (let i = 0; i < 120; i++) {
-    const vx = (Math.random() - 0.5) * (goalExplosionStyle === 'lightning' ? 64 : 40);
-    const vz = (Math.random() - 0.5) * (goalExplosionStyle === 'lightning' ? 64 : 40);
-    emit(cx, cy, cz, vx, Math.random() * 30, vz, 1.2, cs[0], cs[1], cs[2]);
+}
+function goalExplosion(team, preview=false) {
+  const style=Object.hasOwn(GOAL_EFFECT_DATA,goalExplosionStyle)
+    ? goalExplosionStyle:'classic';
+  const data=GOAL_EFFECT_DATA[style];
+  const cx=preview ? 28 : ball.x;
+  const cy=preview ? 3 : Math.max(ball.y,2.5);
+  const cz=preview ? 0 : ball.z;
+  // Keep menu previews and consecutive goals from building up GPU objects.
+  while(activeGoalEffects.length>=3)clearGoalEffect(activeGoalEffects[0]);
+  const group=new THREE.Group();
+  group.position.set(cx,cy,cz);
+  group.name='Goal Explosion · '+style;
+  scene.add(group);
+  const baseColour=style==='classic' ? (team ? ORANGE:BLUE):data.colour;
+  const coreMaterial=new THREE.MeshBasicMaterial({
+    color:style==='blackhole'?0x0b061b:data.accent,
+    transparent:true,opacity:0.9,depthWrite:false,
+    blending:style==='blackhole'?THREE.NormalBlending:THREE.AdditiveBlending
+  });
+  const core=new THREE.Mesh(
+    style==='pixel'?new THREE.BoxGeometry(2.2,2.2,2.2):
+      new THREE.IcosahedronGeometry(style==='blackhole'?3.1:2.3,1),
+    coreMaterial);
+  group.add(core);
+  const rings=[];
+  const ringCount=style==='nova'?4:
+    style==='blackhole'?3:style==='pixel'?2:3;
+  for(let n=0;n<ringCount;n++){
+    const ring=new THREE.Mesh(
+      new THREE.TorusGeometry(2.8+n*0.5,0.12+n*0.07,8,64),
+      new THREE.MeshBasicMaterial({
+        color:n%2?data.accent:baseColour,transparent:true,
+        opacity:0.75,depthWrite:false,blending:THREE.AdditiveBlending
+      })
+    );
+    ring.rotation.x=(n%2?Math.PI/3:Math.PI/2);
+    ring.rotation.y=n*0.72;
+    group.add(ring);
+    rings.push(ring);
   }
-
-  // flash light
-  const pl = new THREE.PointLight(team ? ORANGE : BLUE, 6, 300); pl.position.set(cx, cy, cz); scene.add(pl);
-  let lightLife = 0.9;
-  const lightInterval = setInterval(() => { pl.intensity *= 0.7; lightLife -= 0.06; if (lightLife <= 0) { scene.remove(pl); clearInterval(lightInterval); } }, 60);
-
-  // expanding ring
-  const ringGeo = new THREE.RingGeometry(goalExplosionStyle === 'lightning' ? 4 : 8, goalExplosionStyle === 'lightning' ? 5 : 10, 64);
-  const ring = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: goalExplosionStyle === 'classic' ? (team ? ORANGE : BLUE) : new THREE.Color(cs[0], cs[1], cs[2]), transparent: true, opacity: 0.9, side: THREE.DoubleSide }));
-  ring.rotation.x = -Math.PI / 2; ring.position.set(cx, 1.5, cz); scene.add(ring);
-  let rscale = 1.0;
-  const ringInterval = setInterval(() => { rscale += 0.25; ring.scale.set(rscale, rscale, rscale); ring.material.opacity *= 0.86; if (ring.material.opacity < 0.03) { scene.remove(ring); clearInterval(ringInterval); } }, 40);
-
-  // camera shake + sound
-  camShakeTime = 0.8;
-  [880, 1047, 1318].forEach((f, i) => setTimeout(() => sfx.tone(f, 0.28, 'sawtooth', 0.18), i * 100));
+  const shards=[];
+  const totalShards=graphicsQuality==='low'?12:style==='pixel'?64:style==='blackhole'?36:24;
+  if(['pixel','blackhole','supernova','aurora'].includes(style)) {
+    for(let n=0;n<totalShards;n++){
+      const a=(n/totalShards)*Math.PI*2;
+      const elevation=(n%9)/9*Math.PI-Math.PI/2;
+      const dir=new THREE.Vector3(Math.cos(a)*Math.cos(elevation),
+        Math.sin(elevation),Math.sin(a)*Math.cos(elevation));
+      const startRadius=style==='blackhole'?10+Math.random()*8:2;
+      const shard=new THREE.Mesh(
+        style==='pixel'?new THREE.BoxGeometry(0.7,0.7,0.7):
+          new THREE.TetrahedronGeometry(0.5+Math.random()*0.35),
+        new THREE.MeshBasicMaterial({color:n%3?baseColour:data.accent,
+          transparent:true,opacity:0.95,depthWrite:false,
+          blending:THREE.AdditiveBlending})
+      );
+      shard.position.copy(dir).multiplyScalar(startRadius);
+      group.add(shard);
+      const v=dir.clone().multiplyScalar(style==='blackhole'?-20:14+Math.random()*17);
+      v.y+=style==='supernova'?6:3;
+      shards.push({mesh:shard,velocity:v,spin:1+(n%7)});
+    }
+  }
+  const light=new THREE.PointLight(baseColour,7,145);
+  group.add(light);
+  activeGoalEffects.push({
+    group,core,rings,shards,light,style:data.style,
+    age:0,startedAt:performance.now(),
+    duration:style==='blackhole'?1.7:style==='supernova'?2.0:1.45,maxLight:7
+  });
+  const rgb=new THREE.Color(baseColour),alt=new THREE.Color(data.accent);
+  const count=Math.floor(data.n*(graphicsQuality==='low'?0.42:1));
+  for(let i=0;i<count;i++){
+    const a=Math.random()*2*Math.PI,e=(Math.random()-0.5)*Math.PI;
+    const ux=Math.cos(a)*Math.cos(e),uy=Math.sin(e),uz=Math.sin(a)*Math.cos(e);
+    const speed=style==='blackhole'?(-17-Math.random()*12):
+      style==='supernova'?(26+Math.random()*31):(13+Math.random()*31);
+    const radius=style==='blackhole'?14:0.5;
+    const colour=i%4===0?alt:rgb;
+    emit(cx+ux*radius,cy+uy*radius,cz+uz*radius,
+      ux*speed,uy*speed+(style==='fire'?13:0),uz*speed,
+      0.65+Math.random()*0.95,colour.r,colour.g,colour.b);
+  }
+  if(!preview)camShakeTime=cameraSettings.shake?0.65:0;
+  // The preview button and normal goals both use the selected animation.
+  if(sfx && sfx.init){
+    if(preview)sfx.init();
+    [196,392,587].forEach((frequency,index)=>
+      setTimeout(()=>sfx.tone(frequency+(style==='supernova'?100:0),
+        0.15,'sine',0.10),index*75));
+  }
 }
 
 // Transfer momentum from the curved ramp into VERTICAL wall rolling. Without
@@ -2980,7 +3233,8 @@ function stepBall(dt, body=ball, predicting=false) {
   const p = PHYSICS_TUNING;
   body.onWall=false;
   // Integrate velocity before contacts, keeping all motion in world space.
-  body.vy -= p.BALL_GRAVITY_FORCE * dt;
+  const feel=p.BALL_FEEL;
+  body.vy -= p.BALL_GRAVITY_FORCE * feel.gravity * dt;
   const airDrag = Math.max(0, 1 - p.BALL_DRAG_REFERENCE * dt);
   body.vx *= airDrag; body.vy *= airDrag; body.vz *= airDrag;
   body.x += body.vx * dt; body.y += body.vy * dt; body.z += body.vz * dt;
@@ -3008,8 +3262,8 @@ function stepBall(dt, body=ball, predicting=false) {
   if(body.y<surface || (wasSupported && touching)){
     body.y=Math.max(body.y,surface);
     const hardImpact=normalSpeed < -1.5;
-    const restitution=ramp.height<=0.1?p.BALL_FLOOR_RESTITUTION:
-      (hardImpact?p.BALL_RAMP_IMPACT_RESTITUTION:p.BALL_RAMP_ROLL_RESTITUTION);
+    const restitution=ramp.height<=0.1?p.BALL_FLOOR_RESTITUTION*feel.floor:
+      (hardImpact?p.BALL_RAMP_IMPACT_RESTITUTION*feel.ramp:p.BALL_RAMP_ROLL_RESTITUTION);
     ballSurfaceImpulse(nx,ny,nz,restitution, body);
     // Airborne bounces should not be tagged as "rolling" and dragged flat.
     const outgoing=body.vx*nx+body.vy*ny+body.vz*nz;
@@ -3017,7 +3271,7 @@ function stepBall(dt, body=ball, predicting=false) {
     body.onRamp=ramp.height>0.1&&supported;
     body.onGround=ramp.height<=0.1&&supported;
     if(supported){
-      const rollDrag=Math.exp(-p.BALL_ROLLING_RESISTANCE*dt);
+      const rollDrag=Math.exp(-p.BALL_ROLLING_RESISTANCE*feel.rolling*dt);
       body.vx*=rollDrag;body.vz*=rollDrag;
     }
   }else{
@@ -3090,6 +3344,8 @@ function goal(team) {
     trainingGoals++;
     updateTrainingCounters();
     showGameEvent('FREE PLAY GOAL! · ' + trainingGoals, '#ffca64');
+    // Free Play now uses the same selected 3D explosion as a real match.
+    goalExplosion(ball.z < 0 ? 1 : 0);
     resetTrainingBall();
     return;
   }
@@ -3446,6 +3702,7 @@ function render(dt) {
     }
   }
   ballMesh.position.set(ball.x, ball.y, ball.z);
+  updateBallVisuals();
   const sp = Math.hypot(ball.vx, ball.vz);
   const spinMagnitude = Math.hypot(ball.wx || 0, ball.wy || 0, ball.wz || 0);
   if (spinMagnitude > 0.001) {
@@ -3460,7 +3717,7 @@ function render(dt) {
     p.core.material.opacity = active ? 0.5 : 0.05;
     p.group.visible = active || p.t > 0;
   }
-  stepParts(dt); drawMini(); sfx.update(cars[0], state === 'play');
+  stepParts(dt); tickGoalEffects(dt); drawMini(); sfx.update(cars[0], state === 'play');
   const splitActive = !trainingMode && localTwoPlayer && state !== 'menu' && state !== 'over';
   document.body.classList.toggle('split-screen', splitActive);
   // During a replay, follow the player who scored instead of always following P1.
@@ -3495,6 +3752,18 @@ function render(dt) {
   $('s0').textContent = score[0]; $('s1').textContent = score[1];
   const s = Math.ceil(clock); $('clock').textContent = trainingMode ? 'FREE PLAY' : ot ? 'OT' : Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
   const b = trainingMode ? 100 : cars[0].boost;
+  const speedHud=$('speedHud');
+  if(speedHud){
+    speedHud.hidden=state==='menu'||state==='over';
+    const activeCar=cars[0];
+    if(activeCar){
+      const mph=Math.round(Math.hypot(activeCar.vx,activeCar.vy,activeCar.vz)
+        *0.5*2.236936);
+      const speedNumber=$('speedValue');
+      if(speedNumber)speedNumber.textContent=String(mph);
+      speedHud.classList.toggle('supersonic',!!activeCar.supersonic);
+    }
+  }
   $('bt').textContent = trainingMode ? '∞' : Math.round(b);
   $('bf').style.width = '84%';
   $('bf').style.background = 'conic-gradient(' + (b > 66 ? '#ffd35a' : '#37f2c0') +
@@ -3528,7 +3797,19 @@ window.rocketArena = {
   // Read-only references for browser-level stadium regression checks.
   get stadium() { return scene.getObjectByName('Rocket Ball Championship Arena'); },
   get pitch() { return pitchMesh; },
-  get pads() { return pads; }
+  get pads() { return pads; },
+  get ballFeel() { return PHYSICS_TUNING.BALL_FEEL_MODE; },
+  get goalEffectCount() { return activeGoalEffects.length; },
+  get ballShadow() { return ballGroundShadow; },
+  get ballTrail() { return ballTrail; },
+  previewGoalExplosion(style) {
+    if(Object.hasOwn(GOAL_EFFECT_DATA,style)){
+      goalExplosionStyle=style;
+      if(explosionInput)explosionInput.value=style;
+      try{localStorage.setItem('rocketArenaExplosionV1',style);}catch(_){}
+      goalExplosion(false,true);
+    }
+  }
 };
 let last = performance.now();
 (function loop(now) {
