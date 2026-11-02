@@ -309,3 +309,20 @@ console.log('PASS: controller aerial pitch, independent throttle and analog dire
   assert.equal(read('p1').pitch,0,'S must not pitch down as reverse');
   console.log('PASS: keyboard W+Shift upward aerials and separate I/K pitch');
 }
+
+// Keyboard steering direction must stay the same between floor and air.
+// Rotation signs also determine the direction of boost thrust.
+{
+  const rightYaw={yaw:0,pitch:0,roll:0,airQuat:null,airOmega:null,flip:0};
+  const rightRoll={yaw:0,pitch:0,roll:0,airQuat:null,airOmega:null,flip:0};
+  for(let i=0;i<40;i++){
+    aerialControl(rightYaw,{pitch:0,airYaw:1,roll:0},1/120);
+    aerialControl(rightRoll,{pitch:0,airYaw:0,roll:1},1/120);
+  }
+  assert(getCarForward(rightYaw).x>.2,
+    'D/right must turn car nose RIGHT during an aerial');
+  const rightWheel=new THREE.Vector3(1,0,0).applyQuaternion(rightRoll.airQuat);
+  assert(rightWheel.y<-.2,
+    'E/right air roll should lower the right wheels, not raise them');
+  console.log('PASS: consistent keyboard yaw and air-roll directions');
+}
