@@ -1789,7 +1789,18 @@ if (name2Input) name2Input.addEventListener('input', () => {
   const p2 = cars[mode]; if (p2 && localTwoPlayer) p2.displayName = player2Name;
 });
 const explosionInput = $('explosion');
-if (explosionInput) explosionInput.addEventListener('change', () => { goalExplosionStyle = explosionInput.value; });
+if (explosionInput) explosionInput.addEventListener('change', () => {
+  goalExplosionStyle = explosionInput.value;
+  const value=$('explosionName');
+  if(value)value.textContent=explosionInput.options[explosionInput.selectedIndex].text;
+});
+const explosionPreview = $('explosionPreview');
+if(explosionPreview)explosionPreview.addEventListener('click',()=>{
+  goalExplosionStyle = explosionInput?.value || 'classic';
+  goalExplosion(false,true);
+  const tip=$('explosionPreviewStatus');
+  if(tip)tip.textContent='PREVIEWING '+goalExplosionStyle.toUpperCase();
+});
 function updateGaragePreview() {
   const car = $('menuCarShowcase');
   if (!car) return;
@@ -2948,45 +2959,150 @@ function ballSurfaceImpulse(nx, ny, nz, restitution, body=ball) {
 
 // goal explosion helpers
 let camShakeTime = 0;
-function goalExplosion(team) {
-  const cx = ball.x, cy = Math.max(ball.y, 2.5), cz = ball.z;
-  // color palette
-  const palettes = {
-    classic: team ? [1, 0.54, 0.12] : [0.18, 0.72, 1],
-    fire: [1, 0.18 + Math.random() * 0.25, 0.025],
-    galaxy: [0.62, 0.2, 1],
-    lightning: [0.55, 0.9, 1]
-  };
-  const cs = palettes[goalExplosionStyle] || palettes.classic;
-  const burstCount = goalExplosionStyle === 'galaxy' ? 520 : goalExplosionStyle === 'lightning' ? 260 : 400;
-  // large particle burst
-  for (let i = 0; i < burstCount; i++) {
-    const a = Math.random() * Math.PI * 2, e = Math.random() * 1.6, s = 12 + Math.random() * 32;
-    const r = i % 6 ? (goalExplosionStyle === 'galaxy' && i % 3 === 0 ? [0.15, 0.65, 1] : cs) : [1, 0.9, 0.6];
-    emit(cx, cy, cz, Math.cos(a) * Math.cos(e) * s, Math.sin(e) * s + 6, Math.sin(a) * Math.cos(e) * s, 1.6 + Math.random() * 0.8, r[0], r[1], r[2]);
+
+const activeGoalEffects = [];
+const GOAL_EFFECT_DATA = Object.freeze({
+  classic: {colour:0x36bfff, accent:0xffffff, n:340, style:'burst'},
+  fire: {colour:0xff5b18, accent:0xffeb6c, n:425, style:'flames'},
+  galaxy: {colour:0xa45bff, accent:0x22e9ff, n:420, style:'spiral'},
+  lightning: {colour:0x61d8ff, accent:0xf6fbff, n:400, style:'sparks'},
+  blackhole: {colour:0x7b37ff, accent:0xff57cb, n:450, style:'implosion'},
+  supernova: {colour:0xffdd69, accent:0xffffff, n:500, style:'nova'},
+  pixel: {colour:0x3efaac, accent:0xff54be, n:290, style:'pixels'},
+  aurora: {colour:0x48f5c5, accent:0xb48cff, n:390, style:'spiral'}
+});
+// This is scene geometry, not a flat particle colour swap. Each style has
+// expanding torus shockwaves, a light source, a glowing 3D core and optionally
+// individually animated shards. Every object is disposed after the explosion.
+function clearGoalEffect(effect) {
+  scene.remove(effect.group);
+  effect.group.traverse(object => {
+    if (object.geometry) object.geometry.dispose();
+    const materials=Array.isArray(object.material) ? object.material : [object.material];
+    for (const mat of materials) if(mat && mat.dispose)mat.dispose();
+  });
+  const index=activeGoalEffects.indexOf(effect);
+  if(index>=0)activeGoalEffects.splice(index,1);
+}
+function tickGoalEffects(dt) {
+  for(let i=activeGoalEffects.length-1;i>=0;i--){
+    const fx=activeGoalEffects[i];
+    fx.age+=Math.min(dt,0.1);
+    const progress=fx.age/fx.duration;
+    if(progress>=1){clearGoalEffect(fx);continue;}
+    const remain=Math.max(0,1-progress);
+    fx.light.intensity=fx.maxLight*remain*remain;
+    if(fx.core){
+      const scale=fx.style==='implosion' ? 1.4-1.3*progress :
+        fx.style==='nova' ? 1+3*progress : 1+1.8*progress;
+      fx.core.scale.setScalar(Math.max(0.04,scale));
+      fx.core.material.opacity=fx.style==='implosion'?Math.min(0.9,remain):remain*0.8;
+      fx.core.rotation.y+=dt*2.2;
+    }
+    fx.rings.forEach((ring,index)=>{
+      ring.scale.setScalar(1+(index+1)*0.2+progress*(fx.style==='nova'?8:5));
+      ring.rotation.z+=dt*(index%2?1.8:-1.2);
+      ring.material.opacity=Math.max(0,remain*remain*0.8);
+    });
+    for(const shard of fx.shards){
+      shard.mesh.position.addScaledVector(shard.velocity,dt);
+      shard.velocity.y-=dt*(fx.style==='pixels'?5:9);
+      shard.mesh.rotation.x+=dt*shard.spin;
+      shard.mesh.rotation.y+=dt*shard.spin*1.3;
+      shard.mesh.material.opacity=remain;
+    }
   }
-  // confetti shards (heavier)
-  for (let i = 0; i < 120; i++) {
-    const vx = (Math.random() - 0.5) * (goalExplosionStyle === 'lightning' ? 64 : 40);
-    const vz = (Math.random() - 0.5) * (goalExplosionStyle === 'lightning' ? 64 : 40);
-    emit(cx, cy, cz, vx, Math.random() * 30, vz, 1.2, cs[0], cs[1], cs[2]);
+}
+function goalExplosion(team, preview=false) {
+  const style=Object.hasOwn(GOAL_EFFECT_DATA,goalExplosionStyle)
+    ? goalExplosionStyle:'classic';
+  const data=GOAL_EFFECT_DATA[style];
+  const cx=preview ? 28 : ball.x;
+  const cy=preview ? 3 : Math.max(ball.y,2.5);
+  const cz=preview ? 0 : ball.z;
+  // Keep menu previews and consecutive goals from building up GPU objects.
+  while(activeGoalEffects.length>=3)clearGoalEffect(activeGoalEffects[0]);
+  const group=new THREE.Group();
+  group.position.set(cx,cy,cz);
+  group.name='Goal Explosion · '+style;
+  scene.add(group);
+  const baseColour=style==='classic' ? (team ? ORANGE:BLUE):data.colour;
+  const coreMaterial=new THREE.MeshBasicMaterial({
+    color:style==='blackhole'?0x0b061b:data.accent,
+    transparent:true,opacity:0.9,depthWrite:false,
+    blending:style==='blackhole'?THREE.NormalBlending:THREE.AdditiveBlending
+  });
+  const core=new THREE.Mesh(
+    style==='pixel'?new THREE.BoxGeometry(2.2,2.2,2.2):
+      new THREE.IcosahedronGeometry(style==='blackhole'?3.1:2.3,1),
+    coreMaterial);
+  group.add(core);
+  const rings=[];
+  const ringCount=style==='nova'?4:
+    style==='blackhole'?3:style==='pixel'?2:3;
+  for(let n=0;n<ringCount;n++){
+    const ring=new THREE.Mesh(
+      new THREE.TorusGeometry(2.8+n*0.5,0.12+n*0.07,8,64),
+      new THREE.MeshBasicMaterial({
+        color:n%2?data.accent:baseColour,transparent:true,
+        opacity:0.75,depthWrite:false,blending:THREE.AdditiveBlending
+      })
+    );
+    ring.rotation.x=(n%2?Math.PI/3:Math.PI/2);
+    ring.rotation.y=n*0.72;
+    group.add(ring);
+    rings.push(ring);
   }
-
-  // flash light
-  const pl = new THREE.PointLight(team ? ORANGE : BLUE, 6, 300); pl.position.set(cx, cy, cz); scene.add(pl);
-  let lightLife = 0.9;
-  const lightInterval = setInterval(() => { pl.intensity *= 0.7; lightLife -= 0.06; if (lightLife <= 0) { scene.remove(pl); clearInterval(lightInterval); } }, 60);
-
-  // expanding ring
-  const ringGeo = new THREE.RingGeometry(goalExplosionStyle === 'lightning' ? 4 : 8, goalExplosionStyle === 'lightning' ? 5 : 10, 64);
-  const ring = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: goalExplosionStyle === 'classic' ? (team ? ORANGE : BLUE) : new THREE.Color(cs[0], cs[1], cs[2]), transparent: true, opacity: 0.9, side: THREE.DoubleSide }));
-  ring.rotation.x = -Math.PI / 2; ring.position.set(cx, 1.5, cz); scene.add(ring);
-  let rscale = 1.0;
-  const ringInterval = setInterval(() => { rscale += 0.25; ring.scale.set(rscale, rscale, rscale); ring.material.opacity *= 0.86; if (ring.material.opacity < 0.03) { scene.remove(ring); clearInterval(ringInterval); } }, 40);
-
-  // camera shake + sound
-  camShakeTime = 0.8;
-  [880, 1047, 1318].forEach((f, i) => setTimeout(() => sfx.tone(f, 0.28, 'sawtooth', 0.18), i * 100));
+  const shards=[];
+  const totalShards=graphicsQuality==='low'?12:style==='pixel'?64:style==='blackhole'?36:24;
+  if(['pixel','blackhole','supernova','aurora'].includes(style)) {
+    for(let n=0;n<totalShards;n++){
+      const a=(n/totalShards)*Math.PI*2;
+      const elevation=(n%9)/9*Math.PI-Math.PI/2;
+      const dir=new THREE.Vector3(Math.cos(a)*Math.cos(elevation),
+        Math.sin(elevation),Math.sin(a)*Math.cos(elevation));
+      const startRadius=style==='blackhole'?10+Math.random()*8:2;
+      const shard=new THREE.Mesh(
+        style==='pixel'?new THREE.BoxGeometry(0.7,0.7,0.7):
+          new THREE.TetrahedronGeometry(0.5+Math.random()*0.35),
+        new THREE.MeshBasicMaterial({color:n%3?baseColour:data.accent,
+          transparent:true,opacity:0.95,depthWrite:false,
+          blending:THREE.AdditiveBlending})
+      );
+      shard.position.copy(dir).multiplyScalar(startRadius);
+      group.add(shard);
+      const v=dir.clone().multiplyScalar(style==='blackhole'?-20:14+Math.random()*17);
+      v.y+=style==='supernova'?6:3;
+      shards.push({mesh:shard,velocity:v,spin:1+(n%7)});
+    }
+  }
+  const light=new THREE.PointLight(baseColour,7,145);
+  group.add(light);
+  activeGoalEffects.push({
+    group,core,rings,shards,light,style:data.style,
+    age:0,duration:style==='blackhole'?1.7:style==='supernova'?2.0:1.45,maxLight:7
+  });
+  const rgb=new THREE.Color(baseColour),alt=new THREE.Color(data.accent);
+  const count=Math.floor(data.n*(graphicsQuality==='low'?0.42:1));
+  for(let i=0;i<count;i++){
+    const a=Math.random()*2*Math.PI,e=(Math.random()-0.5)*Math.PI;
+    const ux=Math.cos(a)*Math.cos(e),uy=Math.sin(e),uz=Math.sin(a)*Math.cos(e);
+    const speed=style==='blackhole'?(-17-Math.random()*12):
+      style==='supernova'?(26+Math.random()*31):(13+Math.random()*31);
+    const radius=style==='blackhole'?14:0.5;
+    const colour=i%4===0?alt:rgb;
+    emit(cx+ux*radius,cy+uy*radius,cz+uz*radius,
+      ux*speed,uy*speed+(style==='fire'?13:0),uz*speed,
+      0.65+Math.random()*0.95,colour.r,colour.g,colour.b);
+  }
+  if(!preview)camShakeTime=cameraSettings.shake?0.65:0;
+  // The preview button and normal goals both use the selected animation.
+  if(sfx && sfx.init){
+    if(preview)sfx.init();
+    [196,392,587].forEach((frequency,index)=>
+      setTimeout(()=>sfx.tone(frequency+(style==='supernova'?100:0),
+        0.15,'sine',0.10),index*75));
+  }
 }
 
 // Transfer momentum from the curved ramp into VERTICAL wall rolling. Without
@@ -3504,7 +3620,7 @@ function render(dt) {
     p.core.material.opacity = active ? 0.5 : 0.05;
     p.group.visible = active || p.t > 0;
   }
-  stepParts(dt); drawMini(); sfx.update(cars[0], state === 'play');
+  stepParts(dt); tickGoalEffects(dt); drawMini(); sfx.update(cars[0], state === 'play');
   const splitActive = !trainingMode && localTwoPlayer && state !== 'menu' && state !== 'over';
   document.body.classList.toggle('split-screen', splitActive);
   // During a replay, follow the player who scored instead of always following P1.
@@ -3572,7 +3688,16 @@ window.rocketArena = {
   // Read-only references for browser-level stadium regression checks.
   get stadium() { return scene.getObjectByName('Rocket Ball Championship Arena'); },
   get pitch() { return pitchMesh; },
-  get pads() { return pads; }
+  get pads() { return pads; },
+  get ballFeel() { return PHYSICS_TUNING.BALL_FEEL_MODE; },
+  get goalEffectCount() { return activeGoalEffects.length; },
+  previewGoalExplosion(style) {
+    if(Object.hasOwn(GOAL_EFFECT_DATA,style)){
+      goalExplosionStyle=style;
+      if(explosionInput)explosionInput.value=style;
+      goalExplosion(false,true);
+    }
+  }
 };
 let last = performance.now();
 (function loop(now) {
