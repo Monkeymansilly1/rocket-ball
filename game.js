@@ -2131,8 +2131,8 @@ function aerialControl(c, ct, dt) {
     const desiredElevation=Math.PI/4;
     pitchIn=clamp((elevation-desiredElevation)*2.6-omega.pitch*0.85,-1,1);
   }
-  const yawIn = -clamp(Number.isFinite(ct.airYaw) ? ct.airYaw : (ct.steer || 0), -1, 1);
-  const rollIn = clamp(ct.roll || 0,-1,1);
+  const yawIn = clamp(Number.isFinite(ct.airYaw) ? ct.airYaw : (ct.steer || 0), -1, 1);
+  const rollIn = -clamp(ct.roll || 0,-1,1);
   omega.pitch += (12.146*pitchIn - 2.798*omega.pitch) * dt;
   omega.yaw += (8.920*yawIn - 1.886*omega.yaw) * dt;
   omega.roll += (36.080*rollIn - 4.472*omega.roll) * dt;
