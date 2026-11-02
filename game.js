@@ -3344,6 +3344,8 @@ function goal(team) {
     trainingGoals++;
     updateTrainingCounters();
     showGameEvent('FREE PLAY GOAL! · ' + trainingGoals, '#ffca64');
+    // Free Play now uses the same selected 3D explosion as a real match.
+    goalExplosion(ball.z < 0 ? 1 : 0);
     resetTrainingBall();
     return;
   }
