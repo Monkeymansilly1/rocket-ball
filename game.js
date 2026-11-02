@@ -49,6 +49,8 @@ const PHYSICS_TUNING = {
   BALL_ROLLING_RESISTANCE: 0.14, BALL_RAMP_IMPACT_RESTITUTION: 0.56,
   BALL_RAMP_ROLL_RESTITUTION: 0.24, BALL_BOUNCE_CUTOFF_SPEED: 0.7,
   BALL_WALL_LIP_EFFICIENCY: 0.96, BALL_CONTACT_SLOP: 0.045,
+  CAR_LANDING_MIN_DOT: 0.28, CAR_ROOF_RESTITUTION: 0.23,
+  DODGE_STICK_DEADZONE: 0.50,
   BALL_CAR_TANGENT_TRANSFER: 0.13,
   BALL_SURFACE_FRICTION: 0.35, BALL_HIT_MULTIPLIER: 1.0,
   BALL_HIT_FORWARD_FORCE: 6, BALL_FORWARD_SPEED_FACTOR: 0.34,
@@ -2026,67 +2028,13 @@ function player2Ctl() {
 const pred = []; // where the ball will be every 0.1s for the next 4 seconds
 let predictionTimer = 0;
 function predict() {
-  let x = ball.x, y = ball.y, z = ball.z, vx = ball.vx, vy = ball.vy, vz = ball.vz;
-  let onRamp = !!ball.onRamp;
-  pred.length = 0;
-  for (let i = 0; i < 40; i++) {
-    for (let k = 0; k < 4; k++) {
-      const h = 0.025;
-      vy -= PHYSICS_TUNING.BALL_GRAVITY_FORCE * h;
-      const drag = 1 - 0.03 * h; vx *= drag; vz *= drag;
-      x += vx * h; y += vy * h; z += vz * h;
-      if (y < BR) {
-        y = BR; vy = -vy * PHYSICS_TUNING.BALL_FLOOR_RESTITUTION;
-        if (Math.abs(vy) < PHYSICS_TUNING.BALL_BOUNCE_CUTOFF_SPEED) vy = 0;
-        const groundDrag = Math.max(0, 1 - PHYSICS_TUNING.BALL_ROLLING_RESISTANCE * h); vx *= groundDrag; vz *= groundDrag;
-      }
-      if (y > CEIL - BR) { y = CEIL - BR; vy = -Math.abs(vy) * PHYSICS_TUNING.BALL_RESTITUTION; }
-
-      const az = Math.abs(z), sz = Math.sign(z);
-      if (Math.abs(x) > HW - BR && az <= HL) {
-        const sx = Math.sign(x), edgeX = sx * (HW - BR);
-        const edgeRamp = arenaRampAt(edgeX, z);
-        const ridingRamp = edgeRamp.height > 0.2 && y < edgeRamp.height + BR + 2.5;
-        x = edgeX;
-        if (ridingRamp) vz *= Math.max(0, 1 - PHYSICS_TUNING.BALL_SURFACE_FRICTION * h);
-        else {
-          vx = -sx * Math.abs(vx) * PHYSICS_TUNING.BALL_WALL_RESTITUTION;
-          const damp = Math.max(0, 1 - PHYSICS_TUNING.BALL_SURFACE_FRICTION * h);
-          vy *= damp; vz *= damp;
-        }
-      }
-      if (az > HL - BR && !(Math.abs(x) + BR < GW && y + BR < GH)) {
-        const edgeZ = sz * (HL - BR), edgeRamp = arenaRampAt(x, edgeZ);
-        const ridingRamp = edgeRamp.height > 0.2 && Math.abs(x) > GW + 2 && y < edgeRamp.height + BR + 2.5;
-        z = edgeZ;
-        if (ridingRamp) vx *= Math.max(0, 1 - PHYSICS_TUNING.BALL_SURFACE_FRICTION * h);
-        else {
-          vz = -sz * Math.abs(vz) * PHYSICS_TUNING.BALL_WALL_RESTITUTION;
-          const damp = Math.max(0, 1 - PHYSICS_TUNING.BALL_SURFACE_FRICTION * h);
-          vx *= damp; vy *= damp;
-        }
-      }
-
-      const ramp = arenaRampAt(x, z);
-      const rampSurfaceY = ramp.height + BR;
-      const rampVelocityY = vx * ramp.dx + vz * ramp.dz;
-      if (ramp.height > 0.025 && (y < rampSurfaceY - 0.05 ||
-          (y <= rampSurfaceY + 0.18 && vy <= rampVelocityY + 2) ||
-          (onRamp && y <= rampSurfaceY + 3))) {
-        const normalVelocity = vy - rampVelocityY;
-        const normalLengthSq = 1 + ramp.dx * ramp.dx + ramp.dz * ramp.dz;
-        vx += normalVelocity * ramp.dx / normalLengthSq;
-        vz += normalVelocity * ramp.dz / normalLengthSq;
-        vy -= normalVelocity / normalLengthSq;
-        y = rampSurfaceY; onRamp = true;
-      } else onRamp = false;
-      const speed = Math.hypot(vx, vy, vz);
-      if (speed > PHYSICS_TUNING.MAX_BALL_SPEED) {
-        const factor = PHYSICS_TUNING.MAX_BALL_SPEED / speed;
-        vx *= factor; vy *= factor; vz *= factor;
-      }
-    }
-    pred.push({ x, y, z });
+  // Match the real ball solver exactly instead of using a stale separate
+  // collision model. This improves AI interception after curved wall bounces.
+  const forecast={...ball};
+  pred.length=0;
+  for(let i=0;i<40;i++){
+    for(let sub=0;sub<4;sub++)stepBall(0.025,forecast,true);
+    pred.push({x:forecast.x,y:forecast.y,z:forecast.z});
   }
 }
 function aiCtl(c, dt) {
@@ -2363,6 +2311,14 @@ function stepCar(c, ct, dt) {
   // snaps the car back onto its surface in the next physics step.
   c.wallDetachTimer = Math.max(0, (c.wallDetachTimer || 0) - dt);
   let contact=carSurfaceContact(c);
+  if(contact && !c.ground && c.airQuat) {
+    // Landing on the roof, flank or an inverted wheel pose should bounce.
+    // Only the tyres can reset jumps and establish traction.
+    const wheelUp=AIR_Y.clone().applyQuaternion(c.airQuat);
+    if(wheelUp.dot(contact.normal)<PHYSICS_TUNING.CAR_LANDING_MIN_DOT){
+      contact=null;
+    }
+  }
   if(contact && contact.kind==='ceiling') {
     // Tyre suction on the inverted surface only lasts while accelerating;
     // releasing the throttle drops the car after a short transition.
@@ -2472,17 +2428,20 @@ function stepCar(c, ct, dt) {
     } else if (c.jumps === 1 && c.jt < PHYSICS_TUNING.DOUBLE_JUMP_WINDOW) {
       c.jumps = 2;c.hold=0;c.jumpNormal=null;
       const f = ct.dodge ? ct.dodge[0] : (Number.isFinite(ct.pitch) ? ct.pitch : ct.throttle), s = ct.dodge ? ct.dodge[1] : ct.steer;
-      if (Math.abs(f)+Math.abs(s) > 0.1) {
+      // Avoid accidental dodges from tiny analog stick movement.
+      if (Math.hypot(f,s) >= PHYSICS_TUNING.DODGE_STICK_DEADZONE) {
         const dir=Math.hypot(f,s);
         const nose=getCarForward(c);
         const right=AIR_X.clone().applyQuaternion(getCarOrientation(c));
         const force=PHYSICS_TUNING.DODGE_IMPULSE/Math.max(1,dir);
-        c.vx += (nose.x*f-right.x*s)*force;
-        c.vy += (nose.y*f-right.y*s)*force;
-        c.vz += (nose.z*f-right.z*s)*force;
+        // Positive steering must dodge to the car's RIGHT, not left.
+        c.vx += (nose.x*f+right.x*s)*force;
+        c.vy += (nose.y*f+right.y*s)*force;
+        c.vz += (nose.z*f+right.z*s)*force;
         c.vy = Math.max(c.vy, 2.2);
         c.flip=0.55;c.fx=f;c.fz=s;
-        c.flipAxis=new THREE.Vector3(f,0,s).normalize();
+        // The right wheels tip downward for a rightward dodge.
+        c.flipAxis=new THREE.Vector3(f,0,-s).normalize();
         if (!c.airQuat) c.airQuat=getCarOrientation(c).clone();
       } else {
         // A neutral second jump adds velocity along the roof, not global up.
@@ -2512,7 +2471,18 @@ function stepCar(c, ct, dt) {
   const previousSideSpeed=previousRight ?
     c.vx*previousRight.x+c.vy*previousRight.y+c.vz*previousRight.z : 0;
   c.x+=c.vx*dt;c.y+=c.vy*dt;c.z+=c.vz*dt;
-  c.y=clamp(c.y,CAR_CLEARANCE,CEIL-CAR_CLEARANCE);
+  if(c.y<CAR_CLEARANCE){
+    c.y=CAR_CLEARANCE;
+    if(!ground && c.vy<0){
+      // Roof-first impact: preserve orientation and rebound instead of
+      // silently resetting the double jump as if the wheels had landed.
+      c.vy=-c.vy*PHYSICS_TUNING.CAR_ROOF_RESTITUTION;
+      c.vx*=0.94;c.vz*=0.94;
+    }
+  }else if(c.y>CEIL-CAR_CLEARANCE){
+    c.y=CEIL-CAR_CLEARANCE;
+    if(!ground && c.vy>0)c.vy=-c.vy*PHYSICS_TUNING.CAR_ROOF_RESTITUTION;
+  }
   // Wheel suspension brings the car to its nearest curved surface without
   // deleting its speed along that surface. Contact normal is updated every
   // physics tick, so the ramp-wall boundary is not a mode-switch teleport.
@@ -2803,38 +2773,38 @@ function hitBall(c) {
   ball.wz += (nx * ty - ny * tx) * spinTransfer;
   clampBallMotion();
 }
-function clampBallMotion() {
-  const speed = Math.hypot(ball.vx, ball.vy, ball.vz);
+function clampBallMotion(body=ball) {
+  const speed = Math.hypot(body.vx, body.vy, body.vz);
   if (speed > PHYSICS_TUNING.MAX_BALL_SPEED) {
     const scale = PHYSICS_TUNING.MAX_BALL_SPEED / speed;
-    ball.vx *= scale; ball.vy *= scale; ball.vz *= scale;
+    body.vx *= scale; body.vy *= scale; body.vz *= scale;
   }
-  const spin = Math.hypot(ball.wx || 0, ball.wy || 0, ball.wz || 0);
+  const spin = Math.hypot(body.wx || 0, body.wy || 0, body.wz || 0);
   if (spin > PHYSICS_TUNING.BALL_MAX_ANGULAR_SPEED) {
     const scale = PHYSICS_TUNING.BALL_MAX_ANGULAR_SPEED / spin;
-    ball.wx *= scale; ball.wy *= scale; ball.wz *= scale;
+    body.wx *= scale; body.wy *= scale; body.wz *= scale;
   }
 }
-function ballSurfaceImpulse(nx, ny, nz, restitution) {
-  const vn=ball.vx*nx+ball.vy*ny+ball.vz*nz;
+function ballSurfaceImpulse(nx, ny, nz, restitution, body=ball) {
+  const vn=body.vx*nx+body.vy*ny+body.vz*nz;
   if(vn>=0)return 0;
   // Only genuine impacts rebound. Small resting contacts lose their normal
   // velocity, but retain horizontal rolling momentum.
   const e=vn<-PHYSICS_TUNING.BALL_BOUNCE_CUTOFF_SPEED?restitution:0;
   const impulse=-(1+e)*vn;
-  ball.vx+=impulse*nx;ball.vy+=impulse*ny;ball.vz+=impulse*nz;
-  const tangentDot=ball.vx*nx+ball.vy*ny+ball.vz*nz;
-  const tx=ball.vx-tangentDot*nx,ty=ball.vy-tangentDot*ny,tz=ball.vz-tangentDot*nz;
+  body.vx+=impulse*nx;body.vy+=impulse*ny;body.vz+=impulse*nz;
+  const tangentDot=body.vx*nx+body.vy*ny+body.vz*nz;
+  const tx=body.vx-tangentDot*nx,ty=body.vy-tangentDot*ny,tz=body.vz-tangentDot*nz;
   const speed=Math.hypot(tx,ty,tz);
   if(speed>0.001){
     // Bounded friction transfers only a small portion of the tangent velocity.
     const slip=Math.min(speed*0.09,impulse*PHYSICS_TUNING.BALL_SURFACE_FRICTION*0.18);
     const k=slip/speed;
-    ball.vx-=tx*k;ball.vy-=ty*k;ball.vz-=tz*k;
+    body.vx-=tx*k;body.vy-=ty*k;body.vz-=tz*k;
     const spin=slip/BR*0.36/speed;
-    ball.wx+=(ny*tz-nz*ty)*spin;
-    ball.wy+=(nz*tx-nx*tz)*spin;
-    ball.wz+=(nx*ty-ny*tx)*spin;
+    body.wx+=(ny*tz-nz*ty)*spin;
+    body.wy+=(nz*tx-nx*tz)*spin;
+    body.wz+=(nx*ty-ny*tx)*spin;
   }
   return impulse;
 }
@@ -2884,137 +2854,137 @@ function goalExplosion(team) {
 
 // Transfer momentum from the curved ramp into VERTICAL wall rolling. Without
 // this the ball hits a flat invisible barrier at the ramp lip and rebounds.
-function resolveBallWall(axis, sign, rampSurfaceY) {
-  const outward = (axis === 'x' ? ball.vx : ball.vz) * sign;
+function resolveBallWall(axis, sign, rampSurfaceY, body=ball) {
+  const outward = (axis === 'x' ? body.vx : body.vz) * sign;
   // The ball centre meets the vertical boundary before the ramp reaches its
   // full height, because the ball radius offsets it inward from the wall.
   const atWallLip = rampSurfaceY > BR + WALL_RAMP_HEIGHT * 0.25 &&
-    ball.y > rampSurfaceY - 2.2 &&
-    ball.y < rampSurfaceY + 4.2;
+    body.y > rampSurfaceY - 2.2 &&
+    body.y < rampSurfaceY + 4.2;
   // At the lip, the rounded ramp has ALREADY converted most outward
   // velocity to upward motion. Do not require a large remaining outward speed
   // or inject another vertical "pop" every frame.
   // A fast outward ball at the lip can roll upward even when its initial
   // vertical velocity is small. Avoid popping genuinely falling wall hits.
-  if (atWallLip && outward > 1.1 && ball.vy > -0.5) {
+  if (atWallLip && outward > 1.1 && body.vy > -0.5) {
     // Convert the outward component INTO vertical travel only once.
     // The efficiency is below 1 so the wall cannot create kinetic energy.
-    const rising=Math.max(0,ball.vy);
-    ball.vy=Math.max(rising,Math.hypot(outward,rising)*PHYSICS_TUNING.BALL_WALL_LIP_EFFICIENCY);
-    if(axis==='x')ball.vx=0;
-    else ball.vz=0;
-    ball.onRamp=false;ball.onGround=false;ball.onWall=true;
+    const rising=Math.max(0,body.vy);
+    body.vy=Math.max(rising,Math.hypot(outward,rising)*PHYSICS_TUNING.BALL_WALL_LIP_EFFICIENCY);
+    if(axis==='x')body.vx=0;
+    else body.vz=0;
+    body.onRamp=false;body.onGround=false;body.onWall=true;
     // Turning surface momentum upward is the wall ramp continuation, not an
     // extra speed boost. The sphere will naturally slow and fall under gravity.
   } else {
     ballSurfaceImpulse(axis === 'x' ? -sign : 0, 0,
-      axis === 'z' ? -sign : 0, PHYSICS_TUNING.BALL_WALL_RESTITUTION);
-    ball.onWall = false;
+      axis === 'z' ? -sign : 0, PHYSICS_TUNING.BALL_WALL_RESTITUTION, body);
+    body.onWall = false;
   }
 }
-function stepBall(dt) {
+function stepBall(dt, body=ball, predicting=false) {
   const p = PHYSICS_TUNING;
-  ball.onWall=false;
+  body.onWall=false;
   // Integrate velocity before contacts, keeping all motion in world space.
-  ball.vy -= p.BALL_GRAVITY_FORCE * dt;
+  body.vy -= p.BALL_GRAVITY_FORCE * dt;
   const airDrag = Math.max(0, 1 - p.BALL_DRAG_REFERENCE * dt);
-  ball.vx *= airDrag; ball.vy *= airDrag; ball.vz *= airDrag;
-  ball.x += ball.vx * dt; ball.y += ball.vy * dt; ball.z += ball.vz * dt;
+  body.vx *= airDrag; body.vy *= airDrag; body.vz *= airDrag;
+  body.x += body.vx * dt; body.y += body.vy * dt; body.z += body.vz * dt;
 
-  if (ball.y > CEIL - BR) {
-    ball.y = CEIL - BR;
-    ballSurfaceImpulse(0, -1, 0, p.BALL_RESTITUTION);
+  if (body.y > CEIL - BR) {
+    body.y = CEIL - BR;
+    ballSurfaceImpulse(0, -1, 0, p.BALL_RESTITUTION, body);
   }
-  const ax = Math.abs(ball.x), az = Math.abs(ball.z);
-  const sx = Math.sign(ball.x) || 1, sz = Math.sign(ball.z) || 1;
-  if (state === 'play' && az > HL && ax < GW - BR * 0.25 && ball.y < GH - BR * 0.25) {
-    return goal(ball.z > 0 ? 0 : 1);
+  const ax = Math.abs(body.x), az = Math.abs(body.z);
+  const sx = Math.sign(body.x) || 1, sz = Math.sign(body.z) || 1;
+  if (!predicting && state === 'play' && az > HL && ax < GW - BR * 0.25 && body.y < GH - BR * 0.25) {
+    return goal(body.z > 0 ? 0 : 1);
   }
 
   // Smooth sphere contact with the same ramp height field used by the cars.
   // Only hold the ball on a ramp when actually touching it; never snap an
   // airborne ball down from several units above the slope.
-  const ramp = arenaRampAt(ball.x, ball.z);
+  const ramp = arenaRampAt(body.x, body.z);
   const surface = BR + ramp.height;
   const normalLength = Math.hypot(-ramp.dx, 1, -ramp.dz);
   const nx = -ramp.dx / normalLength, ny = 1 / normalLength, nz = -ramp.dz / normalLength;
-  const normalSpeed = ball.vx * nx + ball.vy * ny + ball.vz * nz;
-  const touching=ball.y<=surface+p.BALL_CONTACT_SLOP && normalSpeed<=0.2;
-  const wasSupported=!!(ball.onGround||ball.onRamp);
-  if(ball.y<surface || (wasSupported && touching)){
-    ball.y=Math.max(ball.y,surface);
+  const normalSpeed = body.vx * nx + body.vy * ny + body.vz * nz;
+  const touching=body.y<=surface+p.BALL_CONTACT_SLOP && normalSpeed<=0.2;
+  const wasSupported=!!(body.onGround||body.onRamp);
+  if(body.y<surface || (wasSupported && touching)){
+    body.y=Math.max(body.y,surface);
     const hardImpact=normalSpeed < -1.5;
     const restitution=ramp.height<=0.1?p.BALL_FLOOR_RESTITUTION:
       (hardImpact?p.BALL_RAMP_IMPACT_RESTITUTION:p.BALL_RAMP_ROLL_RESTITUTION);
-    ballSurfaceImpulse(nx,ny,nz,restitution);
+    ballSurfaceImpulse(nx,ny,nz,restitution, body);
     // Airborne bounces should not be tagged as "rolling" and dragged flat.
-    const outgoing=ball.vx*nx+ball.vy*ny+ball.vz*nz;
+    const outgoing=body.vx*nx+body.vy*ny+body.vz*nz;
     const supported=outgoing<0.36;
-    ball.onRamp=ramp.height>0.1&&supported;
-    ball.onGround=ramp.height<=0.1&&supported;
+    body.onRamp=ramp.height>0.1&&supported;
+    body.onGround=ramp.height<=0.1&&supported;
     if(supported){
       const rollDrag=Math.exp(-p.BALL_ROLLING_RESISTANCE*dt);
-      ball.vx*=rollDrag;ball.vz*=rollDrag;
+      body.vx*=rollDrag;body.vz*=rollDrag;
     }
   }else{
-    ball.onRamp=false;ball.onGround=false;
+    body.onRamp=false;body.onGround=false;
   }
 
   // Circular corner wall collision: exact normal from the new arc, not
   // the old 45-degree invisible diagonal that kicked balls unexpectedly.
-  const corner = arenaCornerContact(ball.x,ball.z,BR);
+  const corner = arenaCornerContact(body.x,body.z,BR);
   if(corner){
-    ball.x -= corner.nx*corner.penetration;
-    ball.z -= corner.nz*corner.penetration;
-    ballSurfaceImpulse(-corner.nx,0,-corner.nz,p.BALL_WALL_RESTITUTION);
-    ball.onWall=true;
+    body.x -= corner.nx*corner.penetration;
+    body.z -= corner.nz*corner.penetration;
+    ballSurfaceImpulse(-corner.nx,0,-corner.nz,p.BALL_WALL_RESTITUTION, body);
+    body.onWall=true;
   }
 
-  if (Math.abs(ball.x) > HW - BR && az <= HL + BR &&
-      !(Math.abs(ball.x)>HW-CH && Math.abs(ball.z)>HL-CH)) {
-    const sign = Math.sign(ball.x);
-    ball.x = sign * (HW - BR);
-    resolveBallWall('x', sign, surface);
+  if (Math.abs(body.x) > HW - BR && az <= HL + BR &&
+      !(Math.abs(body.x)>HW-CH && Math.abs(body.z)>HL-CH)) {
+    const sign = Math.sign(body.x);
+    body.x = sign * (HW - BR);
+    resolveBallWall('x', sign, surface, body);
   }
-  if (Math.abs(ball.z) > HL) {
+  if (Math.abs(body.z) > HL) {
     // Goal interior has its own side / roof / back-wall colliders.
-    if (Math.abs(ball.x) > GW - BR) {
-      const sign = Math.sign(ball.x);
-      ball.x = sign * (GW - BR);
-      ballSurfaceImpulse(-sign, 0, 0, 0.5);
+    if (Math.abs(body.x) > GW - BR) {
+      const sign = Math.sign(body.x);
+      body.x = sign * (GW - BR);
+      ballSurfaceImpulse(-sign, 0, 0, 0.5, body);
     }
-    if (ball.y > GH - BR) {
-      ball.y = GH - BR;
-      ballSurfaceImpulse(0, -1, 0, 0.5);
+    if (body.y > GH - BR) {
+      body.y = GH - BR;
+      ballSurfaceImpulse(0, -1, 0, 0.5, body);
     }
-    if (Math.abs(ball.z) > HL + GD - BR) {
-      const sign = Math.sign(ball.z);
-      ball.z = sign * (HL + GD - BR);
-      ballSurfaceImpulse(0, 0, -sign, 0.4);
+    if (Math.abs(body.z) > HL + GD - BR) {
+      const sign = Math.sign(body.z);
+      body.z = sign * (HL + GD - BR);
+      ballSurfaceImpulse(0, 0, -sign, 0.4, body);
     }
-  } else if (Math.abs(ball.z) > HL - BR &&
-      !(Math.abs(ball.x)>HW-CH && Math.abs(ball.z)>HL-CH) &&
-      !(Math.abs(ball.x) < GW - BR && ball.y < GH - BR)) {
-    const sign = Math.sign(ball.z);
-    ball.z = sign * (HL - BR);
-    resolveBallWall('z', sign, surface);
+  } else if (Math.abs(body.z) > HL - BR &&
+      !(Math.abs(body.x)>HW-CH && Math.abs(body.z)>HL-CH) &&
+      !(Math.abs(body.x) < GW - BR && body.y < GH - BR)) {
+    const sign = Math.sign(body.z);
+    body.z = sign * (HL - BR);
+    resolveBallWall('z', sign, surface, body);
   }
 
   // Rolling rotation follows ground velocity; airborne spin decays slowly.
-  if(ball.onGround||ball.onRamp){
+  if(body.onGround||body.onRamp){
     // The spin axis tracks the curved surface instead of flat world Y.
-    const tx=(ny*ball.vz-nz*ball.vy)/BR;
-    const ty=(nz*ball.vx-nx*ball.vz)/BR;
-    const tz=(nx*ball.vy-ny*ball.vx)/BR;
+    const tx=(ny*body.vz-nz*body.vy)/BR;
+    const ty=(nz*body.vx-nx*body.vz)/BR;
+    const tz=(nx*body.vy-ny*body.vx)/BR;
     const blend=Math.min(1,dt*8);
-    ball.wx+=(tx-ball.wx)*blend;
-    ball.wy+=(ty-ball.wy)*blend;
-    ball.wz+=(tz-ball.wz)*blend;
+    body.wx+=(tx-body.wx)*blend;
+    body.wy+=(ty-body.wy)*blend;
+    body.wz+=(tz-body.wz)*blend;
   }else{
     const decay=Math.exp(-0.12*dt);
-    ball.wx*=decay;ball.wy*=decay;ball.wz*=decay;
+    body.wx*=decay;body.wy*=decay;body.wz*=decay;
   }
-  clampBallMotion();
+  clampBallMotion(body);
 }
 
 function showGameEvent(label, color = '#fff') {
@@ -3303,15 +3273,20 @@ function updateCam(dt, carIndex = 0, targetCamera = camera, camState = cam) {
   const wallView = !!car.wallVerticalAxis || (car.wallDetachTimer || 0) > 0 ||
     (car.wallRide && car.y > WALL_RAMP_HEIGHT * 0.72);
   if (wallView) {
-    const infieldOffset = Math.max(11, cameraSettings.distance * 1.05);
-    if (car.wallVerticalAxis === 'x' || Math.abs(car.x) > HW - 10) {
-      tx = Math.sign(car.x) * (HW - infieldOffset);
-      tz = clamp(car.z - 6.5, -HL + 9, HL - 9);
-    } else if (car.wallVerticalAxis === 'z' || Math.abs(car.z) > HL - 10) {
-      tz = Math.sign(car.z) * (HL - infieldOffset);
-      tx = clamp(car.x - 6.5, -HW + 9, HW - 9);
+    // Keep the camera behind the actual travel direction rather than
+    // always subtracting Z (which flipped the view on opposite walls).
+    const infieldOffset=Math.max(11,cameraSettings.distance*1.15);
+    const horizontalSpeed=Math.hypot(car.vx,car.vz);
+    const trailX=horizontalSpeed>3 ? -car.vx/horizontalSpeed : backX;
+    const trailZ=horizontalSpeed>3 ? -car.vz/horizontalSpeed : backZ;
+    if(car.wallVerticalAxis==='x' || Math.abs(car.x)>HW-10){
+      tx=Math.sign(car.x)*(HW-infieldOffset);
+      tz=clamp(car.z+trailZ*cameraSettings.distance*0.7,-HL+10,HL-10);
+    }else if(car.wallVerticalAxis==='z'||Math.abs(car.z)>HL-10){
+      tz=Math.sign(car.z)*(HL-infieldOffset);
+      tx=clamp(car.x+trailX*cameraSettings.distance*0.7,-HW+10,HW-10);
     }
-    ty = clamp(car.y + cameraSettings.height + 2.0, 4, CEIL - 1);
+    ty=clamp(car.y+cameraSettings.height+1.4,4,CEIL-1);
   }
   camState.x += (tx - camState.x) * k;
   camState.y += (ty - camState.y) * k;
