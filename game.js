@@ -1056,6 +1056,7 @@ ballTrailGeometry.setDrawRange(0,0);
 const ballTrail=new THREE.Line(ballTrailGeometry,
   new THREE.LineBasicMaterial({color:0x75f5fb,transparent:true,
     opacity:0.58,depthWrite:false,blending:THREE.AdditiveBlending}));
+ballTrail.frustumCulled=false;
 scene.add(ballTrail);
 const ballTrailHistory=[];
 function resetBallTrail(){
