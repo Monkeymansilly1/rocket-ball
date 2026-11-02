@@ -2215,8 +2215,16 @@ function carSurfaceContact(c, broad = false) {
   // snapping the car upwards from below the ramp.
   const nearUpperWall=c.y>=WALL_RAMP_HEIGHT+CAR_CLEARANCE+0.10 ||
     (c.y>=WALL_RAMP_HEIGHT+0.3 && c.vy>1.5);
+  // An airborne car with its wheels toward a real wall may land on it.
+  // A much narrower tolerance is used than for a car driving up the ramp:
+  // this prevents a 1+ metre teleport across empty space.
+  const airborneWallTouch=!c.ground && !!c.airQuat && (
+    (atCorner && radius>=CH-CAR_CLEARANCE-0.18) ||
+    (onSide && ax>=HW-CAR_CLEARANCE-0.18) ||
+    (onEnd && az>=HL-CAR_CLEARANCE-0.18));
   if(nearUpperWall && (atCorner||onSide||onEnd) &&
-      (broad || c.ground || c.wallRide || c.wallVerticalAxis)) {
+      (broad || c.ground || c.wallRide || c.wallVerticalAxis ||
+        airborneWallTouch)) {
     let n,kind='wall',axis=null,sign=0;
     if(atCorner) {
       const dx=ax-cx,dz=az-cz;
@@ -2233,7 +2241,10 @@ function carSurfaceContact(c, broad = false) {
   }
   const ramp=arenaRampAt(c.x,c.z);
   const support=ramp.height+CAR_CLEARANCE;
-  if(c.y<=support+(broad?1.35:0.67) && (broad || c.vy<=3 ||
+  // Airborne wheels need actual proximity: broad suspension probing is
+  // reserved for vehicles already following a curved ramp.
+  const contactReach=broad?1.35:(c.ground||c.wallRide?0.67:0.19);
+  if(c.y<=support+contactReach && (broad || c.vy<=3 ||
      c.ground || c.wallRide)) {
     const normal=new THREE.Vector3(-ramp.dx,1,-ramp.dz).normalize();
     return {kind:ramp.height>0.04?'ramp':'floor',normal,
@@ -2329,6 +2340,7 @@ function stepCar(c, ct, dt) {
       contact=null;
     }
   } else c.ceilingRelease=0;
+  const wasGrounded=!!c.ground;
   const ground=!!contact;
   // When tyres lose contact, preserve the last ground/wall orientation.
   if(!ground && c.ground && c.surfaceQuat) {
@@ -2341,6 +2353,18 @@ function stepCar(c, ct, dt) {
   c.wallVerticalAxis=ground ? contact.axis : null;
   c.wallVerticalSign=ground ? contact.sign : 0;
   if(ground) {
+    if(!wasGrounded && c.airQuat) {
+      // Preserve the nose direction that the player aimed during the
+      // recovery instead of reverting to a stale pre-jump surface heading.
+      const nose=AIR_Z.clone().applyQuaternion(c.airQuat);
+      nose.addScaledVector(contact.normal,-nose.dot(contact.normal));
+      if(nose.lengthSq()>0.0001){
+        c.surfaceForward=nose.normalize();
+        c.surfaceNormal=contact.normal.clone();
+      }else{
+        c.surfaceForward=null;c.surfaceNormal=null;
+      }
+    }
     c.airQuat=null;c.airOmega=null;c.flipAxis=null;c.jumpNormal=null;
     snapCarToContact(c,contact);
     updateCarSurfaceFrame(c,contact.normal);
