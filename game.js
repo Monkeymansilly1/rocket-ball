@@ -2095,21 +2095,51 @@ function aiCtl(c, dt) {
   const dx = tx - c.x, dz = tz - c.z, dist = Math.hypot(dx, dz), parked = !chase && dist < 5;
   const da = wrap(Math.atan2(parked ? ball.x - c.x : dx, parked ? ball.z - c.z : dz) - c.yaw);
   if (c.ground) {
-    ct.steer = -clamp(da * sk.steer, -1, 1);
-    if (parked) ct.throttle = 0;
-    ct.boost = !!sk.boost && c.boost > (chase ? 5 : 45) && Math.abs(da) < 0.3 && dist > 12;
-    ct.hand = sk.drift && Math.abs(da) > 1.3 && sp > 14;
+    // Positive steering rotates the nose RIGHT (+yaw) in the current vehicle
+    // solver. Bots still used the old negative sign after the control overhaul,
+    // causing them to turn AWAY from every target and circle helplessly.
+    ct.steer = clamp(da * sk.steer, -1, 1);
+    const headingError = Math.abs(da);
+    const forwardSpeed = c.vx * Math.sin(c.yaw) + c.vz * Math.cos(c.yaw);
+    const targetSpeed = chase ? clamp(dist * 1.9 + 7, 11, 39) :
+      clamp(dist * 1.6, 0, 29);
+    const reverseTurn = headingError > 2.15 && sp < 7 && dist > 7;
+    // Tyres now preserve momentum through steering. Give the bot a real
+    // approach speed/brake strategy instead of holding throttle at full power
+    // while making an impossible U-turn around a moving target.
+    if (parked) ct.throttle = Math.abs(forwardSpeed) > 3 ? -Math.sign(forwardSpeed)*0.65 : 0;
+    else if (reverseTurn) {
+      ct.throttle = -0.7;
+      ct.steer = -ct.steer; // reversing flips the effective steering direction
+    } else if (forwardSpeed > targetSpeed + 4)
+      ct.throttle = -0.8;
+    else if (headingError > 1.25 && sp > 9)
+      ct.throttle = 0.15;
+    else ct.throttle = sk.thr;
+    ct.boost = !reverseTurn && !parked && !!sk.boost &&
+      c.boost > (chase ? 5 : 45) && headingError < 0.21 &&
+      forwardSpeed > 8 && dist > 20;
+    ct.hand = sk.drift && !reverseTurn && headingError > 0.85 && sp > 13;
     const low = tgt.y < 4.5 && ball.y < 4.5;
     if (chase && c.aiCd <= 0 && low && bd < 9.5 && Math.abs(da) < 0.35 && sp > 16 && Math.random() < sk.flip) { ct.jump = true; c.flipNext = true; c.aiCd = 1.2; } // power flip into the ball
     else if (chase && c.aiCd <= 0 && sk.aerial && tgt.y > 7 && tgt.y < 26 && d2(c, tgt) < 30 && sp > 10 && Math.abs(da) < 0.4) { ct.jump = true; c.aerial = true; c.aiCd = 2; }
     else if (chase && c.aiCd <= 0 && !sk.aerial && bd < 11 && ball.y > 4 && Math.abs(ball.x - c.x) < 9) { ct.jump = true; c.aiCd = 1; }
   } else if (c.aerial) { // aerial: aim nose at the ball and boost
     const hd = d2(c, tgt), want = Math.atan2(tgt.y - c.y, hd), dp = want - c.pitch;
-    ct.steer = -clamp(wrap(Math.atan2(tgt.x - c.x, tgt.z - c.z) - c.yaw) * 3, -1, 1);
-    ct.throttle = dp > 0.1 ? -1 : dp < -0.1 ? 1 : 0; ct.jumpHeld = true;
-    ct.boost = Math.abs(dp) < 0.35 && c.boost > 8 && hd < 45;
+    const aerialHeading = wrap(Math.atan2(tgt.x - c.x, tgt.z - c.z) - c.yaw);
+    // Air yaw has the same sign as ground steering. Control pitch directly
+    // rather than routing it through reverse/accelerate input, which also
+    // applies unintended linear force during flight.
+    ct.airYaw = clamp(aerialHeading * 2.4, -1, 1);
+    ct.steer = ct.airYaw;
+    ct.pitch = clamp(-dp * 2.7, -1, 1);
+    ct.throttle = 0;
+    ct.jumpHeld = true;
+    ct.boost = Math.abs(dp) < 0.38 && Math.abs(aerialHeading) < 0.5 &&
+      c.boost > 8 && hd < 45;
   } else {
-    ct.throttle = c.pitch > 0.12 ? 1 : c.pitch < -0.12 ? -1 : 0; // level out for landing
+    ct.pitch = clamp(c.pitch * 2.2, -1, 1); // level out without unwanted air throttle
+    ct.throttle = 0;
     if (c.flipNext && c.jumps === 1 && c.jt > 0.1) { ct.jump = true; ct.dodge = [1, 0]; c.flipNext = false; }
   }
   return ct;
