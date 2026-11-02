@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Rocket Arena 3D</title>
+<title>Rocket Arena Reloaded | Rocket Ball</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -30,7 +30,7 @@
         <option value="kickoff">Kickoff Practice</option>
       </select>
     </label>
-    <p class="wall-training-tip" id="wallTrainingTip" hidden>Wall Air Dribble: hold W to climb, Space to jump inward, Shift to boost; use S in the air to pitch up and Q/E to roll.</p>
+    <p class="wall-training-tip" id="wallTrainingTip" hidden>Wall Air Dribble: W climbs, Space jumps inward, Shift boosts; K raises the nose in Assisted flight (or S in Manual mode). Q/E air roll.</p>
     <div class="training-actions">
       <button id="trainingNextShot" type="button" title="Load the next training shot (H)">NEXT SHOT <kbd>H</kbd></button>
       <button id="trainingResetBall" type="button" title="Reset ball (R)">RESET BALL <kbd>R</kbd></button>
@@ -43,6 +43,7 @@
 <div id="hud">
   <div id="score"><b id="s0">0</b><span id="clock">2:00</span><b id="s1">0</b></div>
   <div id="player">PLAYER</div>
+  <div id="speedHud" aria-label="Current car speed"><b id="speedValue">0</b><small>MPH</small></div>
   <div id="boost"><i id="bf"></i><span id="bt">34</span></div>
   <div id="boost2"><i id="bf2"></i><span id="bt2">34</span></div>
   <div id="splitDivider"></div><div id="p1Tag">P1 · BLUE</div><div id="p2Tag">P2 · ORANGE</div>
@@ -61,7 +62,16 @@
   </section>
   <div id="menu">
     <div id="menuCarShowcase" aria-hidden="true"><div class="showcase-platform"></div><div class="showcase-car"><div class="car-spoiler"></div><div class="car-roof"></div><div class="car-window"></div><div class="car-body"></div><div class="car-nose"></div><div class="car-wheel wheel-a"></div><div class="car-wheel wheel-b"></div><div class="car-glow"></div></div><div class="showcase-label">YOUR RIDE</div></div>
+    <div class="reloaded-banner" aria-label="New game update">
+      <span class="reloaded-badge">RELOADED · NOV 2026</span>
+      <span class="reloaded-copy">LIGHTER BALL FEEL <span aria-hidden="true">✦</span> NEW 3D GOAL EXPLOSIONS <span aria-hidden="true">✦</span> REBUILT GARAGE</span>
+    </div>
     <h1 id="mt">ROCKET ARENA 3D</h1>
+    <div class="quickmodes" aria-label="Quick modes">
+      <button id="quickCasual" type="button" data-quick="casual"><b>CASUAL</b><small>1v1 · EASY</small></button>
+      <button id="quickCompetitive" type="button" data-quick="competitive"><b>COMPETITIVE</b><small>2v2 · HARD</small></button>
+      <button id="quickFreestyle" type="button" data-quick="freestyle"><b>FREESTYLE</b><small>WALL AIR DRIBBLES</small></button>
+    </div>
 
     <div class="opts">
       <span>Player 1</span>
@@ -105,7 +115,30 @@
       <button data-car2="hyperion" class="carbtn2">Hyperion</button>
     </div>
 
-    <div class="opts"><span>Explosion</span><select id="explosion" aria-label="Change goal explosion"><option value="classic">Classic</option><option value="fire">Firestorm</option><option value="galaxy">Galaxy</option><option value="lightning">Lightning</option></select></div>
+    <div class="opts explosion-select-row">
+      <span>Explosion</span>
+      <select id="explosion" aria-label="Choose goal explosion">
+        <option value="classic">Classic Blast</option>
+        <option value="fire">Firestorm</option>
+        <option value="galaxy">Galaxy Rift</option>
+        <option value="lightning">Lightning Storm</option>
+        <option value="blackhole">Black Hole</option>
+        <option value="supernova">Supernova</option>
+        <option value="pixel">Pixel Party</option>
+        <option value="aurora">Aurora Pulse</option>
+      </select>
+      <button id="explosionPreview" class="preview-explosion" type="button" aria-label="Preview selected goal explosion">✦ PREVIEW</button>
+      <small id="explosionPreviewStatus" role="status" aria-live="polite">Eight animated explosions</small>
+    </div>
+    <div class="opts ball-feel-row">
+      <span>Ball Feel</span>
+      <select id="ballFeel" aria-label="Choose ball feel">
+        <option value="responsive" selected>Responsive (new default)</option>
+        <option value="classic">Classic physics</option>
+        <option value="airy">Airy freestyle</option>
+      </select>
+      <small id="ballFeelHint" role="status" aria-live="polite">Sharper touches, brighter bounces, easier ball lifts.</small>
+    </div>
     <div class="opts"><span>Garage</span><label class="paint-label" for="paint">P1 Paint</label><input id="paint" type="color" value="#2fb8ff" aria-label="Player 1 car paint colour"><label class="paint-label" for="paint2">P2 Paint</label><input id="paint2" type="color" value="#ff8a1f" aria-label="Player 2 car paint colour"><label for="stadium">Stadium</label><select id="stadium"><option value="sunset">Coliseum Day</option><option value="neon">Neon Night</option><option value="ice">Ice Arena</option><option value="desert">Desert Dusk</option></select></div>
     <div class="opts"><span>Physics</span><select id="physics"><option value="standard">Standard</option><option value="arcade">Arcade (snappy)</option><option value="floaty">Floaty aerials</option><option value="heavy">Heavy car</option></select><label class="toggle-label"><input id="localTwo" type="checkbox"> Local 2-player</label></div>
     <div class="opts"><span>Match</span><button data-mode="1">1v1</button><button data-mode="2">2v2</button><button data-mode="3">3v3</button></div>
