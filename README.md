@@ -45,3 +45,6 @@ Wall driving, instant replays, two-player split screen, car models (`.glb` via G
 - Free Play → **Wall Air Dribble** is the repeatable practice drill. Use Space/A to detach, hold boost in bursts, and adjust pitch/air roll with the left stick and shoulder buttons.
 
 Run local automated checks with `node tests/physics-smoke.js` and `node tests/wall-physics.test.js`. Browser gameplay is checked by `node tests/browser-smoke.js` when Chrome is installed.
+
+## Keyboard aerial controls (November 2026)
+W/S are **drive and reverse**, no longer full-time pitch controls. A/D steer and yaw, Space jumps/dodges, Shift boosts, Q/E air-roll, **K points the nose UP**, and **I points it DOWN**. During a jump, **W + Shift** now gently pitches toward a stable upward angle instead of continuously diving. Use K/I to override the assist for precise flight. Jump off the ground first; boost alone does not lift a grounded car.
