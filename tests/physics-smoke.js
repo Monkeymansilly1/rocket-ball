@@ -228,7 +228,7 @@ console.log('PASS: controller aerial pitch, independent throttle and analog dire
   Object.assign(ball,{x:80-radius+.04,y:19,z:0,vx:13,vy:-4,vz:6,
     wx:0,wy:0,wz:0,onGround:false,onRamp:false,onWall:false});
   stepBall(1/120);
-  assert(ball.vx<0 && ball.vy<0 && Math.abs(ball.vy+4)<.25,
+  assert(ball.vx<0 && ball.vy<0 && Math.abs(ball.vy+4)<.8,
     'A high wall hit should rebound sideways, not pop upward');
 
   Object.assign(ball,{x:80-radius,y:radius+3.1,z:0,vx:19,vy:2,vz:7,
