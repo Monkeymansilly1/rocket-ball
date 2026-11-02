@@ -1037,6 +1037,65 @@ const ballTex = (() => {
 const ballMesh = new THREE.Mesh(new THREE.SphereGeometry(BR, 32, 24),
   new THREE.MeshStandardMaterial({ map: ballTex, roughness: 0.4, emissive: 0xffffff, emissiveIntensity: 0.12 }));
 ballMesh.castShadow = true; scene.add(ballMesh);
+// A readable contact shadow is important for judging a bouncing ball's
+// true height. It stays on the curved pitch rather than floating in the air.
+const ballGroundShadow=new THREE.Mesh(
+  new THREE.CircleGeometry(BR*1.4,40),
+  new THREE.MeshBasicMaterial({color:0x020916,transparent:true,opacity:0.32,
+    depthWrite:false,polygonOffset:true,polygonOffsetFactor:-2})
+);
+ballGroundShadow.rotation.x=-Math.PI/2;
+scene.add(ballGroundShadow);
+// Lightweight 3D streak for genuinely fast ball motion. Draw-range avoids
+// creating and destroying meshes each frame.
+const BALL_TRAIL_POINTS=16;
+const ballTrailGeometry=new THREE.BufferGeometry();
+ballTrailGeometry.setAttribute('position',
+  new THREE.BufferAttribute(new Float32Array(BALL_TRAIL_POINTS*3),3));
+ballTrailGeometry.setDrawRange(0,0);
+const ballTrail=new THREE.Line(ballTrailGeometry,
+  new THREE.LineBasicMaterial({color:0x75f5fb,transparent:true,
+    opacity:0.58,depthWrite:false,blending:THREE.AdditiveBlending}));
+scene.add(ballTrail);
+const ballTrailHistory=[];
+function resetBallTrail(){
+  ballTrailHistory.length=0;
+  ballTrailGeometry.setDrawRange(0,0);
+  ballTrail.visible=false;
+}
+function updateBallVisuals(){
+  const gameActive=state==='play'||state==='goal'||state==='replay';
+  ballGroundShadow.visible=gameActive;
+  const floorY=arenaRampAt(ball.x,ball.z).height;
+  const height=Math.max(0,ball.y-(BR+floorY));
+  ballGroundShadow.position.set(ball.x,floorY+0.055,ball.z);
+  const scale=1+Math.min(20,height)*0.065;
+  ballGroundShadow.scale.setScalar(scale);
+  ballGroundShadow.material.opacity=Math.max(0.06,0.33-height*0.012);
+  const speed=Math.hypot(ball.vx,ball.vy,ball.vz);
+  if(!gameActive || speed<24 || !Number.isFinite(speed)){
+    resetBallTrail();
+    return;
+  }
+  const current=new THREE.Vector3(ball.x,ball.y,ball.z);
+  if(ballTrailHistory.length &&
+    current.distanceTo(ballTrailHistory[ballTrailHistory.length-1])>11)
+    ballTrailHistory.length=0;
+  ballTrailHistory.push(current);
+  if(ballTrailHistory.length>BALL_TRAIL_POINTS)ballTrailHistory.shift();
+  const positions=ballTrailGeometry.attributes.position;
+  // Use each point's stored world-space location; no velocity extrapolation.
+  for(let k=0;k<ballTrailHistory.length;k++){
+    const p=ballTrailHistory[k];
+    positions.setXYZ(k,p.x,p.y,p.z);
+  }
+  positions.needsUpdate=true;
+  ballTrailGeometry.setDrawRange(0,ballTrailHistory.length);
+  ballTrail.visible=ballTrailHistory.length>1;
+  const t=clamp((speed-24)/70,0,1);
+  ballTrail.material.opacity=0.25+t*0.5;
+  ballTrail.material.color.setHex(speed>65?0xffd278:0x75f5fb);
+}
 
 // ---------- state ----------
 let state = 'menu', t = 0, score = [0, 0], clock = MATCH, ot = false, cd = 0, ballCam = false, mode = 2, diff = 1, muted = false;
@@ -1235,6 +1294,7 @@ const FORM = [[0, 4608 / 50 / HL], [-40.96, 2560 / 50 / HL], [40.96, 2560 / 50 /
 function kickoff() {
   previousTouch = null;
   eventCooldown = {};
+  resetBallTrail();
   const msgEl = $('msg'); if (msgEl) msgEl.classList.remove('replay-title');
   const goalByEl = $('goalBy'); if (goalByEl) goalByEl.textContent = '';
   const goalSpeedEl = $('goalSpeed'); if (goalSpeedEl) goalSpeedEl.textContent = '';
@@ -1296,6 +1356,7 @@ function start(freePlay = false) {
 // Free Play lets players practise aerials, wall shots and ground dribbles
 // without changing normal match rules or spawning opposition bots.
 function resetTrainingBall() {
+  resetBallTrail();
   Object.assign(ball, {
     x: 0, y: BR + 0.038, z: 0, vx: 0, vy: 0, vz: 0,
     wx: 0, wy: 0, wz: 0, onRamp: false, onGround: false
@@ -3638,6 +3699,7 @@ function render(dt) {
     }
   }
   ballMesh.position.set(ball.x, ball.y, ball.z);
+  updateBallVisuals();
   const sp = Math.hypot(ball.vx, ball.vz);
   const spinMagnitude = Math.hypot(ball.wx || 0, ball.wy || 0, ball.wz || 0);
   if (spinMagnitude > 0.001) {
@@ -3735,6 +3797,8 @@ window.rocketArena = {
   get pads() { return pads; },
   get ballFeel() { return PHYSICS_TUNING.BALL_FEEL_MODE; },
   get goalEffectCount() { return activeGoalEffects.length; },
+  get ballShadow() { return ballGroundShadow; },
+  get ballTrail() { return ballTrail; },
   previewGoalExplosion(style) {
     if(Object.hasOwn(GOAL_EFFECT_DATA,style)){
       goalExplosionStyle=style;
