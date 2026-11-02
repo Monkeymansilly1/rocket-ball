@@ -260,3 +260,52 @@ console.log('PASS: controller aerial pitch, independent throttle and analog dire
     pred[0].z-simulated.z)<1e-8,'Ball predictor disagrees with real collision solver');
   console.log('PASS: shared live/AI ball dynamics and side-effect-free prediction');
 }
+
+ 
+// Regression: keyboard W must accelerate without rotating the nose down,
+// while W + Shift in flight reaches a stable positive boost pitch.
+{
+  const keys=Object.create(null);
+  const bindings={p1:{
+    keyboard:{forward:'KeyW',reverse:'KeyS',left:'KeyA',right:'KeyD',
+      aerialUp:'KeyK',aerialDown:'KeyI',jump:'Space',boost:'ShiftLeft',
+      hand:'KeyE',rollLeft:'KeyQ',rollRight:'KeyE'},
+    pad:{forward:7,reverse:6,left:null,right:null,jump:0,boost:2,hand:4,
+      rollLeft:null,rollRight:5,camera:3}
+  }};
+  const read=new Function('controlBindings','keys','controllerForPlayer',
+    'buttonValue','clamp','controllerDeadZone','controllerSteeringSensitivity',
+    'controllerAerialSensitivity',
+    extract('playerActions')+'\\nreturn playerActions;'
+  )(bindings,keys,()=>null,()=>0,(n,a,b)=>Math.max(a,Math.min(b,n)),.12,1.25,1.35);
+  keys.KeyW=true;
+  let action=read('p1');
+  assert.equal(action.throttle,1);
+  assert.equal(action.pitch,0,'W alone must not pitch car into the ground');
+  assert.equal(action.keyboardFlightAssist,false);
+  keys.ShiftLeft=true;
+  action=read('p1');
+  assert.equal(action.keyboardFlightAssist,true,
+    'W + Shift needs a non-looping aerial climb assist');
+  const flyer={x:0,y:12,z:0,vx:0,vy:7,vz:0,pitch:0,yaw:0,roll:0,
+    airQuat:null,airOmega:null,flip:0};
+  for(let i=0;i<200;i++){
+    flyer.vy-=tuning.GRAVITY_FORCE/120;
+    aerialControl(flyer,action,1/120);
+    applyDirectionalBoost(flyer,1/120,false);
+  }
+  assert(getCarForward(flyer).y>0.5,'Boosting with W pitched DOWN or kept flipping');
+  assert(flyer.vy>0,'Holding W + Shift should support climbing while in flight');
+  keys.KeyK=true;
+  action=read('p1');
+  assert.equal(action.pitch,-1,'K must manually pitch the nose UP');
+  assert.equal(action.keyboardFlightAssist,false,'Manual pitch must override assist');
+  delete keys.KeyK;
+  keys.KeyI=true;
+  assert.equal(read('p1').pitch,1,'I must manually pitch the nose DOWN');
+  delete keys.KeyI;
+  delete keys.KeyW;
+  keys.KeyS=true;
+  assert.equal(read('p1').pitch,0,'S must not pitch down as reverse');
+  console.log('PASS: keyboard W+Shift upward aerials and separate I/K pitch');
+}
