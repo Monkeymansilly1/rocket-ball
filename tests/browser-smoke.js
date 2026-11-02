@@ -98,6 +98,22 @@ async function main() {
     await call('Page.navigate',{url});
     await eventually(()=>evalJS('document.readyState==="complete" && !!window.rocketArena && !!window.THREE'),15000)
       .catch(err=>{throw new Error('Game startup: '+err.message+'; browser exceptions: '+JSON.stringify(errors));});
+    console.log('Game loaded; testing Reloaded menu and goal effects');
+    assert.equal(await evalJS('window.rocketArena.ballFeel'),'responsive');
+    assert.equal(await evalJS('document.querySelectorAll("#explosion option").length'),8);
+    assert.equal(await evalJS('document.querySelectorAll("[data-quick]").length'),3);
+    // Preview every selectable goal style without scoring a real match.
+    await evalJS(`for(const style of ["classic","fire","galaxy","lightning","blackhole","supernova","pixel","aurora"])window.rocketArena.previewGoalExplosion(style)`);
+    assert((await evalJS('window.rocketArena.goalEffectCount'))>0,
+      '3D explosion preview never spawned scene objects');
+    assert((await evalJS('window.rocketArena.goalEffectCount'))<=3,
+      '3D goal explosion preview leaks unbounded meshes');
+    await eventually(()=>evalJS('window.rocketArena.goalEffectCount===0'),6500);
+    await evalJS('document.getElementById("ballFeel").value="airy"; document.getElementById("ballFeel").dispatchEvent(new Event("change",{bubbles:true}))');
+    assert.equal(await evalJS('window.rocketArena.ballFeel'),'airy');
+    assert.equal(await evalJS('JSON.parse(localStorage.getItem("rocketArenaSettingsV1")).ballFeelMode'),'airy');
+    await evalJS('document.getElementById("ballFeel").value="responsive";document.getElementById("ballFeel").dispatchEvent(new Event("change",{bubbles:true}))');
+    console.log('PASS: eight 3D explosions, previews, cleanup and persistent ball feel');
     console.log('Game loaded; testing Free Play');
     assert.equal(await evalJS('window.rocketArena.state'),'menu');
     // Verify the NEW arena exists as playable 3D geometry, not just an image.
