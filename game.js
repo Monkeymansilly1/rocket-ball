@@ -58,8 +58,35 @@ const PHYSICS_TUNING = {
   BALL_HIT_FORWARD_FORCE: 6, BALL_FORWARD_SPEED_FACTOR: 0.34,
   BALL_FLIP_HIT_BONUS: 8, BALL_BOOST_HIT_BONUS: 5,
   BALL_UPWARD_POP: 5.5, BALL_EXTRA_HIT_MAX_RELATIVE_SPEED: 4600 / 50,
-  BALL_CAR_MASS_RATIO: 180 / 30
+  BALL_CAR_MASS_RATIO: 180 / 30,
+  // Ball response is its own setting, independent of the car-physics preset.
+  // The reference gravity/mass above remain unchanged and documented.
+  BALL_FEEL_MODE: 'responsive',
+  BALL_FEEL: {gravity:0.97, floor:1.10, ramp:1.13, rolling:0.70,
+              impact:1.12, pop:1.22}
 };
+const BALL_FEEL_PROFILES = Object.freeze({
+  responsive: Object.freeze({gravity:0.97, floor:1.10, ramp:1.13,
+    rolling:0.70, impact:1.12, pop:1.22}),
+  classic: Object.freeze({gravity:1, floor:1, ramp:1,
+    rolling:1, impact:1, pop:1}),
+  airy: Object.freeze({gravity:0.88, floor:1.15, ramp:1.20,
+    rolling:0.65, impact:1.18, pop:1.3})
+});
+function setBallFeel(mode, persist=true) {
+  PHYSICS_TUNING.BALL_FEEL_MODE = Object.hasOwn(BALL_FEEL_PROFILES, mode)
+    ? mode : 'responsive';
+  PHYSICS_TUNING.BALL_FEEL = BALL_FEEL_PROFILES[PHYSICS_TUNING.BALL_FEEL_MODE];
+  const select = $('ballFeel');
+  if (select) select.value = PHYSICS_TUNING.BALL_FEEL_MODE;
+  const hint = $('ballFeelHint');
+  if (hint) hint.textContent = PHYSICS_TUNING.BALL_FEEL_MODE === 'classic'
+    ? 'Original bounce and touch response.'
+    : PHYSICS_TUNING.BALL_FEEL_MODE === 'airy'
+      ? 'Higher bounces and longer air time.'
+      : 'Sharper touches, brighter bounces, easier ball lifts.';
+  if (persist) saveGeneralSettings();
+}
 const MATCH = 180;
 const TEAM_COLOR_PRESETS = {
   normal: { blue: 0x2fb8ff, orange: 0xff8a1f },
@@ -81,6 +108,8 @@ try {
   if (Number.isFinite(savedSettings.steeringSensitivity)) controllerSteeringSensitivity = Math.max(1, Math.min(2.5, savedSettings.steeringSensitivity));
   if (Number.isFinite(savedSettings.aerialSensitivity)) controllerAerialSensitivity = Math.max(1, Math.min(2.5, savedSettings.aerialSensitivity));
   if (typeof savedSettings.controllerVibration === 'boolean') controllerVibrationEnabled = savedSettings.controllerVibration;
+  if (Object.hasOwn(BALL_FEEL_PROFILES, savedSettings.ballFeelMode))
+    PHYSICS_TUNING.BALL_FEEL_MODE = savedSettings.ballFeelMode;
   if (['assist', 'manual'].includes(savedSettings.keyboardFlightMode)) keyboardFlightMode = savedSettings.keyboardFlightMode;
   if (savedSettings.camera && typeof savedSettings.camera === 'object') {
     for (const key of ['fov', 'distance', 'height', 'stiffness']) {
@@ -90,6 +119,7 @@ try {
   }
   if (Object.prototype.hasOwnProperty.call(TEAM_COLOR_PRESETS, savedSettings.colourVisionMode)) colourVisionMode = savedSettings.colourVisionMode;
 } catch (_) {}
+PHYSICS_TUNING.BALL_FEEL = BALL_FEEL_PROFILES[PHYSICS_TUNING.BALL_FEEL_MODE];
 BLUE = TEAM_COLOR_PRESETS[colourVisionMode].blue;
 ORANGE = TEAM_COLOR_PRESETS[colourVisionMode].orange;
 const WALL_RAMP_WIDTH = 6.0, WALL_RAMP_HEIGHT = 256 / 50;
@@ -1786,6 +1816,7 @@ function saveGeneralSettings() {
       volume: gameVolume, colourVisionMode, deadZone: controllerDeadZone,
       steeringSensitivity: controllerSteeringSensitivity, aerialSensitivity: controllerAerialSensitivity,
       controllerVibration: controllerVibrationEnabled, keyboardFlightMode,
+      ballFeelMode: PHYSICS_TUNING.BALL_FEEL_MODE,
       camera: cameraSettings, graphicsQuality
     }));
   } catch (_) {}
@@ -1942,6 +1973,11 @@ const stadiumInput = $('stadium');
 if (stadiumInput) stadiumInput.addEventListener('change', () => applyArenaStyle(stadiumInput.value));
 const physicsInput = $('physics');
 if (physicsInput) physicsInput.addEventListener('change', () => { physicsStyle = physicsInput.value || 'standard'; });
+const ballFeelInput = $('ballFeel');
+if (ballFeelInput) {
+  setBallFeel(PHYSICS_TUNING.BALL_FEEL_MODE, false);
+  ballFeelInput.addEventListener('change', () => setBallFeel(ballFeelInput.value));
+}
 const localTwoInput = $('localTwo');
 if (localTwoInput) localTwoInput.addEventListener('change', () => {
   localTwoPlayer = localTwoInput.checked;
@@ -2818,11 +2854,17 @@ function hitBall(c) {
     c.nextRumbleAt = t + 0.15;
   }
 
+  const feel = PHYSICS_TUNING.BALL_FEEL;
   const inverseBallMass = 1 / PHYSICS_TUNING.BALL_MASS_REFERENCE;
   const inverseCarMass = 1 / PHYSICS_TUNING.CAR_MASS_REFERENCE;
   const impulse = closing * (1 + PHYSICS_TUNING.CAR_BALL_RESTITUTION) / (inverseBallMass + inverseCarMass);
   const ballChange = impulse * inverseBallMass, carChange = impulse * inverseCarMass;
-  ball.vx += nx * ballChange; ball.vy += ny * ballChange; ball.vz += nz * ballChange;
+  // Faster *real* initial separation; limit the assist to the impact frame.
+  // No repeated acceleration during an air-dribble or while objects overlap.
+  const responsiveness = c.ground ? feel.impact : 1+(feel.impact-1)*0.40;
+  ball.vx += nx * ballChange * responsiveness;
+  ball.vy += ny * ballChange * responsiveness;
+  ball.vz += nz * ballChange * responsiveness;
   c.vx -= nx * carChange; c.vy -= ny * carChange; c.vz -= nz * carChange;
   // Gentle tangential contact gives the driver air-dribble steering authority
   // without adding free energy or locking the sphere to the car's hitbox.
@@ -2850,11 +2892,12 @@ function hitBall(c) {
     const extra = aerial
       ? aligned * (c.flip > 0 ? Math.min(7, closing*0.18+3) :
           Math.min(1.35, closing*0.055 + forwardSpeed*0.012))
-      : aligned * Math.min(13, closing*0.12 + forwardSpeed*0.05 +
-          (c.flip > 0 ? 5 : 0) + (c.fl ? 2.2 : 0));
+      : aligned * Math.min(14.5, closing*0.13 + forwardSpeed*0.055 +
+          (c.flip > 0 ? 5 : 0) + (c.fl ? 2.2 : 0)) * feel.impact;
     ball.vx += fx * extra; ball.vy += fy * extra; ball.vz += fz * extra;
     if (ny > 0.2 && forward > -0.4) {
-      ball.vy += Math.min(aerial ? 0.4 : 2.2, closing * (aerial ? 0.035 : 0.1));
+      ball.vy += Math.min(aerial ? 0.4 : 2.7*feel.pop,
+        closing * (aerial ? 0.035 : 0.125*feel.pop));
     }
     c.ballHitCooldown = aerial ? 0.11 : 0.085;
   }
@@ -2980,7 +3023,8 @@ function stepBall(dt, body=ball, predicting=false) {
   const p = PHYSICS_TUNING;
   body.onWall=false;
   // Integrate velocity before contacts, keeping all motion in world space.
-  body.vy -= p.BALL_GRAVITY_FORCE * dt;
+  const feel=p.BALL_FEEL;
+  body.vy -= p.BALL_GRAVITY_FORCE * feel.gravity * dt;
   const airDrag = Math.max(0, 1 - p.BALL_DRAG_REFERENCE * dt);
   body.vx *= airDrag; body.vy *= airDrag; body.vz *= airDrag;
   body.x += body.vx * dt; body.y += body.vy * dt; body.z += body.vz * dt;
@@ -3008,8 +3052,8 @@ function stepBall(dt, body=ball, predicting=false) {
   if(body.y<surface || (wasSupported && touching)){
     body.y=Math.max(body.y,surface);
     const hardImpact=normalSpeed < -1.5;
-    const restitution=ramp.height<=0.1?p.BALL_FLOOR_RESTITUTION:
-      (hardImpact?p.BALL_RAMP_IMPACT_RESTITUTION:p.BALL_RAMP_ROLL_RESTITUTION);
+    const restitution=ramp.height<=0.1?p.BALL_FLOOR_RESTITUTION*feel.floor:
+      (hardImpact?p.BALL_RAMP_IMPACT_RESTITUTION*feel.ramp:p.BALL_RAMP_ROLL_RESTITUTION);
     ballSurfaceImpulse(nx,ny,nz,restitution, body);
     // Airborne bounces should not be tagged as "rolling" and dragged flat.
     const outgoing=body.vx*nx+body.vy*ny+body.vz*nz;
@@ -3017,7 +3061,7 @@ function stepBall(dt, body=ball, predicting=false) {
     body.onRamp=ramp.height>0.1&&supported;
     body.onGround=ramp.height<=0.1&&supported;
     if(supported){
-      const rollDrag=Math.exp(-p.BALL_ROLLING_RESISTANCE*dt);
+      const rollDrag=Math.exp(-p.BALL_ROLLING_RESISTANCE*feel.rolling*dt);
       body.vx*=rollDrag;body.vz*=rollDrag;
     }
   }else{
