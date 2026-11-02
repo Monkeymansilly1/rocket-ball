@@ -2022,6 +2022,27 @@ function handleMenuChoice(e) {
 }
 $('menu').addEventListener('pointerdown', handleMenuChoice);
 $('menu').addEventListener('click', handleMenuChoice);
+// One-click quick modes use the real start path, not a separate fake arena.
+for(const button of document.querySelectorAll('[data-quick]')){
+  button.addEventListener('click',event=>{
+    event.stopPropagation();
+    const choice=button.dataset.quick;
+    if(choice==='freestyle'){
+      setBallFeel('airy');
+      start(true);
+      const preset=$('trainingPreset');
+      if(preset){
+        preset.value='wall';
+        preset.dispatchEvent(new Event('change',{bubbles:true}));
+      }
+      return;
+    }
+    pick('mode',choice==='competitive'?2:1);
+    pick('diff',choice==='competitive'?2:0);
+    setBallFeel('responsive');
+    start();
+  });
+}
 function playerActions(who) {
   const binding = controlBindings[who].keyboard;
   const pad = controllerForPlayer(who);
@@ -3655,6 +3676,18 @@ function render(dt) {
   $('s0').textContent = score[0]; $('s1').textContent = score[1];
   const s = Math.ceil(clock); $('clock').textContent = trainingMode ? 'FREE PLAY' : ot ? 'OT' : Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
   const b = trainingMode ? 100 : cars[0].boost;
+  const speedHud=$('speedHud');
+  if(speedHud){
+    speedHud.hidden=state==='menu'||state==='over';
+    const activeCar=cars[0];
+    if(activeCar){
+      const mph=Math.round(Math.hypot(activeCar.vx,activeCar.vy,activeCar.vz)
+        *0.5*2.236936);
+      const speedNumber=$('speedValue');
+      if(speedNumber)speedNumber.textContent=String(mph);
+      speedHud.classList.toggle('supersonic',!!activeCar.supersonic);
+    }
+  }
   $('bt').textContent = trainingMode ? '∞' : Math.round(b);
   $('bf').style.width = '84%';
   $('bf').style.background = 'conic-gradient(' + (b > 66 ? '#ffd35a' : '#37f2c0') +
