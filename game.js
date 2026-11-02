@@ -46,8 +46,10 @@ const PHYSICS_TUNING = {
   BALL_RESTITUTION: 0.6, BALL_FLOOR_RESTITUTION: 0.64, BALL_WALL_RESTITUTION: 0.6,
   // Material friction is not the same as rolling resistance. Keeping them
   // separate prevents a grounded ball losing speed too quickly.
-  BALL_ROLLING_RESISTANCE: 0.14, BALL_RAMP_IMPACT_RESTITUTION: 0.48,
-  BALL_RAMP_ROLL_RESTITUTION: 0.18, BALL_BOUNCE_CUTOFF_SPEED: 0.7,
+  BALL_ROLLING_RESISTANCE: 0.14, BALL_RAMP_IMPACT_RESTITUTION: 0.56,
+  BALL_RAMP_ROLL_RESTITUTION: 0.24, BALL_BOUNCE_CUTOFF_SPEED: 0.7,
+  BALL_WALL_LIP_EFFICIENCY: 0.96, BALL_CONTACT_SLOP: 0.045,
+  BALL_CAR_TANGENT_TRANSFER: 0.13,
   BALL_SURFACE_FRICTION: 0.35, BALL_HIT_MULTIPLIER: 1.0,
   BALL_HIT_FORWARD_FORCE: 6, BALL_FORWARD_SPEED_FACTOR: 0.34,
   BALL_FLIP_HIT_BONUS: 8, BALL_BOOST_HIT_BONUS: 5,
@@ -1265,7 +1267,7 @@ function resetTrainingCar() {
   Object.assign(car, {
     x: 0, y: 0.55, z: -34, vx: 0, vy: 0, vz: 0,
     yaw: 0, pitch: 0, roll: 0, jumps: 0, jt: 0,
-    flip: 0, fl: 0, hold: 0, ground: true,
+    flip: 0, fl: 0, hold: 0, jumpNormal: null, ground: true,
     wallRide: false, wallVerticalAxis: null, wallVerticalSign: 0, wallDetachTimer: 0,
     airQuat: null, airOmega: null, surfaceQuat:null, surfaceNormal:null, surfaceForward:null, ceilingRide:false, flipAxis:null, demoTimer: 0, boost: 100, ballHitCooldown: 0, airTouchCooldown: 0
   });
@@ -1329,10 +1331,14 @@ function loadTrainingShot(scenario = 'dribble') {
       car.wallRide = true;
       car.wallVerticalAxis = 'x'; car.wallVerticalSign = sideSign;
       car.ground = true;
+      // Launch with the ball JUST ahead of the upright car's roof.
+      // The previous preset sent it inward at 12 units/s, while a wall
+      // jump starts near 6: it raced away before the driver could catch it.
+      // Use a real reachable 3D contact rather than a scripted fake touch.
       const ballX = sideSign * (HW - 3.5);
       Object.assign(ball, {
-        x: ballX, z: car.z + 1.3, y: car.y + 5.8,
-        vx: -sideSign * 12, vy: 11.8, vz: 3,
+        x: ballX, z: car.z + 1.3, y: car.y + 4.0,
+        vx: -sideSign * 3.5, vy: 11.8, vz: 3,
         wx: 0, wy: 0, wz: 0,
         onRamp: false, onGround: false, onWall: false
       });
@@ -2343,7 +2349,7 @@ function stepCar(c, ct, dt) {
       c.x = 0; c.z = c.team ? HL - 14 : -HL + 14; c.yaw = c.team ? Math.PI : 0;
       c.pitch = 0; c.roll = 0; c.wallRide = false; c.wallVerticalAxis = null; c.wallVerticalSign = 0;
       c.surfaceQuat=null;c.surfaceNormal=null;c.surfaceForward=null;c.ceilingRide=false;
-      c.airQuat=null;c.airOmega=null;
+      c.airQuat=null;c.airOmega=null;c.jumpNormal=null;
       c.boost = 34; c.jumps = 0; c.jt = 0; c.ground = true; c.boostImpactTimer = 0;
       c.mesh.root.visible = true;
     } else {
@@ -2379,7 +2385,7 @@ function stepCar(c, ct, dt) {
   c.wallVerticalAxis=ground ? contact.axis : null;
   c.wallVerticalSign=ground ? contact.sign : 0;
   if(ground) {
-    c.airQuat=null;c.airOmega=null;c.flipAxis=null;
+    c.airQuat=null;c.airOmega=null;c.flipAxis=null;c.jumpNormal=null;
     snapCarToContact(c,contact);
     updateCarSurfaceFrame(c,contact.normal);
   }
@@ -2425,11 +2431,14 @@ function stepCar(c, ct, dt) {
     c.vy -= PHYSICS_TUNING.GRAVITY_FORCE * gravityScale * dt;
     aerialControl(c, ct, dt);
     if (c.hold > 0 && ct.jumpHeld && c.jumps === 1) {
-      const roof=AIR_Y.clone().applyQuaternion(getCarOrientation(c));
-      c.vx += roof.x * PHYSICS_TUNING.JUMP_HOLD_FORCE * dt;
-      c.vy += roof.y * PHYSICS_TUNING.JUMP_HOLD_FORCE * dt;
-      c.vz += roof.z * PHYSICS_TUNING.JUMP_HOLD_FORCE * dt;
-      c.hold = Math.max(0, c.hold - dt);
+      // Keep jump hold along the launch surface normal. The driver can rotate
+      // the car to aim at the ball without changing that initial jump impulse.
+      const direction=c.jumpNormal || AIR_Y;
+      const heldTime=Math.min(dt,c.hold);
+      c.vx+=direction.x*PHYSICS_TUNING.JUMP_HOLD_FORCE*heldTime;
+      c.vy+=direction.y*PHYSICS_TUNING.JUMP_HOLD_FORCE*heldTime;
+      c.vz+=direction.z*PHYSICS_TUNING.JUMP_HOLD_FORCE*heldTime;
+      c.hold=Math.max(0,c.hold-heldTime);
     } else c.hold = 0;
     // Rocket League retains a small forward/reverse throttle acceleration in
     // air, separate from its pitch input. Most aerial control comes from boost.
@@ -2454,13 +2463,14 @@ function stepCar(c, ct, dt) {
       const launch=PHYSICS_TUNING.JUMP_IMPULSE;
       c.airQuat=c.surfaceQuat.clone();
       c.airOmega=null;
+      c.jumpNormal=n.clone();
       c.vx+=n.x*launch;c.vy+=n.y*launch;c.vz+=n.z*launch;
       c.x+=n.x*0.16;c.y+=n.y*0.16;c.z+=n.z*0.16;
       c.ground=false;c.wallRide=false;c.ceilingRide=false;c.wallVerticalAxis=null;
       c.wallVerticalSign=0;c.wallDetachTimer=0.30;
       c.jumps=1;c.jt=0;c.hold=PHYSICS_TUNING.JUMP_HOLD_DURATION;
     } else if (c.jumps === 1 && c.jt < PHYSICS_TUNING.DOUBLE_JUMP_WINDOW) {
-      c.jumps = 2;
+      c.jumps = 2;c.hold=0;c.jumpNormal=null;
       const f = ct.dodge ? ct.dodge[0] : (Number.isFinite(ct.pitch) ? ct.pitch : ct.throttle), s = ct.dodge ? ct.dodge[1] : ct.steer;
       if (Math.abs(f)+Math.abs(s) > 0.1) {
         const dir=Math.hypot(f,s);
@@ -2750,6 +2760,18 @@ function hitBall(c) {
   const ballChange = impulse * inverseBallMass, carChange = impulse * inverseCarMass;
   ball.vx += nx * ballChange; ball.vy += ny * ballChange; ball.vz += nz * ballChange;
   c.vx -= nx * carChange; c.vy -= ny * carChange; c.vz -= nz * carChange;
+  // Gentle tangential contact gives the driver air-dribble steering authority
+  // without adding free energy or locking the sphere to the car's hitbox.
+  const tangentX=rvx+closing*nx,tangentY=rvy+closing*ny,tangentZ=rvz+closing*nz;
+  const tangentSpeed=Math.hypot(tangentX,tangentY,tangentZ);
+  if(tangentSpeed>0.001){
+    const tangentChange=Math.min(tangentSpeed*PHYSICS_TUNING.BALL_CAR_TANGENT_TRANSFER,
+      ballChange*0.24);
+    const blend=tangentChange/tangentSpeed;
+    ball.vx-=tangentX*blend;ball.vy-=tangentY*blend;ball.vz-=tangentZ*blend;
+    const carBlend=blend*inverseCarMass/inverseBallMass;
+    c.vx+=tangentX*carBlend;c.vy+=tangentY*carBlend;c.vz+=tangentZ*carBlend;
+  }
 
   // Only the first substantial impact in a short window receives additional
   // shot power. This prevents the "sticky / accelerating ball" behaviour.
@@ -2794,13 +2816,27 @@ function clampBallMotion() {
   }
 }
 function ballSurfaceImpulse(nx, ny, nz, restitution) {
-  const vn = ball.vx * nx + ball.vy * ny + ball.vz * nz;
-  if (vn >= 0) return;
-  // Ignore only near-rest micro impacts; light drops should still bounce.
-  const e = vn < -PHYSICS_TUNING.BALL_BOUNCE_CUTOFF_SPEED ? restitution : 0;
-  ball.vx -= (1 + e) * vn * nx;
-  ball.vy -= (1 + e) * vn * ny;
-  ball.vz -= (1 + e) * vn * nz;
+  const vn=ball.vx*nx+ball.vy*ny+ball.vz*nz;
+  if(vn>=0)return 0;
+  // Only genuine impacts rebound. Small resting contacts lose their normal
+  // velocity, but retain horizontal rolling momentum.
+  const e=vn<-PHYSICS_TUNING.BALL_BOUNCE_CUTOFF_SPEED?restitution:0;
+  const impulse=-(1+e)*vn;
+  ball.vx+=impulse*nx;ball.vy+=impulse*ny;ball.vz+=impulse*nz;
+  const tangentDot=ball.vx*nx+ball.vy*ny+ball.vz*nz;
+  const tx=ball.vx-tangentDot*nx,ty=ball.vy-tangentDot*ny,tz=ball.vz-tangentDot*nz;
+  const speed=Math.hypot(tx,ty,tz);
+  if(speed>0.001){
+    // Bounded friction transfers only a small portion of the tangent velocity.
+    const slip=Math.min(speed*0.09,impulse*PHYSICS_TUNING.BALL_SURFACE_FRICTION*0.18);
+    const k=slip/speed;
+    ball.vx-=tx*k;ball.vy-=ty*k;ball.vz-=tz*k;
+    const spin=slip/BR*0.36/speed;
+    ball.wx+=(ny*tz-nz*ty)*spin;
+    ball.wy+=(nz*tx-nx*tz)*spin;
+    ball.wz+=(nx*ty-ny*tx)*spin;
+  }
+  return impulse;
 }
 
 // goal explosion helpers
@@ -2861,12 +2897,13 @@ function resolveBallWall(axis, sign, rampSurfaceY) {
   // A fast outward ball at the lip can roll upward even when its initial
   // vertical velocity is small. Avoid popping genuinely falling wall hits.
   if (atWallLip && outward > 1.1 && ball.vy > -0.5) {
-    ball.vy = Math.max(ball.vy, Math.hypot(outward, ball.vy) * 0.93);
-    if (axis === 'x') ball.vx = 0;
-    else ball.vz = 0;
-    ball.onRamp = false;
-    ball.onGround = false;
-    ball.onWall = true;
+    // Convert the outward component INTO vertical travel only once.
+    // The efficiency is below 1 so the wall cannot create kinetic energy.
+    const rising=Math.max(0,ball.vy);
+    ball.vy=Math.max(rising,Math.hypot(outward,rising)*PHYSICS_TUNING.BALL_WALL_LIP_EFFICIENCY);
+    if(axis==='x')ball.vx=0;
+    else ball.vz=0;
+    ball.onRamp=false;ball.onGround=false;ball.onWall=true;
     // Turning surface momentum upward is the wall ramp continuation, not an
     // extra speed boost. The sphere will naturally slow and fall under gravity.
   } else {
@@ -2877,6 +2914,7 @@ function resolveBallWall(axis, sign, rampSurfaceY) {
 }
 function stepBall(dt) {
   const p = PHYSICS_TUNING;
+  ball.onWall=false;
   // Integrate velocity before contacts, keeping all motion in world space.
   ball.vy -= p.BALL_GRAVITY_FORCE * dt;
   const airDrag = Math.max(0, 1 - p.BALL_DRAG_REFERENCE * dt);
@@ -2901,23 +2939,25 @@ function stepBall(dt) {
   const normalLength = Math.hypot(-ramp.dx, 1, -ramp.dz);
   const nx = -ramp.dx / normalLength, ny = 1 / normalLength, nz = -ramp.dz / normalLength;
   const normalSpeed = ball.vx * nx + ball.vy * ny + ball.vz * nz;
-  const touching = ball.y <= surface + 0.035 && normalSpeed <= 0.2;
-  if (ball.y < surface || (ball.onRamp && touching)) {
-    ball.y = Math.max(ball.y, surface);
-    // Keep a shallow, low-bounce ramp contact for smooth upward wall rolls,
-    // but let a ball dropped onto a ramp bounce instead of sticking to it.
-    const rampImpact = ramp.height > 0.1 && ball.vy < -2 && normalSpeed < -2;
-    const restitution = ramp.height <= 0.1 ? p.BALL_FLOOR_RESTITUTION :
-      (rampImpact ? p.BALL_RAMP_IMPACT_RESTITUTION : p.BALL_RAMP_ROLL_RESTITUTION);
-    ballSurfaceImpulse(nx, ny, nz, restitution);
-    const groundFriction = Math.max(0, 1 - p.BALL_ROLLING_RESISTANCE * dt);
-    ball.vx *= groundFriction;
-    ball.vz *= groundFriction;
-    ball.onRamp = ramp.height > 0.1;
-    ball.onGround = ramp.height <= 0.1;
-  } else {
-    ball.onRamp = false;
-    ball.onGround = false;
+  const touching=ball.y<=surface+p.BALL_CONTACT_SLOP && normalSpeed<=0.2;
+  const wasSupported=!!(ball.onGround||ball.onRamp);
+  if(ball.y<surface || (wasSupported && touching)){
+    ball.y=Math.max(ball.y,surface);
+    const hardImpact=normalSpeed < -1.5;
+    const restitution=ramp.height<=0.1?p.BALL_FLOOR_RESTITUTION:
+      (hardImpact?p.BALL_RAMP_IMPACT_RESTITUTION:p.BALL_RAMP_ROLL_RESTITUTION);
+    ballSurfaceImpulse(nx,ny,nz,restitution);
+    // Airborne bounces should not be tagged as "rolling" and dragged flat.
+    const outgoing=ball.vx*nx+ball.vy*ny+ball.vz*nz;
+    const supported=outgoing<0.36;
+    ball.onRamp=ramp.height>0.1&&supported;
+    ball.onGround=ramp.height<=0.1&&supported;
+    if(supported){
+      const rollDrag=Math.exp(-p.BALL_ROLLING_RESISTANCE*dt);
+      ball.vx*=rollDrag;ball.vz*=rollDrag;
+    }
+  }else{
+    ball.onRamp=false;ball.onGround=false;
   }
 
   // Circular corner wall collision: exact normal from the new arc, not
@@ -2961,16 +3001,18 @@ function stepBall(dt) {
   }
 
   // Rolling rotation follows ground velocity; airborne spin decays slowly.
-  if (ball.onGround || ball.onRamp) {
-    const targetWx = ball.vz / BR, targetWz = -ball.vx / BR;
-    const blend = Math.min(1, dt * 8);
-    ball.wx += (targetWx - ball.wx) * blend;
-    ball.wz += (targetWz - ball.wz) * blend;
-    ball.wy *= Math.max(0, 1 - 0.35 * dt);
-  } else {
-    ball.wx *= Math.max(0, 1 - 0.12 * dt);
-    ball.wy *= Math.max(0, 1 - 0.12 * dt);
-    ball.wz *= Math.max(0, 1 - 0.12 * dt);
+  if(ball.onGround||ball.onRamp){
+    // The spin axis tracks the curved surface instead of flat world Y.
+    const tx=(ny*ball.vz-nz*ball.vy)/BR;
+    const ty=(nz*ball.vx-nx*ball.vz)/BR;
+    const tz=(nx*ball.vy-ny*ball.vx)/BR;
+    const blend=Math.min(1,dt*8);
+    ball.wx+=(tx-ball.wx)*blend;
+    ball.wy+=(ty-ball.wy)*blend;
+    ball.wz+=(tz-ball.wz)*blend;
+  }else{
+    const decay=Math.exp(-0.12*dt);
+    ball.wx*=decay;ball.wy*=decay;ball.wz*=decay;
   }
   clampBallMotion();
 }

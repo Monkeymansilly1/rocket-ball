@@ -36,3 +36,12 @@ In the air, W/S tilt the nose and A/D turn, so you can aim boost at the ball.
 
 ## Ideas to add
 Wall driving, instant replays, two-player split screen, car models (`.glb` via GLTFLoader), touch controls.
+
+## Physics overhaul (November 2026)
+- Ball contacts now distinguish a **rebound** from true rolling support, with bounded slip, rolling drag and spin aligned to curved ramps.
+- Ramp-to-wall transfers redirect the ball's outward momentum upward without creating extra speed. High wall hits still rebound normally.
+- Car/ball contacts include a small reciprocal sideways impulse for controlled aerial carries rather than sticky nose hits.
+- Wall jumps preserve the original jump direction as the car rotates, allowing players to aim the nose and feather boost independently while airborne.
+- Free Play → **Wall Air Dribble** is the repeatable practice drill. Use Space/A to detach, hold boost in bursts, and adjust pitch/air roll with the left stick and shoulder buttons.
+
+Run local automated checks with `node tests/physics-smoke.js` and `node tests/wall-physics.test.js`. Browser gameplay is checked by `node tests/browser-smoke.js` when Chrome is installed.
