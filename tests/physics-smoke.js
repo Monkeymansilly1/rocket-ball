@@ -276,7 +276,7 @@ console.log('PASS: controller aerial pitch, independent throttle and analog dire
   const read=new Function('controlBindings','keys','controllerForPlayer',
     'buttonValue','clamp','controllerDeadZone','controllerSteeringSensitivity',
     'controllerAerialSensitivity',
-    extract('playerActions')+'\\nreturn playerActions;'
+    extract('playerActions')+'\nreturn playerActions;'
   )(bindings,keys,()=>null,()=>0,(n,a,b)=>Math.max(a,Math.min(b,n)),.12,1.25,1.35);
   keys.KeyW=true;
   let action=read('p1');
