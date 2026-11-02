@@ -215,3 +215,30 @@ console.log('PASS: syntax, training controls, floor, walls, ball speed cap, car-
     'LB/L1 plus left stick must control aerial roll, not yaw');
 }
 console.log('PASS: controller aerial pitch, independent throttle and analog directional dodge');
+
+// Regression suite: the ball must release freely from its contact surface,
+// conserve momentum at the wall lip and never invent a vertical wall pop.
+{
+  const radius=91.25/50;
+  Object.assign(ball,{x:0,y:radius+0.03,z:0,vx:7,vy:3.5,vz:0,
+    wx:0,wy:0,wz:0,onGround:true,onRamp:false,onWall:false});
+  stepBall(1/120);
+  assert(ball.vy>3.2 && !ball.onGround,
+    'Ball clung to floor while travelling upward');
+  Object.assign(ball,{x:80-radius+.04,y:19,z:0,vx:13,vy:-4,vz:6,
+    wx:0,wy:0,wz:0,onGround:false,onRamp:false,onWall:false});
+  stepBall(1/120);
+  assert(ball.vx<0 && ball.vy<0 && Math.abs(ball.vy+4)<.25,
+    'A high wall hit should rebound sideways, not pop upward');
+
+  Object.assign(ball,{x:80-radius,y:radius+3.1,z:0,vx:19,vy:2,vz:7,
+    wx:0,wy:0,wz:0,onGround:false,onRamp:true,onWall:false});
+  const before=Math.hypot(ball.vx,ball.vy,ball.vz);
+  resolveBallWall('x',1,radius+3);
+  const after=Math.hypot(ball.vx,ball.vy,ball.vz);
+  assert(ball.onWall && ball.vx===0 && ball.vy>12,
+    'Ramp lip should transfer outward momentum upward');
+  assert(after<=before+1e-8,'Wall lip created kinetic energy');
+  console.log('PASS: airborne release, wall rebound, energy-limited wall roll');
+}
+
