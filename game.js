@@ -1116,6 +1116,11 @@ let player2Paint = '#ff8a1f', player2PaintCustom = false;
 let physicsStyle = 'standard';
 let localTwoPlayer = false;
 let goalExplosionStyle = 'classic';
+try {
+  const previous=localStorage.getItem('rocketArenaExplosionV1');
+  if(['classic','fire','galaxy','lightning','blackhole','supernova','pixel','aurora'].includes(previous))
+    goalExplosionStyle=previous;
+} catch (_) {}
 let trainingMode = false, trainingGoals = 0, trainingAttempts = 0, trainingAirTouches = 0, trainingWallArmed = false;
 let paused = false;
 let lastTouch = null;
@@ -1789,8 +1794,10 @@ if (name2Input) name2Input.addEventListener('input', () => {
   const p2 = cars[mode]; if (p2 && localTwoPlayer) p2.displayName = player2Name;
 });
 const explosionInput = $('explosion');
+if(explosionInput)explosionInput.value=goalExplosionStyle;
 if (explosionInput) explosionInput.addEventListener('change', () => {
   goalExplosionStyle = explosionInput.value;
+  try {localStorage.setItem('rocketArenaExplosionV1',goalExplosionStyle);}catch(_){}
   const value=$('explosionName');
   if(value)value.textContent=explosionInput.options[explosionInput.selectedIndex].text;
 });
@@ -3728,6 +3735,7 @@ window.rocketArena = {
     if(Object.hasOwn(GOAL_EFFECT_DATA,style)){
       goalExplosionStyle=style;
       if(explosionInput)explosionInput.value=style;
+      try{localStorage.setItem('rocketArenaExplosionV1',style);}catch(_){}
       goalExplosion(false,true);
     }
   }
