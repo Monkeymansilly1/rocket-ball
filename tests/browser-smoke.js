@@ -126,6 +126,22 @@ async function main() {
     assert.equal(await evalJS('window.rocketArena.state'),'menu');
     // Verify the NEW arena exists as playable 3D geometry, not just an image.
     assert.equal(await evalJS('window.rocketArena.stadium.name'), 'Rocket Ball Championship Arena');
+    // The old static coloured boxes have been replaced with real, smiling,
+    // GPU-instanced blob creatures in the actual coliseum seating tiers.
+    const spectatorCount=await evalJS('window.rocketArena.miniCrowd.fans.length');
+    assert(spectatorCount>=1000,'Crowd unexpectedly small');
+    assert.equal(await evalJS('window.rocketArena.miniCrowd.body.name'),'Mini Bean Fans');
+    assert.equal(await evalJS('window.rocketArena.miniCrowd.eyes.count'),
+      spectatorCount*2,'Fans must have two physical eyes');
+    assert.equal(await evalJS('window.rocketArena.miniCrowd.smiles.count'),
+      spectatorCount,'Fans must have smiling mouths');
+    assert.equal(await evalJS('window.rocketArena.miniCrowd.mouths.count'),
+      spectatorCount,'Fans must have cheering expressions');
+    assert((await evalJS('window.rocketArena.miniCrowd.flags.count'))>=20,
+      'Crowd team flags missing');
+    assert.equal(await evalJS('window.rocketArena.miniCrowd.fans.every(f=>Math.abs(f.base.x)>80||Math.abs(f.base.z)>104)'),
+      true,'Crowd is intruding into the playable arena');
+    console.log('PASS: thousands of colourful blob spectators, eyes, expressions and team flags');
     assert.equal(await evalJS('window.rocketArena.stadium.children.length > 40'), true);
     assert.equal(await evalJS('window.rocketArena.stadium.children.filter(x => x.isInstancedMesh).length >= 7'),true);
     assert.equal(await evalJS('window.rocketArena.pitch.geometry.attributes.position.count > 15000'),true);
@@ -193,6 +209,13 @@ async function main() {
     await evalJS('(function(){const b=window.rocketArena.ball;Object.assign(b,{x:0,y:2,z:105,vx:0,vy:0,vz:32});})()');
     await eventually(()=>evalJS('document.getElementById("trainingGoalCount").textContent.includes("1") && window.rocketArena.goalEffectCount>0'),6000)
       .catch(err=>{throw new Error('Free Play scoring explosion: '+err.message);});
+    assert.equal(await evalJS('window.rocketArena.miniCrowdCheering'),true,
+      'Free Play goal must also trigger crowd celebration');
+    assert.equal(await evalJS('window.rocketArena.miniCrowd.cheerTeam'),0,
+      'Blue fans should celebrate when scoring in orange goal');
+    await eventually(()=>evalJS('(function(){const crowd=window.rocketArena.miniCrowd;const matrix=crowd.body.instanceMatrix.array;return crowd.fans.some((fan,i)=>fan.team===0 && matrix[i*16+13]-fan.base.y>.12);})()'),2300)
+      .catch(err=>{throw new Error('Scoring crowd did not jump in 3D: '+err.message);});
+    console.log('PASS: real Free Play goal makes the scoring team\'s bean fans jump');
     await evalJS('document.getElementById("trainingExit").click()');
     assert.equal(await evalJS('window.rocketArena.state'),'menu');
 
