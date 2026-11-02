@@ -606,6 +606,7 @@ function cheerMiniCrowd(team) {
   if (!miniCrowd) return;
   miniCrowd.cheerTeam=team===1?1:0;
   miniCrowd.cheerTime=CROWD_CHEER_LENGTH;
+  miniCrowd.cheerStartedAt=performance.now();
   miniCrowd.faces.material.map=miniCrowd.cheerFace;
   miniCrowd.faces.material.needsUpdate=true;
   miniCrowd.drawTick=.05; // force first celebration pose next render
@@ -671,7 +672,9 @@ function updateMiniCrowd(dt) {
   if(!miniCrowd)return;
   miniCrowd.elapsed+=Math.min(dt,.1);
   if(miniCrowd.cheerTime>0){
-    miniCrowd.cheerTime=Math.max(0,miniCrowd.cheerTime-dt);
+    // A celebration ends on real elapsed time, even if rendering is slow.
+    miniCrowd.cheerTime=Math.max(0,CROWD_CHEER_LENGTH-
+      (performance.now()-miniCrowd.cheerStartedAt)/1000);
     if(miniCrowd.cheerTime===0){
       miniCrowd.faces.material.map=miniCrowd.calmFace;
       miniCrowd.faces.material.needsUpdate=true;
