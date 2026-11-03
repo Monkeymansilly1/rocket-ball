@@ -891,15 +891,20 @@ function buildStadium() {
   gradient.addColorStop(.68,'#a2d5f5');gradient.addColorStop(1,'#e7eef0');
   sky.fillStyle=gradient;sky.fillRect(0,0,cv.width,cv.height);
   const rand=(n)=>{const x=Math.sin(n*216.17+9.3)*49781.232;return x-Math.floor(x);};
-  for(let cloud=0;cloud<38;cloud++){
-    const x=rand(cloud*3)*cv.width,y=180+rand(cloud*3+1)*480;
-    const w=35+rand(cloud*3+2)*105;
-    sky.fillStyle='rgba(255,255,255,.08)';
+  // Broad, soft cotton clouds over bright blue water.
+  // Previously the cloud ellipses were tiny translucent streaks.
+  for(let cloud=0;cloud<32;cloud++){
+    const x=rand(cloud*3)*cv.width,y=165+rand(cloud*3+1)*475;
+    const w=40+rand(cloud*3+2)*100;
+    sky.fillStyle='rgba(196,223,236,.25)';
+    sky.beginPath();sky.ellipse(x,y+w*.12,w*.58,w*.24,0,0,Math.PI*2);sky.fill();
     for(let puff=0;puff<6;puff++){
-      sky.beginPath();
-      sky.ellipse(x+(puff-2.5)*w*.16,
-        y+Math.sin(puff*1.7)*4,w*.23,6+rand(cloud+puff)*10,-.12,0,Math.PI*2);
-      sky.fill();
+      const px=x+(puff-2.5)*w*.17;
+      const py=y-Math.sin((puff+.4)*.64)*w*.10;
+      const rx=w*(.17+rand(cloud*9+puff)*.08);
+      const ry=w*(.14+rand(cloud*7+puff)*.10);
+      sky.fillStyle=puff%3===0?'rgba(252,255,255,.72)':'rgba(255,255,255,.82)';
+      sky.beginPath();sky.ellipse(px,py,rx,ry,0,0,Math.PI*2);sky.fill();
     }
   }
   skyMesh=new THREE.Mesh(new THREE.SphereGeometry(1200,36,20),
