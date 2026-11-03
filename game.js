@@ -202,7 +202,7 @@ const renderer = new THREE.WebGLRenderer({ canvas: $('c'), antialias: true });
 renderer.shadowMap.enabled = true;
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x8ac7ec);
-scene.fog = new THREE.Fog(0xbcd9e8, 240, 850);
+scene.fog = new THREE.Fog(0xbcd9e8, 450, 1420);
 const camera = new THREE.PerspectiveCamera(72, 1, 0.5, 2000);
 const camera2 = new THREE.PerspectiveCamera(72, 1, 0.5, 2000);
 function resize() {
@@ -704,12 +704,168 @@ function updateMiniCrowd(dt) {
   updateMiniCrowdTransforms(miniCrowd,dt);
 }
 
+
+// Decorative, collision-free open-air setting modeled on the supplied
+// lakeside arena screenshots: turquoise water, green shoreline, tall conifers,
+// soft alpine peaks and a futuristic skyline across the lake.
+let lakesideScenery = null;
+function buildLakesideScenery(stadium) {
+  const scenery=new THREE.Group();
+  scenery.name='Lakeside Mountains Water Trees City';
+  stadium.add(scenery);
+  lakesideScenery=scenery;
+  let seed=7471;
+  const random=()=>{seed=(1664525*seed+1013904223)>>>0;return seed/4294967296;};
+  const mat=(color,roughness=0.9)=>new THREE.MeshStandardMaterial({
+    color,roughness,metalness:0});
+  const oceanTexture=(()=>{
+    const canvas=document.createElement('canvas');
+    canvas.width=256;canvas.height=256;
+    const ctx=canvas.getContext('2d');
+    ctx.fillStyle='#67c8e9';
+    ctx.fillRect(0,0,256,256);
+    for(let i=0;i<440;i++){
+      const x=random()*256,y=random()*256;
+      const w=5+random()*25;
+      ctx.strokeStyle=i%4===0?'rgba(243,255,255,.25)':'rgba(13,91,134,.11)';
+      ctx.lineWidth=.7+random()*1.1;
+      ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+w,y+random()*1.3);ctx.stroke();
+    }
+    const texture=new THREE.CanvasTexture(canvas);
+    texture.wrapS=texture.wrapT=THREE.RepeatWrapping;
+    texture.repeat.set(9,9);
+    texture.colorSpace=THREE.SRGBColorSpace||texture.colorSpace;
+    return texture;
+  })();
+  const lake=new THREE.Mesh(new THREE.PlaneGeometry(2050,2050),
+    new THREE.MeshStandardMaterial({map:oceanTexture,color:0x9bdaef,
+      roughness:.27,metalness:.23,emissive:0x0e2a44,emissiveIntensity:.13}));
+  lake.name='Reflective Blue Lake';
+  lake.rotation.x=-Math.PI/2;
+  lake.position.y=-11;
+  lake.receiveShadow=false;
+  scenery.add(lake);
+  // The playing stadium sits on a grassy peninsula raised over the water.
+  const island=new THREE.Mesh(new THREE.CylinderGeometry(320,327,9,90),
+    mat(0x82b979));
+  island.name='Stadium Green Island';
+  island.position.y=-6;
+  island.scale.z=1.09;
+  scenery.add(island);
+  // Paved pedestrian loop around the grandstand and above the lake shore.
+  const pathPts=[];
+  for(let j=0;j<=128;j++){
+    const a=j/128*Math.PI*2;
+    pathPts.push(new THREE.Vector3(207*Math.cos(a),-1.26,246*Math.sin(a)));
+  }
+  const promenade=new THREE.Mesh(
+    new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pathPts,true),
+      128,4.2,5,true),mat(0xf2f1df,.98));
+  promenade.name='Pale Lakeside Walkway';
+  scenery.add(promenade);
+  const treeCount=230;
+  const trunkGeo=new THREE.CylinderGeometry(.22,.32,1,5);
+  const pineGeo=new THREE.ConeGeometry(1,1,7);
+  const trunk=new THREE.InstancedMesh(trunkGeo,mat(0x826a50),treeCount);
+  const lower=new THREE.InstancedMesh(pineGeo,
+    new THREE.MeshLambertMaterial({color:0xffffff}),treeCount);
+  const upper=new THREE.InstancedMesh(pineGeo,
+    new THREE.MeshLambertMaterial({color:0xffffff}),treeCount);
+  const tr=new THREE.Matrix4(),treeColor=new THREE.Color();
+  const greens=[0x3c8b58,0x549f61,0x367c50,0x69a867,0x438969,0x528f54];
+  for(let i=0;i<treeCount;i++){
+    const angle=random()*Math.PI*2;
+    const r=239+random()*68;
+    const x=Math.cos(angle)*r,z=Math.sin(angle)*r*1.09;
+    const h=7+random()*12,w=2.1+random()*1.8;
+    tr.makeScale(.7,h*.45,.7);
+    tr.setPosition(x,-1.0+h*.22,z);
+    trunk.setMatrixAt(i,tr);
+    tr.makeScale(w*1.10,h*.74,w*1.10);
+    tr.setPosition(x,-.3+h*.57,z);
+    lower.setMatrixAt(i,tr);
+    tr.makeScale(w*.77,h*.64,w*.77);
+    tr.setPosition(x,-.3+h*.88,z);
+    upper.setMatrixAt(i,tr);
+    treeColor.setHex(greens[(i*7)%greens.length]);
+    lower.setColorAt(i,treeColor);
+    upper.setColorAt(i,treeColor.clone().multiplyScalar(1.08));
+  }
+  for(const obj of [trunk,lower,upper]){
+    obj.instanceMatrix.needsUpdate=true;
+    obj.frustumCulled=false;
+    scenery.add(obj);
+  }
+  lower.instanceColor.needsUpdate=true;
+  upper.instanceColor.needsUpdate=true;
+  // Hills frame the water without creating invisible driveable ground.
+  const hillMat=mat(0x81b98b),farHillMat=mat(0xacc7ae);
+  for(let i=0;i<13;i++){
+    const x=-900+i*150+(random()-.5)*80;
+    const z=-770-random()*135;
+    const radius=135+random()*130,height=38+random()*45;
+    const hill=new THREE.Mesh(new THREE.ConeGeometry(radius,height,7),
+      i%3===0?farHillMat:hillMat);
+    hill.position.set(x,-16+height/2,z);
+    scenery.add(hill);
+  }
+  // Jagged snow-capped alpine peaks beyond the forest and lake.
+  const mountainColours=[0x8ca4a1,0x8ba3b3,0x778f9a,0x9faeb4,0x7f9998];
+  const snow=mat(0xecf8fa);
+  for(let i=0;i<13;i++){
+    const x=-950+i*162+(random()-.5)*70;
+    const z=-930-random()*95;
+    const radius=82+random()*76,height=110+random()*155;
+    const mountain=new THREE.Mesh(new THREE.ConeGeometry(radius,height,5),
+      mat(mountainColours[i%mountainColours.length]));
+    mountain.position.set(x,-17+height/2,z);
+    scenery.add(mountain);
+    const snowy=new THREE.Mesh(
+      new THREE.ConeGeometry(radius*.39,height*.39,5),snow);
+    snowy.position.set(x,-17+height-height*.195,z);
+    scenery.add(snowy);
+  }
+  // Bluish glass city with needle towers as seen across the lake.
+  const buildingCount=48;
+  const cityBlocks=new THREE.InstancedMesh(new THREE.BoxGeometry(1,1,1),
+    new THREE.MeshStandardMaterial({color:0xffffff,roughness:.26,
+      metalness:.45,emissive:0x162637,emissiveIntensity:.18}),buildingCount);
+  const shades=[0x7fabc2,0xc8e5ee,0x6d9fba,0x9dd5e8,0xe5f4f7,0x92b5ca];
+  for(let i=0;i<buildingCount;i++){
+    const col=i%12,row=Math.floor(i/12);
+    const x=140+(col-5.5)*26+(random()-.5)*12;
+    const z=-605-row*33+(random()-.5)*14;
+    const height=45+random()*113+(col===5||col===8?72:0);
+    const width=10+random()*9;
+    tr.makeScale(width,height,width*.83);
+    tr.setPosition(x,height/2-16,z);
+    cityBlocks.setMatrixAt(i,tr);
+    cityBlocks.setColorAt(i,new THREE.Color(shades[(i*5)%shades.length]));
+  }
+  cityBlocks.instanceMatrix.needsUpdate=true;
+  cityBlocks.instanceColor.needsUpdate=true;
+  cityBlocks.frustumCulled=false;
+  scenery.add(cityBlocks);
+  const silver=mat(0xe5f4ff,.35);
+  for(const [x,z,height] of [[178,-662,216],[274,-670,182],[348,-640,155]]){
+    const needle=new THREE.Mesh(new THREE.CylinderGeometry(.7,2.3,height,8),
+      silver);
+    needle.position.set(x,-15+height/2,z);
+    scenery.add(needle);
+    const spire=new THREE.Mesh(new THREE.ConeGeometry(4.5,46,7),silver);
+    spire.position.set(x,-15+height+23,z);
+    scenery.add(spire);
+  }
+  return scenery;
+}
+
 function buildStadium() {
   // The bowl sits OUTSIDE the glass playable enclosure. Stadium structure is
   // decorative only and cannot cause rogue collisions or interrupt wall riding.
   const stadium = new THREE.Group();
   stadium.name='Rocket Ball Championship Arena';
   scene.add(stadium);
+  buildLakesideScenery(stadium);
   // Metallic arena gantries replace the sandstone-coloured structures.
   const stone = new THREE.MeshStandardMaterial({color:0x2a4158,roughness:.51,metalness:.56});
   const oldStone = new THREE.MeshStandardMaterial({color:0x263745,roughness:.68,metalness:.42});
@@ -3993,6 +4149,7 @@ window.rocketArena = {
   get state() { return state; },
   // Read-only references for browser-level stadium regression checks.
   get stadium() { return scene.getObjectByName('Rocket Ball Championship Arena'); },
+  get lakesideScenery() { return lakesideScenery; },
   get pitch() { return pitchMesh; },
   get pads() { return pads; },
   get ballFeel() { return PHYSICS_TUNING.BALL_FEEL_MODE; },
