@@ -126,12 +126,24 @@ async function main() {
     assert.equal(await evalJS('window.rocketArena.state'),'menu');
     // Verify the NEW arena exists as playable 3D geometry, not just an image.
     assert.equal(await evalJS('window.rocketArena.stadium.name'), 'Rocket Ball Championship Arena');
-    assert.equal(await evalJS('window.rocketArena.miniCrowd.bodies.count'),2400,
-      'Mini potato spectators were not created');
-    assert.equal(await evalJS('window.rocketArena.miniCrowd.faces.count'),2400,
+    assert.equal(await evalJS('window.rocketArena.miniCrowd.bodies.count'),4096,
+      'Dense mini potato spectators were not created');
+    assert.equal(await evalJS('window.rocketArena.miniCrowd.faces.count'),4096,
       'Mini crowd faces missing');
-    assert.equal(await evalJS('window.rocketArena.miniCrowd.flagData.length'),100,
+    assert.equal(await evalJS('window.rocketArena.miniCrowd.outlines.count'),4096,
+      'Outlined mini potato bodies missing');
+    assert.equal(await evalJS('window.rocketArena.miniCrowd.flagData.length'),171,
       'Team flags missing');
+    assert.equal(await evalJS('window.rocketArena.stadium.getObjectByName("White Alpine Sail Canopies")?.isMesh'),true,
+      'Scalloped white canopy missing');
+    assert.equal(await evalJS('window.rocketArena.stadium.getObjectByName("Turquoise Stadium Exterior")?.isMesh'),true,
+      'Teal stadium exterior missing');
+    assert.equal(await evalJS('window.rocketArena.lakesideScenery?.getObjectByName("Reflective Blue Lake")?.isMesh'),true,
+      'Decorative lakeside landscape missing');
+    assert.equal(await evalJS('window.rocketArena.lakesideScenery?.children.filter(x=>x.isInstancedMesh).length>=4'),true,
+      'Pine forest or distant skyline missing');
+    assert.equal(await evalJS('document.getElementById("physics")===null'),true,
+      'Physics dropdown was not removed from the menu');
     assert.equal(await evalJS('window.rocketArena.miniCrowd.bodies.geometry.type'),'SphereGeometry',
       'Crowd must be potato characters, not the old box audience');
     assert.equal(await evalJS('window.rocketArena.stadium.children.length > 40'), true);
