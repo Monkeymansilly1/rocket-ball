@@ -866,13 +866,14 @@ function buildStadium() {
   stadium.name='Rocket Ball Championship Arena';
   scene.add(stadium);
   buildLakesideScenery(stadium);
-  // Metallic arena gantries replace the sandstone-coloured structures.
-  const stone = new THREE.MeshStandardMaterial({color:0x2a4158,roughness:.51,metalness:.56});
-  const oldStone = new THREE.MeshStandardMaterial({color:0x263745,roughness:.68,metalness:.42});
-  const ivory = new THREE.MeshStandardMaterial({color:0xb7d9e9,roughness:.33,metalness:.65});
-  const dark = new THREE.MeshStandardMaterial({color:0x101f36,metalness:.58,roughness:.44});
+  // Soft white/turquoise architecture inspired by the reference's open-air
+  // lakeside stadium, rather than the previous dark enclosed coliseum.
+  const stone = new THREE.MeshStandardMaterial({color:0xd1e8ed,roughness:.66,metalness:.13});
+  const oldStone = new THREE.MeshStandardMaterial({color:0x5faeb7,roughness:.72,metalness:.07});
+  const ivory = new THREE.MeshStandardMaterial({color:0xf9ffff,roughness:.43,metalness:.08});
+  const dark = new THREE.MeshStandardMaterial({color:0x172b40,metalness:.46,roughness:.41});
   const gold = new THREE.MeshBasicMaterial({color:0xffe2a3});
-  const roofTrim = new THREE.MeshStandardMaterial({color:0x5a829e,metalness:.75,roughness:.34});
+  const roofTrim = new THREE.MeshStandardMaterial({color:0xecfcff,metalness:.18,roughness:.51});
   const blueCloth = new THREE.MeshStandardMaterial({
     color:0x125bb6,roughness:.88,side:THREE.DoubleSide
   });
@@ -929,7 +930,7 @@ function buildStadium() {
   const steps=18,sectors=144,seatPoints=[],seatColors=[];
   const seatMat=new THREE.MeshStandardMaterial({vertexColors:true,metalness:.06,roughness:.91,side:THREE.DoubleSide});
   const seatVerts=[],seatIndices=[],seatVertsColors=[];
-  const blueSeat=new THREE.Color(0x173b68),orangeSeat=new THREE.Color(0x5c3830);
+  const blueSeat=new THREE.Color(0x638db4),orangeSeat=new THREE.Color(0xd5ac94);
   for(let step=0;step<steps;step++){
     const y=9.0+step*1.83;
     const inX=100+step*2.65,inZ=125+step*2.55;
@@ -961,6 +962,47 @@ function buildStadium() {
   // Character spectators share body, facial expression and flag geometry.
   // A few GPU draw calls replace thousands of separate objects.
   miniCrowd = buildMiniCrowd(stadium, ringPoint);
+
+  // Teal exterior walls with pale structural uprights: the reference shows a
+  // low modern stadium facade below an open crowd and white fabric roof.
+  const facadeVerts=[],facadeIndex=[];
+  const facadeSegments=112;
+  for(let j=0;j<=facadeSegments;j++){
+    const angle=j/facadeSegments*Math.PI*2;
+    const lower=ringPoint(angle,150.5,180.5,-2.5);
+    const upper=ringPoint(angle,150.5,180.5,29.5);
+    facadeVerts.push(...lower.toArray(),...upper.toArray());
+    if(j<facadeSegments){
+      const k=j*2;
+      facadeIndex.push(k,k+1,k+2,k+1,k+3,k+2);
+    }
+  }
+  const facadeGeometry=new THREE.BufferGeometry();
+  facadeGeometry.setAttribute('position',
+    new THREE.Float32BufferAttribute(facadeVerts,3));
+  facadeGeometry.setIndex(facadeIndex);
+  facadeGeometry.computeVertexNormals();
+  const facade=new THREE.Mesh(facadeGeometry,
+    new THREE.MeshStandardMaterial({color:0x5bb1bb,roughness:.72,
+      metalness:.12,side:THREE.DoubleSide}));
+  facade.name='Turquoise Stadium Exterior';
+  stadium.add(facade);
+  const uprightCount=56;
+  const uprights=new THREE.InstancedMesh(
+    new THREE.BoxGeometry(.94,32.5,1.5),ivory,uprightCount);
+  const uprightMatrix=new THREE.Matrix4();
+  for(let j=0;j<uprightCount;j++){
+    const angle=j/uprightCount*Math.PI*2;
+    const point=ringPoint(angle,152.8,182.8,13.7);
+    uprightMatrix.makeRotationY(-angle);
+    uprightMatrix.setPosition(point.x,point.y,point.z);
+    uprights.setMatrixAt(j,uprightMatrix);
+  }
+  uprights.instanceMatrix.needsUpdate=true;
+  uprights.frustumCulled=false;
+  stadium.add(uprights);
+  // The broad upper lip is visible from both the pitch and outside.
+  makeRim(151.8,181.8,30.6,.8,ivory);
 
   // Lower arcade follows the grandstand instead of floating in the distance.
   const pillarsPerTier=40;
@@ -1001,34 +1043,66 @@ function buildStadium() {
   makeArcade(pillarsPerTier,143,171,36,13,6.35);
   makeRim(145,173,56.2,1.25,stone);
 
-  // The outer high arches are the defining Utopia Coliseum silhouette.
-  makeArcade(36,165,196,47,15,7.9);
-  makeRim(167,198,70.8,1.7,ivory);
-
-  // Coloured canvas shades over the stands: a proper open-air roof.
-  const roofGeo=new THREE.BufferGeometry();
-  const roofPos=[],roofCol=[];
-  const firstBlue=new THREE.Color(0x104d9d),firstOrange=new THREE.Color(0xc76738);
-  for(let i=0;i<144;i++){
-    const a0=i/144*Math.PI*2,a1=(i+1)/144*Math.PI*2;
-    const mid=(a0+a1)/2;
-    const col=(Math.sin(mid)<0?firstBlue:firstOrange).clone()
-      .multiplyScalar(i%3===0?.83:1.0);
-    const q=[
-      ringPoint(a0,145,173,56.5),ringPoint(a1,145,173,56.5),
-      ringPoint(a0,165,196,65.8),ringPoint(a1,165,196,65.8)
+  // 24 open white scalloped sail canopies. Triangular high points create the
+  // row of fabric peaks from the user's Potato League screenshots.
+  const sailCount=24,roofPos=[],roofShade=[],sailRibs=[];
+  const whiteA=new THREE.Color(0xf9ffff),whiteB=new THREE.Color(0xd7e9ed);
+  for(let i=0;i<sailCount;i++){
+    const a0=i/sailCount*Math.PI*2;
+    const a1=(i+1)/sailCount*Math.PI*2;
+    const am=(a0+a1)/2;
+    const in0=ringPoint(a0,134.5,161,45.7);
+    const in1=ringPoint(a1,134.5,161,45.7);
+    const left=ringPoint(a0,161.5,191,50.2);
+    const right=ringPoint(a1,161.5,191,50.2);
+    const peak=ringPoint(am,161.5,191,68.5);
+    const centre=ringPoint(am,147.5,174,51);
+    const triangles=[
+      [in0,centre,left],[in0,in1,centre],[in1,right,centre],
+      [centre,peak,left],[centre,right,peak]
     ];
-    const flat=[q[0],q[1],q[2],q[1],q[3],q[2]];
-    for(const vertex of flat) {
-      roofPos.push(vertex.x,vertex.y,vertex.z);
-      roofCol.push(col.r,col.g,col.b);
+    for(const [a,b,c] of triangles){
+      for(const v of [a,b,c]){
+        roofPos.push(v.x,v.y,v.z);
+        const colour=(i%3===0?whiteB:whiteA);
+        roofShade.push(colour.r,colour.g,colour.b);
+      }
+    }
+    for(const [a,b] of [[peak,left],[peak,right],[peak,centre]]){
+      sailRibs.push(a.x,a.y+.08,a.z,b.x,b.y+.08,b.z);
     }
   }
-  roofGeo.setAttribute('position',new THREE.Float32BufferAttribute(roofPos,3));
-  roofGeo.setAttribute('color',new THREE.Float32BufferAttribute(roofCol,3));
-  roofGeo.computeVertexNormals();
-  stadium.add(new THREE.Mesh(roofGeo,
-    new THREE.MeshStandardMaterial({vertexColors:true,side:THREE.DoubleSide,roughness:.85})));
+  const sailGeometry=new THREE.BufferGeometry();
+  sailGeometry.setAttribute('position',
+    new THREE.Float32BufferAttribute(roofPos,3));
+  sailGeometry.setAttribute('color',
+    new THREE.Float32BufferAttribute(roofShade,3));
+  sailGeometry.computeVertexNormals();
+  const sails=new THREE.Mesh(sailGeometry,new THREE.MeshStandardMaterial({
+    vertexColors:true,side:THREE.DoubleSide,roughness:.76,
+    emissive:0x243138,emissiveIntensity:.025
+  }));
+  sails.name='White Alpine Sail Canopies';
+  stadium.add(sails);
+  const ribs=new THREE.BufferGeometry();
+  ribs.setAttribute('position',new THREE.Float32BufferAttribute(sailRibs,3));
+  stadium.add(new THREE.LineSegments(ribs,
+    new THREE.LineBasicMaterial({color:0xf4ffff,transparent:true,
+      opacity:.85})));
+  // Thin white supports read as airy canopy masts, not enclosed high arches.
+  const mastCount=sailCount;
+  const mast=new THREE.InstancedMesh(
+    new THREE.CylinderGeometry(.47,.62,55,7),ivory,mastCount);
+  const mastMatrix=new THREE.Matrix4();
+  for(let i=0;i<mastCount;i++){
+    const angle=(i+.5)/mastCount*Math.PI*2;
+    const point=ringPoint(angle,161.5,191,0);
+    mastMatrix.makeTranslation(point.x,25.3,point.z);
+    mast.setMatrixAt(i,mastMatrix);
+  }
+  mast.instanceMatrix.needsUpdate=true;
+  mast.frustumCulled=false;
+  stadium.add(mast);
 
   // Flags and emblems also share GPU geometry; each colour is one draw call.
   const flagGeo=new THREE.PlaneGeometry(3.5,8.2);
@@ -1074,14 +1148,23 @@ function buildStadium() {
     map:new THREE.CanvasTexture(screen),side:THREE.DoubleSide
   });
   for(const sign of [-1,1]){
-    const display=new THREE.Mesh(new THREE.PlaneGeometry(32,15),screenMaterial);
-    display.position.set(0,49,sign*156);
+    const display=new THREE.Mesh(new THREE.PlaneGeometry(42,19),screenMaterial);
+    display.position.set(0,77,sign*219);
     display.rotation.y=sign>0?Math.PI:0;
     stadium.add(display);
-    const frame=new THREE.Mesh(new THREE.BoxGeometry(34,17,.8),dark);
+    const frame=new THREE.Mesh(new THREE.BoxGeometry(44,21,1.15),ivory);
     frame.position.copy(display.position);
-    frame.position.z+=sign*.6;
+    frame.position.z+=sign*.8;
     stadium.add(frame);
+    const darkBacking=new THREE.Mesh(new THREE.BoxGeometry(43,20,.2),dark);
+    darkBacking.position.copy(display.position);
+    darkBacking.position.z+=sign*1.49;
+    stadium.add(darkBacking);
+    for(const side of [-1,1]){
+      const post=new THREE.Mesh(new THREE.CylinderGeometry(.78,.98,57,8),ivory);
+      post.position.set(side*16,38,sign*220);
+      stadium.add(post);
+    }
   }
 
   // Floodlight rigs with emissive bulbs instead of expensive point lights.
