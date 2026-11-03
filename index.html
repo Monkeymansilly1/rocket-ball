@@ -48,6 +48,7 @@
   <div id="boost"><i id="bf"></i><span id="bt">34</span></div>
   <div id="boost2"><i id="bf2"></i><span id="bt2">34</span></div>
   <div id="splitDivider"></div><div id="p1Tag">P1 · BLUE</div><div id="p2Tag">P2 · ORANGE</div>
+  <div id="flightHint" hidden></div>
   <div id="cam">Chase cam (C)</div>
   <div id="msg"></div>
   <div id="goalBy" aria-live="polite"></div>
@@ -216,11 +217,11 @@
           <div class="setting-row">
             <label for="settingKeyboardFlight">Flight control mode</label>
             <select id="settingKeyboardFlight">
-              <option value="assist">Assisted (W + Shift climbs)</option>
+              <option value="assist">Assisted (jump, then Shift to climb)</option>
               <option value="manual">Rocket-style manual (W/S pitch)</option>
             </select>
           </div>
-          <p class="setting-help">Manual mode: W pitches nose down, S pitches nose up in the air. Boost follows your car's nose, so keep it aimed up to climb. Assisted mode preserves the W + Shift climb control; I/K remain dedicated pitch keys in both modes.</p>
+          <p class="setting-help">Manual mode: W pitches nose down, S pitches nose up in the air. Boost follows your car's nose, so keep it aimed up to climb. Assisted mode: hold Space to jump, then hold Shift to raise the nose and climb; W is optional. K raises the nose and I lowers it in both modes. Boost alone does not lift a grounded car.</p>
           <h3>Controller</h3>
           <div class="setting-row">
             <label for="settingDeadZone">Stick dead zone</label>
@@ -247,7 +248,7 @@
           <button id="resetControls" type="button">Reset defaults</button>
         </div>
         <div id="controllerStatus" role="status" aria-live="polite">Searching for controller…</div>
-        <p class="controls-tip">Keyboard: use Settings → Flight control mode to choose Assisted (W + Shift climbs) or Rocket-style Manual (W/S pitch in the air). I/K always pitch, A/D yaw, Q/E roll, and Space jumps/flips. Controller: left stick pitches/yaws; triggers accelerate/reverse. All bindings can be remapped.</p>
+        <p class="controls-tip">Keyboard: use Settings → Flight control mode to choose Assisted (jump, then Shift to climb) or Rocket-style Manual (W/S pitch in the air). I/K always pitch, A/D yaw, Q/E roll, and Space jumps/flips. Controller: left stick pitches/yaws; triggers accelerate/reverse. All bindings can be remapped.</p>
         <div class="control-bind-head"><span>Action</span><span>Keyboard</span><span>Controller</span></div>
         <div class="control-bind-row"><strong>Accelerate</strong><button type="button" data-bind-key="forward">W</button><button type="button" data-bind-pad="forward">Left stick ↑</button></div>
         <div class="control-bind-row"><strong>Reverse</strong><button type="button" data-bind-key="reverse">S</button><button type="button" data-bind-pad="reverse">Left stick ↓</button></div>

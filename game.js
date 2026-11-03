@@ -1752,6 +1752,8 @@ function kickoff() {
   }
 }
 function start(freePlay = false) {
+  document.activeElement?.blur?.();
+  clearHeldInput();
   stopGoalPreview();lobbyArenaTour=false;camera.clearViewOffset();
   sfx.init(); // read UI choices
   trainingMode = !!freePlay;
@@ -2236,7 +2238,21 @@ if ($('resetControls')) $('resetControls').addEventListener('click', () => {
 });
 renderControlBindings();
 
+function isEditingTarget(target) {
+  return !!(target && (target.isContentEditable ||
+    (target.closest && target.closest('input, textarea, select, [contenteditable="true"], [role="textbox"]'))));
+}
+function clearHeldInput() {
+  for(const code of Object.keys(keys))delete keys[code];
+  jumpQ=jumpQ2=false;padJumpQueued.p1=padJumpQueued.p2=false;
+}
+addEventListener('blur',clearHeldInput);
+document.addEventListener('visibilitychange',()=>{if(document.hidden)clearHeldInput();});
+document.addEventListener('focusin',event=>{if(isEditingTarget(event.target))clearHeldInput();});
 addEventListener('keydown', e => {
+  // Text editing and IME composition belong to the browser, including A,
+  // Space, arrows and menu shortcuts. Do not queue driving input from them.
+  if(e.isComposing || isEditingTarget(e.target))return;
   if (pendingKeyCapture) {
     const action = pendingKeyCapture;
     if (e.code === 'Escape') {
@@ -2249,6 +2265,7 @@ addEventListener('keydown', e => {
     }
     e.preventDefault(); e.stopPropagation(); return;
   }
+  if(e.ctrlKey || e.metaKey || e.altKey)return;
   const remappedKey = ['p1','p2'].some(who => Object.values(controlBindings[who].keyboard).includes(e.code));
   if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code) || remappedKey) e.preventDefault();
   if (!keys[e.code] && e.code === controlBindings.p1.keyboard.jump) jumpQ = true;
@@ -2267,7 +2284,7 @@ addEventListener('keydown', e => {
     if ($('viewToggle')) $('viewToggle').innerHTML = ballCam
       ? '◉ <span>BALL CAM</span>' : '◉ <span>PLAYER VIEW</span>';
   }
-  if (e.code === 'Enter' && (state === 'menu' || state === 'over') && document.activeElement !== $('name')) start();
+  if (e.code === 'Enter' && (state === 'menu' || state === 'over') && !isEditingTarget(document.activeElement)) start();
   if (state === 'menu' || state === 'over') {
     const n = { Digit1: 1, Digit2: 2, Digit3: 3 }[e.code], d = { Digit4: 0, Digit5: 1, Digit6: 2 }[e.code];
     if (n) pick('mode', n); if (d !== undefined) pick('diff', d);
@@ -2622,7 +2639,7 @@ function playerActions(who) {
     // In manual Rocket-style mode, W noses down and S noses up while airborne.
     // Controller analogue pitch remains independent of triggers.
     pitch: clamp(manualPitch + (manualFlight ? keyForward-keyReverse : 0) - airAxisY, -1, 1),
-    keyboardFlightAssist: !!(!manualFlight && keyForward && keyboardBoostHeld &&
+    keyboardFlightAssist: !!(!manualFlight && keyboardBoostHeld &&
       !keyboardPitchUp && !keyboardPitchDown && Math.abs(airAxisY) < 0.04),
     // Neutral stick + RT + double-jump stays neutral; the left stick chooses flips.
     dodge: [clamp(keyForward - keyReverse - rawAxisY, -1, 1), clamp(keyRight - keyLeft + rawAxisX + padRight - padLeft, -1, 1)],
@@ -2768,11 +2785,11 @@ function aerialControl(c, ct, dt) {
   let pitchIn = clamp(Number.isFinite(ct.pitch) ? ct.pitch : (ct.throttle || 0), -1, 1);
   if (ct.keyboardFlightAssist && Math.abs(pitchIn) < 0.04 && !(c.flip > 0)) {
     // Keyboard players often hold W (accelerate) and Shift (boost) together.
-    // Steering pitch from throttle caused a continuous nose-down rotation.
-    // Use a damped target instead: approximately 45 degrees up, with no loop.
+    // Assisted mode also supports Space then Shift without holding throttle.
+    // Use a damped target instead: 55 degrees up, with no loop.
     // The car keeps its physical gravity, boost direction and angular momentum.
     const elevation=Math.asin(clamp(getCarForward(c).y,-1,1));
-    const desiredElevation=Math.PI/4;
+    const desiredElevation=55*Math.PI/180;
     pitchIn=clamp((elevation-desiredElevation)*2.6-omega.pitch*0.85,-1,1);
   }
   const yawIn = clamp(Number.isFinite(ct.airYaw) ? ct.airYaw : (ct.steer || 0), -1, 1);
@@ -4089,6 +4106,14 @@ function render(dt) {
   }
   $('s0').textContent = score[0]; $('s1').textContent = score[1];
   const s = Math.ceil(clock); $('clock').textContent = trainingMode ? 'FREE PLAY' : ot ? 'OT' : Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+  const flightHint=$('flightHint');
+  if(flightHint){
+    flightHint.hidden=!['play','kick'].includes(state);
+    const manual=keyboardFlightMode==='manual';
+    const text=manual?'MANUAL AERIAL · Hold SPACE, raise nose with S, then SHIFT · W pitches down'
+      :'ASSISTED AERIAL · Hold SPACE to jump, then hold SHIFT to climb · K/I aim · Q/E roll';
+    if(flightHint.textContent!==text)flightHint.textContent=text;
+  }
   const b = trainingMode ? 100 : cars[0].boost;
   const speedHud=$('speedHud');
   if(speedHud){

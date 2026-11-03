@@ -34,7 +34,7 @@ Effects last roughly 3–5 seconds, remain distinct at every graphics quality, a
 ## Controls and rules
 
 - **Drive:** W/S or arrows; **steer:** A/D; **jump/dodge:** Space; **boost:** Left Shift; **drift:** E; **air roll:** Q/E; **ball camera:** C; **pause:** P; **mute:** M.
-- Assisted aerial mode uses K/I for nose up/down and W + Shift for assisted climb. Manual aerial mode uses W/S for pitch. Controls can be rebound in Settings.
+- Assisted aerial mode: hold Space to jump, then hold Shift to pitch upward and climb (W is optional). K/I override nose up/down; Q/E air-roll. Manual aerial mode uses W/S for pitch. Controls can be rebound in Settings.
 - Controllers use the left stick to steer/pitch, triggers to drive/reverse, A/✕ to jump, X/□ to boost, LB/L1 for drift/air roll and Y/△ for ball camera. A second controller enables local split screen.
 - Matches last five minutes. A tie goes to sudden-death overtime. Large boost pads refill to 100; small pads add 12. Free Play provides unlimited boost and aerial, wall-dribble, save and kickoff drills.
 
@@ -48,12 +48,13 @@ node tests/physics-smoke.js
 node tests/wall-physics.test.js
 node tests/ai-regression.test.js
 node tests/match-clock.test.js
+node tests/aerial-controls.test.js
 node tests/goal-effects.test.js
 node tests/scene-utils.test.js
 node tests/browser-smoke.js
 ```
 
-The browser suite requires system Chrome/Chromium and Node.js 22 or newer. `CHROME_BIN` can select a different installed Chrome executable. It starts its own local HTTP server and checks WebGL startup, the lobby, explosion selection and cleanup, the real arena geometry, Free Play, scoring, camera settings, kickoff and driving. The effects suite checks all eight animations at three quality levels and verifies resource disposal. The clock suite covers slow-frame timing and pause. CI runs these checks.
+The browser suite requires system Chrome/Chromium and Node.js 22 or newer. `CHROME_BIN` can select a different installed Chrome executable. It starts its own local HTTP server and checks WebGL startup, the lobby, explosion selection and cleanup, the real arena geometry, Free Play, scoring, camera settings, kickoff and driving. The effects suite checks all eight animations at three quality levels and verifies resource disposal. The clock suite covers slow-frame timing and pause. The aerial suite starts a car on its wheels and verifies assisted and manual takeoffs. Text fields accept bound keys normally; starting play or leaving the tab clears held keyboard input. CI runs these checks.
 
 ## Files and credits
 

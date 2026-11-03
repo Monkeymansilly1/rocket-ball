@@ -98,6 +98,16 @@ async function main() {
     await call('Page.navigate',{url});
     await eventually(()=>evalJS('document.readyState==="complete" && !!window.rocketArena && !!window.THREE'),15000)
       .catch(err=>{throw new Error('Game startup: '+err.message+'; browser exceptions: '+JSON.stringify(errors));});
+    await evalJS('document.querySelector(".lobby-nav [data-panel=garage]").click();document.getElementById("name").value="";document.getElementById("name").focus()');
+    await call('Input.dispatchKeyEvent',{type:'keyDown',code:'KeyA',key:'A',text:'A',modifiers:8,windowsVirtualKeyCode:65});
+    await call('Input.dispatchKeyEvent',{type:'keyUp',code:'KeyA',key:'A',windowsVirtualKeyCode:65});
+    assert.equal(await evalJS('document.getElementById("name").value'),'A','Bound A key must type normally in a text field');
+    const editing=await evalJS(`(()=>{const input=document.getElementById('name'),camera=document.getElementById('viewToggle').textContent;
+      const allowed=['Space','KeyA','KeyW','KeyP','KeyM','KeyC','Digit2','Enter'].every(code=>input.dispatchEvent(new KeyboardEvent('keydown',{code,bubbles:true,cancelable:true})));
+      const result={allowed,state:window.rocketArena.state,cameraUnchanged:camera===document.getElementById('viewToggle').textContent};
+      input.value='PLAYER';input.dispatchEvent(new Event('input',{bubbles:true}));input.blur();document.querySelector('.lobby-nav [data-panel=play]').click();return result;})()`);
+    assert.deepEqual(editing,{allowed:true,state:'menu',cameraUnchanged:true},'Typing must not trigger gameplay or menu shortcuts');
+    console.log('PASS: real A typing, native editing keys and isolated game shortcuts');
     console.log('Game loaded; testing Reloaded menu and goal effects');
     assert.equal(await evalJS('document.getElementById("ballFeel")===null'),true,'Ball physics options must be removed');
     assert.equal(await evalJS('document.querySelectorAll(".lobby-nav [data-panel]").length'),4);
@@ -179,6 +189,14 @@ async function main() {
     await evalJS('document.getElementById("freePlayBtn").click()');
     await eventually(()=>evalJS('window.rocketArena.state==="play" && window.rocketArena.cars.length===1'));
     assert.equal(await evalJS('document.body.classList.contains("free-play")'),true);
+    assert.equal(await evalJS('document.activeElement===document.getElementById("name")'),false,'Starting gameplay must release text-field focus');
+    await evalJS('window.dispatchEvent(new KeyboardEvent("keydown",{code:"ShiftLeft",bubbles:true}));window.dispatchEvent(new KeyboardEvent("keydown",{code:"Space",bubbles:true}))');
+    await eventually(()=>evalJS('window.rocketArena.cars[0].jumps===1 && window.rocketArena.cars[0].y>1.5'),10000);
+    await evalJS('window.dispatchEvent(new KeyboardEvent("keyup",{code:"Space",bubbles:true}))');
+    await eventually(()=>evalJS('(()=>{const c=window.rocketArena.cars[0];return !c.ground && c.y>6 && c.vy>1 && c.pitch>.6;})()'),15000)
+      .catch(async err=>{throw new Error('Ground-to-air assisted takeoff failed: '+err.message+' '+await evalJS('JSON.stringify({y:window.rocketArena.cars[0].y,vy:window.rocketArena.cars[0].vy,pitch:window.rocketArena.cars[0].pitch})'));});
+    await evalJS('window.dispatchEvent(new KeyboardEvent("keyup",{code:"ShiftLeft",bubbles:true}));document.getElementById("trainingResetCar").click()');
+    console.log('PASS: real Space then Shift aerial takeoff from the ground');
     await evalJS('document.getElementById("trainingPreset").value="wall"; document.getElementById("trainingPreset").dispatchEvent(new Event("change",{bubbles:true}))');
     assert.equal(await evalJS('window.rocketArena.ball.x > 60'),true);
     assert.equal(await evalJS('document.getElementById("trainingShotCount").textContent.includes("2")'),true);
