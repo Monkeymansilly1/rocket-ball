@@ -1629,28 +1629,37 @@ let eventCooldown = {};
 let replayHistory = [];
 let replayCaptureTimer = 0;
 let replayFrames = [];
-let replayIndex = 0;
+let replayElapsed = 0;
+let replaySimulationTime = 0;
 let goalScorerText = 'PLAYER';
 let goalSpeedMph = 0;
 let replayCameraCarIndex = 0;
 const REPLAY_HISTORY_LIMIT = 301;
 function saveReplayFrame() {
-  replayHistory.push({
-    cars: cars.map(c => ({ x:c.x, y:c.y, z:c.z, vx:c.vx, vy:c.vy, vz:c.vz, yaw:c.yaw, pitch:c.pitch, roll:c.roll, wallRide:c.wallRide, wallVerticalAxis:c.wallVerticalAxis, wallVerticalSign:c.wallVerticalSign, aq:c.airQuat ? c.airQuat.toArray() : null, flipAxis:c.flipAxis?c.flipAxis.toArray():null, flip:c.flip, fx:c.fx, fz:c.fz, fl:c.fl })),
-    ball: { x:ball.x, y:ball.y, z:ball.z, vx:ball.vx, vy:ball.vy, vz:ball.vz, wx:ball.wx, wy:ball.wy, wz:ball.wz, onRamp:ball.onRamp }
-  });
-  if (replayHistory.length > REPLAY_HISTORY_LIMIT) replayHistory.shift();
+  const frame={
+    time:replaySimulationTime,
+    cars:cars.map(c=>({x:c.x,y:c.y,z:c.z,vx:c.vx,vy:c.vy,vz:c.vz,
+      q:getCarOrientation(c).toArray(),yaw:c.yaw,pitch:c.pitch,roll:c.roll,
+      ground:c.ground,wallRide:c.wallRide,wallVerticalAxis:c.wallVerticalAxis,wallVerticalSign:c.wallVerticalSign,
+      demoTimer:c.demoTimer,boost:c.boost,engineLoad:c.engineLoad||0,
+      flipAxis:c.flipAxis?c.flipAxis.toArray():null,flip:c.flip,fx:c.fx,fz:c.fz,fl:c.fl})),
+    ball:{x:ball.x,y:ball.y,z:ball.z,vx:ball.vx,vy:ball.vy,vz:ball.vz,
+      wx:ball.wx,wy:ball.wy,wz:ball.wz,q:ball.q?[...ball.q]:[0,0,0,1],onRamp:ball.onRamp},
+    pads:pads.map(p=>p.t)
+  };
+  if(replayHistory.length && replayHistory[replayHistory.length-1].time===frame.time)replayHistory[replayHistory.length-1]=frame;
+  else replayHistory.push(frame);
+  if(replayHistory.length>REPLAY_HISTORY_LIMIT)replayHistory.shift();
 }
 function applyReplayFrame(frame) {
-  if (!frame) return;
-  frame.cars.forEach((p, i) => {
-    const c = cars[i]; if (!c) return;
-    Object.assign(c, p);
-    c.airQuat = p.aq ? new THREE.Quaternion().fromArray(p.aq) : null;
-    c.airOmega = null;
-    c.flipAxis=p.flipAxis?new THREE.Vector3().fromArray(p.flipAxis):null;
+  if(!frame)return;
+  frame.cars.forEach((p,i)=>{
+    const c=cars[i];if(!c)return;
+    Object.assign(c,p);c.airQuat=new THREE.Quaternion().fromArray(p.q);
+    c.airOmega=null;c.flipAxis=p.flipAxis?new THREE.Vector3().fromArray(p.flipAxis):null;
   });
-  Object.assign(ball, frame.ball);
+  Object.assign(ball,frame.ball);
+  frame.pads?.forEach((value,i)=>{if(pads[i])pads[i].t=value;});
 }
 
 
@@ -1741,15 +1750,17 @@ function kickoff() {
   goalSpeedMph = 0;
   replayHistory = [];
   replayCaptureTimer = 0;
+  replaySimulationTime = 0;
   predictionTimer = 0;
   replayFrames = [];
-  replayIndex = 0;
-  Object.assign(ball, { x: 0, y: BR + 0.038, z: 0, vx: 0, vy: 0, vz: 0, wx: 0, wy: 0, wz: 0, onRamp: false, onGround: true });
+  replayElapsed = 0;
+  Object.assign(ball, { x: 0, y: BR + 0.038, z: 0, vx: 0, vy: 0, vz: 0, wx: 0, wy: 0, wz: 0, q:[0,0,0,1], onRamp: false, onGround: true });
   lastTouch = null;
   for (const c of cars) {
     const f = FORM[c.k], s = c.team ? 1 : -1;
     Object.assign(c, { x: f[0] * (c.team ? -1 : 1), y: 0.55, z: s * f[1] * HL, vx: 0, vy: 0, vz: 0, yaw: c.team ? Math.PI : 0, pitch: 0, roll: 0, airQuat: null, airOmega: null, surfaceQuat:null, surfaceNormal:null, surfaceForward:null, ceilingRide:false, flipAxis:null, wallDetachTimer: 0, wallRide: false, wallVerticalAxis: null, wallVerticalSign: 0, boost: 34, jumps: 0, jt: 0, flip: 0, fl: 0, ground: true, aiCd: 0, wait: SKILL[diff].wait });
   }
+  if(!trainingMode)saveReplayFrame();
 }
 function start(freePlay = false) {
   document.activeElement?.blur?.();
@@ -1802,7 +1813,7 @@ function resetTrainingBall() {
   resetBallTrail();
   Object.assign(ball, {
     x: 0, y: BR + 0.038, z: 0, vx: 0, vy: 0, vz: 0,
-    wx: 0, wy: 0, wz: 0, onRamp: false, onGround: false
+    wx: 0, wy: 0, wz: 0, q:[0,0,0,1], onRamp: false, onGround: false
   });
   ballMesh.quaternion.identity();
   lastTouch = previousTouch = null;
@@ -1969,31 +1980,14 @@ function sparks(vn) {
   sfx.tone(90 + Math.min(-vn, 30) * 6, 0.12, 'square', Math.min(0.25, -vn / 60));
 }
 
-// synthesized sound (no audio files)
-const sfx = {
-  init() {
-    if (this.ac) return; const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
-    const a = this.ac = new AC();
-    this.master = a.createGain(); this.master.gain.value = gameVolume; this.master.connect(a.destination);
-    this.o = a.createOscillator(); this.o.type = 'sawtooth'; this.og = a.createGain(); this.og.gain.value = 0;
-    this.o.connect(this.og).connect(this.master); this.o.start();
-    const nb = a.createBuffer(1, a.sampleRate, a.sampleRate), d = nb.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-    const src = a.createBufferSource(); src.buffer = nb; src.loop = true; const f = a.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 800;
-    this.bg = a.createGain(); this.bg.gain.value = 0; src.connect(f).connect(this.bg).connect(this.master); src.start();
-  },
-  setVolume(value) {
-    gameVolume = clamp(Number(value) || 0, 0, 1);
-    if (this.master && this.ac) this.master.gain.setTargetAtTime(gameVolume, this.ac.currentTime, 0.025);
-  },
-  tone(f, d, type, v) {
-    if (!this.ac || muted || gameVolume <= 0) return; const a = this.ac, o = a.createOscillator(), g = a.createGain(); o.type = type; o.frequency.value = f;
-    g.gain.setValueAtTime(v, a.currentTime); g.gain.exponentialRampToValueAtTime(0.001, a.currentTime + d);
-    o.connect(g).connect(this.master || a.destination); o.start(); o.stop(a.currentTime + d);
-  },
-  update(c, on) {
-    if (!this.ac) return; this.o.frequency.value = 55 + Math.hypot(c.vx, c.vz) * 3.2;
-    this.og.gain.value = (!muted && on) ? 0.035 : 0; this.bg.gain.value = (!muted && on && c.fl) ? 0.12 : 0;
-  }
+// Filtered combustion harmonics, a low engine body and a soft boost whoosh.
+const carAudio=new RocketCarAudio.CarAudio();
+const sfx={
+  get ac(){return carAudio.ac;},
+  init(){carAudio.volume=gameVolume;carAudio.init(window.AudioContext||window.webkitAudioContext);},
+  setVolume(value){gameVolume=clamp(Number(value)||0,0,1);carAudio.setVolume(gameVolume);},
+  tone(f,d,type,v){carAudio.muted=muted;carAudio.tone(f,d,type,v);},
+  update(c,on){carAudio.muted=muted;carAudio.update(c,on&&!paused);}
 };
 
 // minimap: your goal at the bottom, attack goal at the top
@@ -2108,7 +2102,7 @@ if (fullscreenToggle) fullscreenToggle.addEventListener('click', async () => {
 });
 const skipReplayButton = $('skipReplayButton');
 if (skipReplayButton) skipReplayButton.addEventListener('click', () => {
-  if (state === 'replay') replayIndex = Math.max(0, replayFrames.length - 1);
+  if (state === 'replay') replayElapsed = RocketReplay.duration(replayFrames);
 });
 
 
@@ -2266,6 +2260,9 @@ addEventListener('keydown', e => {
     e.preventDefault(); e.stopPropagation(); return;
   }
   if(e.ctrlKey || e.metaKey || e.altKey)return;
+  if(state==='replay' && e.code==='Space'){
+    replayElapsed=RocketReplay.duration(replayFrames);clearHeldInput();e.preventDefault();return;
+  }
   const remappedKey = ['p1','p2'].some(who => Object.values(controlBindings[who].keyboard).includes(e.code));
   if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code) || remappedKey) e.preventDefault();
   if (!keys[e.code] && e.code === controlBindings.p1.keyboard.jump) jumpQ = true;
@@ -2976,6 +2973,7 @@ function snapCarToContact(c,contact) {
   }
 }
 function stepCar(c, ct, dt) {
+  c.engineLoad=Math.abs(ct.throttle||0);
   c.demoCooldown = Math.max(0, (c.demoCooldown || 0) - dt);
   c.ballHitCooldown = Math.max(0, (c.ballHitCooldown || 0) - dt);
   c.airTouchCooldown = Math.max(0, (c.airTouchCooldown || 0) - dt);
@@ -3587,10 +3585,12 @@ function resolveBallWall(axis, sign, rampSurfaceY, body=ball) {
 function stepBall(dt, body=ball, predicting=false) {
   const p = PHYSICS_TUNING;
   body.onWall=false;
+  const previousZ=body.z,previousVelocity={vx:body.vx,vy:body.vy,vz:body.vz};
   // Integrate velocity before contacts, keeping all motion in world space.
   body.vy -= p.BALL_GRAVITY_FORCE * dt;
   const airDrag = Math.pow(1-p.BALL_DRAG_REFERENCE,dt);
   body.vx *= airDrag; body.vy *= airDrag; body.vz *= airDrag;
+  clampBallMotion(body);
   body.x += body.vx * dt; body.y += body.vy * dt; body.z += body.vz * dt;
 
   if (body.y > CEIL - BR) {
@@ -3600,7 +3600,12 @@ function stepBall(dt, body=ball, predicting=false) {
   const ax = Math.abs(body.x), az = Math.abs(body.z);
   const sx = Math.sign(body.x) || 1, sz = Math.sign(body.z) || 1;
   if (!predicting && state === 'play' && az > HL && ax < GW - BR * 0.25 && body.y < GH - BR * 0.25) {
-    return goal(body.z > 0 ? 0 : 1);
+    const span=body.z-previousZ;
+    const fraction=Math.abs(previousZ)<=HL && Math.abs(span)>1e-9?clamp(((body.z>0?HL:-HL)-previousZ)/span,0,1):1;
+    const crossing={vx:previousVelocity.vx+(body.vx-previousVelocity.vx)*fraction,
+      vy:previousVelocity.vy+(body.vy-previousVelocity.vy)*fraction,vz:previousVelocity.vz+(body.vz-previousVelocity.vz)*fraction};
+    clampBallMotion(crossing);
+    return goal(body.z > 0 ? 0 : 1,crossing);
   }
 
   // Smooth sphere contact with the same ramp height field used by the cars.
@@ -3669,17 +3674,26 @@ function stepBall(dt, body=ball, predicting=false) {
 
   // Spin changes through contact friction, not a forced rolling animation.
   clampBallMotion(body);
+  if(!predicting){
+    const spin=Math.hypot(body.wx||0,body.wy||0,body.wz||0);
+    if(spin>1e-6){
+      const q=new THREE.Quaternion().fromArray(body.q||[0,0,0,1]);
+      const axis=new THREE.Vector3(body.wx,body.wy,body.wz).multiplyScalar(1/spin);
+      q.premultiply(new THREE.Quaternion().setFromAxisAngle(axis,spin*dt)).normalize();body.q=q.toArray();
+    }
+  }
 }
 
 function showGameEvent(label, color = '#fff') {
   const el = $('eventCallout'); if (!el) return;
   el.textContent = label; el.style.color = color; el.classList.remove('event-pop'); void el.offsetWidth; el.classList.add('event-pop');
 }
-function goal(team) {
+function goal(team, scoringVelocity=ball) {
+  goalSpeedMph=RocketReplay.speedToMph(scoringVelocity,PHYSICS_TUNING.REFERENCE_SCALE);
   if (trainingMode) {
     trainingGoals++;
     updateTrainingCounters();
-    showGameEvent('FREE PLAY GOAL! · ' + trainingGoals, '#ffca64');
+    showGameEvent('FREE PLAY GOAL '+trainingGoals+' · '+goalSpeedMph.toFixed(1)+' MPH', '#ffca64');
     // Free Play now uses the same selected 3D explosion as a real match.
     const scoringSide=ball.z<0?1:0;
     goalExplosion(scoringSide);
@@ -3687,8 +3701,6 @@ function goal(team) {
     resetTrainingBall();
     return;
   }
-  // 1 playable world unit = 50 Unreal units = 0.5 metre, then m/s → MPH.
-  goalSpeedMph = Math.round(Math.hypot(ball.vx, ball.vy, ball.vz) * 0.5 * 2.236936);
   score[team]++;
   const scorerIndex = lastTouch ? cars.indexOf(lastTouch) : -1;
   if (scorerIndex >= 0 && playerStats[scorerIndex]) playerStats[scorerIndex].goals++;
@@ -3700,7 +3712,7 @@ function goal(team) {
   // Keep ten seconds of live gameplay plus the frame in which the goal was scored.
   saveReplayFrame();
   replayFrames = replayHistory.slice(-301);
-  replayIndex = 0;
+  replayElapsed = 0;
 
   // Show the scorer first, before switching to the replay title.
   const scorerName = lastTouch ? (lastTouch === cars[0] ? playerName : lastTouch.displayName) : null;
@@ -3708,7 +3720,7 @@ function goal(team) {
   const goalByEl = $('goalBy');
   if (goalByEl) goalByEl.textContent = 'Goal by ' + goalScorerText + '!!!';
   const goalSpeedEl = $('goalSpeed');
-  if (goalSpeedEl) goalSpeedEl.textContent = 'SHOT SPEED · ' + goalSpeedMph + ' MPH';
+  if (goalSpeedEl) goalSpeedEl.textContent = 'GOAL SPEED · ' + goalSpeedMph.toFixed(1) + ' MPH';
   // Only trust lastTouch when it belongs to the team that was awarded the goal.
   // Otherwise follow the first car on the scoring team, never default to P1.
   replayCameraCarIndex = lastTouch && lastTouch.team === team
@@ -3729,12 +3741,12 @@ function goal(team) {
 }
 function update(dt) {
   t += dt;
+  if(state==='play' && !trainingMode)replaySimulationTime+=dt;
   if (state === 'kick') { cd -= dt; jumpQ = false; $('msg').style.color = '#fff'; $('msg').textContent = cd > 0 ? Math.ceil(cd) : 'GO!'; if (cd <= 0) { state = 'play'; $('msg').textContent = ''; } return; }
   if (state === 'replay') {
-    replayIndex += dt * 30; // recorded at about 30 frames per second: replay ten seconds at normal speed
-    if (replayIndex >= replayFrames.length - 1) {
-      replayIndex = replayFrames.length - 1;
-      applyReplayFrame(replayFrames[replayIndex]);
+    replayElapsed += dt;
+    if (replayElapsed >= RocketReplay.duration(replayFrames)) {
+      applyReplayFrame(replayFrames[replayFrames.length-1]);
       if (ot) {
         state = 'over';
         // Overtime goals end the match from inside the replay branch, so show
@@ -3746,8 +3758,6 @@ function update(dt) {
         cd = 2.5;
       }
       const m = $('msg'); if (m) m.textContent = ot ? '' : 'KICK OFF';
-    } else {
-      applyReplayFrame(replayFrames[Math.floor(replayIndex)]);
     }
     return;
   }
@@ -3772,7 +3782,9 @@ function update(dt) {
     if (cd <= 0) {
       if (replayFrames.length > 1) {
         state = 'replay';
-        replayIndex = 0;
+        replayElapsed = 0;
+        applyReplayFrame(RocketReplay.sample(replayFrames,0));
+        resetBallTrail();
         // Snap the replay camera behind the selected scorer immediately; don't
         // let the previous player's camera position linger into the replay.
         const scorer = cars[replayCameraCarIndex] || cars[0];
@@ -3787,7 +3799,7 @@ function update(dt) {
         }
         const m = $('msg'); if (m) { m.textContent = 'GOAL REPLAY'; m.style.color = '#fff'; m.classList.add('replay-title'); }
         const goalByEl = $('goalBy'); if (goalByEl) goalByEl.textContent = 'Goal by ' + goalScorerText + '!!!';
-        const goalSpeedEl = $('goalSpeed'); if (goalSpeedEl) goalSpeedEl.textContent = 'SHOT SPEED · ' + goalSpeedMph + ' MPH';
+        const goalSpeedEl = $('goalSpeed'); if (goalSpeedEl) goalSpeedEl.textContent = 'GOAL SPEED · ' + goalSpeedMph.toFixed(1) + ' MPH';
       } else {
         $('msg').textContent = '';
         if (ot) state = 'over';
@@ -3820,6 +3832,10 @@ function update(dt) {
     const h = dt / 2;
     cars.forEach((c, i) => stepCar(c, cts[i], h)); cts.forEach(ct => { ct.jump = false; });
     bump(); stepBall(h); cars.forEach(hitBall);
+  }
+  if(state==='play' && !trainingMode){
+    replayCaptureTimer+=dt;
+    if(replayCaptureTimer+1e-9>=1/30){saveReplayFrame();replayCaptureTimer-=1/30;}
   }
   if (state === 'over') {
     showVictoryScreen();
@@ -4006,16 +4022,7 @@ function render(dt) {
   document.body.classList.toggle('in-menu',state==='menu');
   document.body.classList.toggle('goal-celebration',state==='goal');
   document.body.classList.toggle('local-two-enabled',localTwoPlayer);
-  if (state === 'play' && !trainingMode) {
-    // Sample gameplay at a fixed 30fps instead of one frame per render.
-    // A 301-frame buffer now represents approximately ten seconds.
-    replayCaptureTimer += dt;
-    while (replayCaptureTimer >= 1 / 30) {
-      saveReplayFrame();
-      replayCaptureTimer -= 1 / 30;
-    }
-  }
-  if (state === 'replay' && replayFrames.length) applyReplayFrame(replayFrames[Math.min(Math.floor(replayIndex), replayFrames.length - 1)]);
+  if(state==='replay')applyReplayFrame(RocketReplay.sample(replayFrames,replayElapsed));
   for (const c of cars) {
     const m = c.mesh;
     m.root.position.set(c.x, c.y, c.z);
@@ -4040,12 +4047,8 @@ function render(dt) {
   }
   ballMesh.position.set(ball.x, ball.y, ball.z);
   updateBallVisuals();
+  if(ball.q)ballMesh.quaternion.fromArray(ball.q);
   const sp = Math.hypot(ball.vx, ball.vz);
-  const spinMagnitude = Math.hypot(ball.wx || 0, ball.wy || 0, ball.wz || 0);
-  if (spinMagnitude > 0.001) {
-    axis.set(ball.wx, ball.wy, ball.wz).multiplyScalar(1 / spinMagnitude);
-    ballMesh.rotateOnWorldAxis(axis, spinMagnitude * dt);
-  }
   if (state === 'play' && Math.hypot(sp, ball.vy) > 26) emit(ball.x, ball.y, ball.z, (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2, 0.4, 0.3, 0.9, 0.8);
   for (const p of pads) {
     const active = p.t <= 0;
@@ -4054,7 +4057,7 @@ function render(dt) {
     p.core.material.opacity = active ? 0.5 : 0.05;
     p.group.visible = active || p.t > 0;
   }
-  stepParts(dt); tickGoalEffects(dt); updateMiniCrowd(dt); drawMini(); sfx.update(cars[0], state === 'play');
+  stepParts(dt); tickGoalEffects(dt); updateMiniCrowd(dt); drawMini(); sfx.update(cars[0], state === 'play' || state === 'replay');
   const splitActive = !trainingMode && localTwoPlayer && state !== 'menu' && state !== 'over';
   document.body.classList.toggle('split-screen', splitActive);
   // During a replay, follow the player who scored instead of always following P1.
@@ -4115,18 +4118,6 @@ function render(dt) {
     if(flightHint.textContent!==text)flightHint.textContent=text;
   }
   const b = trainingMode ? 100 : cars[0].boost;
-  const speedHud=$('speedHud');
-  if(speedHud){
-    speedHud.hidden=state==='menu'||state==='over';
-    const activeCar=cars[0];
-    if(activeCar){
-      const mph=Math.round(Math.hypot(activeCar.vx,activeCar.vy,activeCar.vz)
-        *0.5*2.236936);
-      const speedNumber=$('speedValue');
-      if(speedNumber)speedNumber.textContent=String(mph);
-      speedHud.classList.toggle('supersonic',!!activeCar.supersonic);
-    }
-  }
   $('bt').textContent = trainingMode ? '∞' : Math.round(b);
   $('bf').style.width = '84%';
   $('bf').style.background = 'conic-gradient(' + (b <= 20 ? '#ff7547' : '#ffba52') +
@@ -4164,6 +4155,9 @@ window.rocketArena = {
   get pads() { return pads; },
   get goalEffectCount() { return activeGoalEffects.length; },
   get goalEffects() { return activeGoalEffects.map(f=>({style:f.style,age:f.age,duration:f.duration,signature:[...f.signature],group:f.group})); },
+  get replayStatus(){const frames=state==='play'?replayHistory:replayFrames;return {elapsed:replayElapsed,duration:RocketReplay.duration(frames),frames:frames.length};},
+  get audioStatus(){return {state:carAudio.ac?.state||'uninitialised',engineGain:carAudio.engineGain?.gain.value||0,boostGain:carAudio.boostGain?.gain.value||0};},
+  get goalSpeedMph(){return goalSpeedMph;},
   get renderStats() { return {calls:renderer.info.render.calls,triangles:renderer.info.render.triangles,geometries:renderer.info.memory.geometries,textures:renderer.info.memory.textures}; },
   get ballShadow() { return ballGroundShadow; },
   get ballTrail() { return ballTrail; },
@@ -4199,7 +4193,7 @@ let last = performance.now();
     const skippedTime = Math.max(0, wallDt - steps * fixedDt);
     if (skippedTime > 0) {
       if (state === 'kick' || state === 'goal') cd -= skippedTime;
-      else if (state === 'replay') replayIndex += skippedTime * 30;
+      else if (state === 'replay') replayElapsed += skippedTime;
       else if (state === 'play' && !trainingMode && !ot) {
         clock = Math.max(0, clock - skippedTime);
         if (clock <= 0) {

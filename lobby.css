@@ -104,7 +104,7 @@ body.goal-preview #menu {background:linear-gradient(90deg,#06111dfc 0%,#081726f0
 }
 @media(prefers-reduced-motion:reduce){#menu .quickmodes button:hover {transform:none;}}
 /* Explicit state avoids relying on how the browser serialises inline styles. */
-body.in-menu #score,body.in-menu #player,body.in-menu #boost,body.in-menu #boost2,body.in-menu #cam,body.in-menu #speedHud,body.in-menu #referenceToolbar,body.in-menu #p1Tag,body.in-menu #p2Tag {display:none!important;}
+body.in-menu #score,body.in-menu #player,body.in-menu #boost,body.in-menu #boost2,body.in-menu #cam,body.in-menu #referenceToolbar,body.in-menu #p1Tag,body.in-menu #p2Tag {display:none!important;}
 body.in-menu #controlsSettings:not([open]) {display:none!important;}
 #menu .custom-match {margin:4px 0 16px;border-top:1px solid #85b8dc22;border-bottom:1px solid #85b8dc22;padding:12px 0;color:#8faec5;font-size:10px;}
 #menu .custom-match summary {cursor:pointer;font-size:10px;font-weight:700;letter-spacing:.12em;list-style:none;}

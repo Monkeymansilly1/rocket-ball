@@ -87,8 +87,8 @@ async function main() {
         socket.send(JSON.stringify({id,method,params}));
       });
     }
-    async function evalJS(expr){
-      const result=await call('Runtime.evaluate',{expression:expr,returnByValue:true,awaitPromise:true});
+    async function evalJS(expr,userGesture=false){
+      const result=await call('Runtime.evaluate',{expression:expr,returnByValue:true,awaitPromise:true,userGesture});
       if(result.exceptionDetails)throw new Error(result.exceptionDetails.text+' '+JSON.stringify(result.exceptionDetails.exception));
       return result.result?.value;
     }
@@ -98,6 +98,8 @@ async function main() {
     await call('Page.navigate',{url});
     await eventually(()=>evalJS('document.readyState==="complete" && !!window.rocketArena && !!window.THREE'),15000)
       .catch(err=>{throw new Error('Game startup: '+err.message+'; browser exceptions: '+JSON.stringify(errors));});
+    // SwiftShader has no hardware GPU; use the real performance mode for functional checks.
+    await evalJS('document.getElementById("settingGraphics").value="low";document.getElementById("settingGraphics").dispatchEvent(new Event("change",{bubbles:true}))');
     await evalJS('document.querySelector(".lobby-nav [data-panel=garage]").click();document.getElementById("name").value="";document.getElementById("name").focus()');
     await call('Input.dispatchKeyEvent',{type:'keyDown',code:'KeyA',key:'A',text:'A',modifiers:8,windowsVirtualKeyCode:65});
     await call('Input.dispatchKeyEvent',{type:'keyUp',code:'KeyA',key:'A',windowsVirtualKeyCode:65});
@@ -108,6 +110,16 @@ async function main() {
       input.value='PLAYER';input.dispatchEvent(new Event('input',{bubbles:true}));input.blur();document.querySelector('.lobby-nav [data-panel=play]').click();return result;})()`);
     assert.deepEqual(editing,{allowed:true,state:'menu',cameraUnchanged:true},'Typing must not trigger gameplay or menu shortcuts');
     console.log('PASS: real A typing, native editing keys and isolated game shortcuts');
+    const renderedAudio=await evalJS(`(async()=>{
+      const audio=new RocketCarAudio.CarAudio();
+      const Offline=class {constructor(){return new OfflineAudioContext(1,44100,44100);}};
+      audio.init(Offline);audio.update({vx:24,vy:0,vz:0,engineLoad:1,fl:1},true);
+      const data=(await audio.ac.startRendering()).getChannelData(0);
+      let peak=0,squares=0;for(const sample of data){peak=Math.max(peak,Math.abs(sample));squares+=sample*sample;}
+      return {peak,rms:Math.sqrt(squares/data.length)};
+    })()`);
+    assert(renderedAudio.peak>.001 && renderedAudio.peak<.9 && renderedAudio.rms>.001,'Real Web Audio output must be audible and free of clipping');
+    console.log('PASS: real Web Audio engine/boost render without clipping');
     console.log('Game loaded; testing Reloaded menu and goal effects');
     assert.equal(await evalJS('document.getElementById("ballFeel")===null'),true,'Ball physics options must be removed');
     assert.equal(await evalJS('document.querySelectorAll(".lobby-nav [data-panel]").length'),4);
@@ -186,14 +198,16 @@ async function main() {
         '; browserErrors='+JSON.stringify(errors));});
     assert.equal(await evalJS('window.rocketArena.cars[0].mesh.detailedWheels.length'),4);
     console.log('Detailed Octane 3D body, original material maps and four wheels loaded.');
-    await evalJS('document.getElementById("freePlayBtn").click()');
+    await evalJS('document.getElementById("freePlayBtn").click()',true);
     await eventually(()=>evalJS('window.rocketArena.state==="play" && window.rocketArena.cars.length===1'));
     assert.equal(await evalJS('document.body.classList.contains("free-play")'),true);
+    await eventually(()=>evalJS('window.rocketArena.audioStatus.state==="running"'),10000);
+    assert.equal(await evalJS('document.getElementById("speedValue")===null'),true);
     assert.equal(await evalJS('document.activeElement===document.getElementById("name")'),false,'Starting gameplay must release text-field focus');
     await evalJS('window.dispatchEvent(new KeyboardEvent("keydown",{code:"ShiftLeft",bubbles:true}));window.dispatchEvent(new KeyboardEvent("keydown",{code:"Space",bubbles:true}))');
     await eventually(()=>evalJS('window.rocketArena.cars[0].jumps===1 && window.rocketArena.cars[0].y>1.5'),10000);
     await evalJS('window.dispatchEvent(new KeyboardEvent("keyup",{code:"Space",bubbles:true}))');
-    await eventually(()=>evalJS('(()=>{const c=window.rocketArena.cars[0];return !c.ground && c.y>6 && c.vy>1 && c.pitch>.6;})()'),15000)
+    await eventually(()=>evalJS('(()=>{const c=window.rocketArena.cars[0];return !c.ground && c.y>6 && c.vy>1 && c.pitch>.6;})()'),30000)
       .catch(async err=>{throw new Error('Ground-to-air assisted takeoff failed: '+err.message+' '+await evalJS('JSON.stringify({y:window.rocketArena.cars[0].y,vy:window.rocketArena.cars[0].vy,pitch:window.rocketArena.cars[0].pitch})'));});
     await evalJS('window.dispatchEvent(new KeyboardEvent("keyup",{code:"ShiftLeft",bubbles:true}));document.getElementById("trainingResetCar").click()');
     console.log('PASS: real Space then Shift aerial takeoff from the ground');
@@ -246,12 +260,13 @@ async function main() {
     const resetY=await evalJS('window.rocketArena.ball.y');
     assert(Math.abs(resetY-(91.25/50+0.038))<.3,'Training ball did not reset');
     // Actually score in Free Play and verify the chosen 3D explosion plays.
+    const goalsBefore=await evalJS('Number(document.getElementById("trainingGoalCount").textContent.match(/\\d+/)[0])');
     await evalJS('(function(){const b=window.rocketArena.ball;Object.assign(b,{x:0,y:2,z:105,vx:0,vy:0,vz:32});})()');
     const celebration=await eventually(()=>evalJS(`(()=>{
       const a=window.rocketArena,c=a.miniCrowd;
-      return document.getElementById('trainingGoalCount').textContent.includes('1') && a.goalEffectCount>0 && c.cheerTime>0
+      return Number(document.getElementById('trainingGoalCount').textContent.match(/\\d+/)[0])===${goalsBefore+1} && a.goalEffectCount>0 && c.cheerTime>0
         ? {team:c.cheerTeam,cheering:c.faces.material.map===c.cheerFace}:null;
-    })()`),10000).catch(err=>{throw new Error('Free Play scoring explosion: '+err.message);});
+    })()`),10000).catch(async err=>{throw new Error('Free Play scoring explosion: '+err.message+' '+await evalJS('JSON.stringify({state:window.rocketArena.state,goals:document.getElementById("trainingGoalCount").textContent,ball:window.rocketArena.ball,effects:window.rocketArena.goalEffectCount,cheer:window.rocketArena.miniCrowd.cheerTime})'));});
     assert.equal(celebration.team,0,'Scoring blue side did not trigger crowd celebration');
     assert.equal(celebration.cheering,true,'Mini spectators did not switch to cheering faces');
     await eventually(()=>evalJS('window.rocketArena.miniCrowd.cheerTime===0'),6000);
@@ -284,13 +299,25 @@ async function main() {
     const pos1=await evalJS('window.rocketArena.cars[0].z');
     assert(pos1>pos0+0.05,'Car did not move when accelerating: '+pos0+' -> '+pos1);
     assert.equal(await evalJS('Number.isFinite(window.rocketArena.ball.x) && Number.isFinite(window.rocketArena.ball.y) && Number.isFinite(window.rocketArena.ball.z)'),true);
-    assert.equal(await evalJS('Number.isFinite(Number(document.getElementById("speedValue").textContent))'),true,
-      'Live mph speedometer is not updating');
+    assert.equal(await evalJS('document.getElementById("speedHud")===null'),true,'Bottom-left speedometer must be removed');
+    await eventually(()=>evalJS('window.rocketArena.replayStatus.duration>2'),60000).catch(async err=>{throw new Error('Replay capture: '+err.message+' '+await evalJS('JSON.stringify({state:window.rocketArena.state,replay:window.rocketArena.replayStatus})'));});
     await evalJS('Object.assign(window.rocketArena.ball,{x:0,y:2,z:105,vx:0,vy:0,vz:32})');
     const matchGoal=await eventually(()=>evalJS(`(()=>{const a=window.rocketArena,e=a.goalEffects[0];return a.state==='goal'&&e?{style:e.style,selected:document.getElementById('explosion').value,z:e.group.position.z,direction:e.group.rotation.y}:null;})()`),10000);
     assert.equal(matchGoal.style,matchGoal.selected,'Actual match must play the selected 3D model');
     assert.equal(matchGoal.z,103,'Celebration must be anchored at the goal mouth');
     assert.equal(matchGoal.direction,Math.PI,'Celebration must face into the pitch');
+    const goalSpeed=await evalJS('window.rocketArena.goalSpeedMph');
+    assert(Math.abs(goalSpeed-35.8)<.2,'Goal speed must use the 32-world-unit ball velocity, not the car speed');
+    assert.equal(await evalJS('document.getElementById("goalSpeed").textContent'), 'GOAL SPEED · '+goalSpeed.toFixed(1)+' MPH');
+    const goalClock=await evalJS('document.getElementById("clock").textContent');
+    await eventually(()=>evalJS('window.rocketArena.state==="replay" && window.rocketArena.replayStatus.elapsed>0'),15000);
+    assert.equal(await evalJS('document.getElementById("clock").textContent'),goalClock,'Match clock must stay frozen through the replay');
+    assert.equal(await evalJS('window.rocketArena.goalSpeedMph'),goalSpeed,'Goal speed must remain captured during replay');
+    const replayStatus=await evalJS('window.rocketArena.replayStatus');
+    assert(replayStatus.duration>2 && replayStatus.frames>50,'Replay must contain distinct physics-clock samples');
+    await evalJS('window.dispatchEvent(new KeyboardEvent("keydown",{code:"Space",bubbles:true,cancelable:true}))');
+    await eventually(()=>evalJS('window.rocketArena.state==="kick" || window.rocketArena.state==="play"'),10000);
+    assert.equal(await evalJS('Math.abs(window.rocketArena.ball.z)<1'),true,'Skipping replay must restore kickoff instead of leaving the scored ball in the goal');
     await evalJS('document.getElementById("quickPlayButton").click()');
     assert.equal(await evalJS('window.rocketArena.state'),'menu');
     await evalJS('document.getElementById("quickCasual").click()');
@@ -302,7 +329,7 @@ async function main() {
     assert.equal(await evalJS('window.rocketArena.cars.length'),1);
     assert.equal(await evalJS('document.getElementById("ballFeel")===null'),true);
     assert.deepEqual(errors,[],'Unexpected browser JS errors');
-    console.log('PASS: WebGL startup, menu, Free Play, ball reset, camera persistence, match kickoff and driving.');
+    console.log('PASS: WebGL startup, engine audio, menu, Free Play, match driving, accurate goal speed, interpolated replay and Space skip.');
   } finally {
     if(socket)socket.close();
     chrome.kill();

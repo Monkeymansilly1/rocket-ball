@@ -6,7 +6,7 @@ const source = fs.readFileSync('game.js', 'utf8');
 const loop = source.slice(source.indexOf('let last = performance.now();'), source.lastIndexOf('\n})();'));
 const context = {
   performance: {now: () => 0}, window: {}, paused: false,
-  state: 'kick', cd: 3, clock: 300, trainingMode: false, ot: false, replayIndex: 0,
+  state: 'kick', cd: 3, clock: 300, trainingMode: false, ot: false, replayElapsed: 0,
   pollControllers() {}, render() {}, showVictoryScreen() {}, score: [0, 0],
   requestAnimationFrame(callback) { context.frame = callback; },
   update(dt) {
@@ -15,6 +15,7 @@ const context = {
       context.cd -= dt;
       if (context.cd <= 0) context.state = 'play';
     } else if (context.state === 'play') context.clock -= dt;
+    else if(context.state==='replay')context.replayElapsed+=dt;
   }
 };
 vm.runInNewContext(loop, context);
@@ -29,4 +30,6 @@ assert(Math.abs(context.clock - 298) < 0.001, 'Match clock must track elapsed ti
 context.paused = true;
 context.frame(10010);
 assert(Math.abs(context.clock - 298) < 0.001, 'Pause must freeze match time');
-console.log('PASS: slow-frame countdown, fixed-step physics, match clock and pause');
+context.paused=false;context.state='replay';context.replayElapsed=0;context.frame(12010);
+assert(Math.abs(context.replayElapsed-2)<.0001,'Replay playback must track elapsed time under slow rendering');
+console.log('PASS: slow-frame countdown, fixed-step physics, match clock, replay playback and pause');

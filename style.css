@@ -702,19 +702,6 @@ body.split-screen #boost2 {
   letter-spacing:.06em;
 }
 #menu .opts .preview-explosion:hover { background:#544c91; transform:translateY(-1px); }
-#speedHud {
-  position:absolute; bottom:32px; left:24px; display:flex;align-items:baseline;
-  gap:6px; min-width:92px; padding:7px 13px; z-index:3; pointer-events:none;
-  background:linear-gradient(135deg,#061827ce,#113950ce);
-  border:1px solid #5593ae90;border-radius:8px;box-shadow:0 7px 30px #0007;
-  color:white;font-family:Impact,"Arial Narrow",sans-serif;
-}
-#speedHud[hidden] {display:none!important;}
-#speedHud b {font-size:36px;line-height:1;color:#c3f8ff;font-variant-numeric:tabular-nums;}
-#speedHud small {font:800 11px "Trebuchet MS",sans-serif;color:#7debdc;letter-spacing:.1em;}
-#speedHud.supersonic {border-color:#ffbd63;background:linear-gradient(140deg,#3f1808cc,#1b2635dd);}
-#speedHud.supersonic b {color:#ffca66;}
-body.split-screen #speedHud {left:50%;transform:translateX(-50%);bottom:12px;}
 @media(max-width:720px) {
   #menu .reloaded-banner {margin-top:6px;}
   #menu .reloaded-copy {font-size:9px;}
@@ -722,8 +709,6 @@ body.split-screen #speedHud {left:50%;transform:translateX(-50%);bottom:12px;}
   #menu .quickmodes button {min-height:60px;}
   #menu .quickmodes button b {font-size:12px;}
   #menu .quickmodes button small {font-size:9px;}
-  #speedHud {left:9px;bottom:10px;padding:5px 8px;min-width:65px;}
-  #speedHud b {font-size:26px;}
 }
 @media(max-width:430px) {
   #menu .quickmodes {gap:4px;}
@@ -746,14 +731,11 @@ body.split-screen #speedHud {left:50%;transform:translateX(-50%);bottom:12px;}
 #boost { background:radial-gradient(circle,#101c29e8 0 57%,#815b2944 59% 70%,transparent 72%); border-color:#ffbb5266!important; box-shadow:none; }
 #bt { color:#fff1d4; font-style:normal; font-variant-numeric:tabular-nums; }
 #boost::after { color:#ffbb52; letter-spacing:.18em; }
-#speedHud { border:0; background:#071321a8; box-shadow:none; bottom:68px; }
-#speedHud small { color:#c2cedd; }
 #cam { color:#ffad47; text-transform:uppercase; letter-spacing:.12em; font-size:14px; text-shadow:0 2px 5px #000; }
 #leaguePreset { justify-self:center; padding:10px 18px; border:1px solid #70bfff; border-radius:3px; background:linear-gradient(110deg,#10529b,#0878bb); color:#fff; font:800 13px "Trebuchet MS",sans-serif; letter-spacing:.08em; cursor:pointer; }
 #leaguePreset:hover { filter:brightness(1.18); }
 #leaguePresetHint { max-width:540px; font-size:12px!important; color:#b9d8ed!important; }
 @media(max-width:600px) {
-  #speedHud { bottom:62px; }
   #score b { min-width:34px; padding:6px 8px; font-size:28px; }
   #score #clock { min-width:64px!important; font-size:23px!important; }
   #leaguePresetHint { font-size:10px!important; }

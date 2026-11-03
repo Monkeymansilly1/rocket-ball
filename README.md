@@ -31,6 +31,14 @@ Select a celebration in **Goal FX** to watch it at the actual goal with a dedica
 
 Effects last roughly 3–5 seconds, remain distinct at every graphics quality, and dispose their geometries and materials after finishing. Rapid previews replace previous previews instead of accumulating GPU resources. Match goal celebrations finish before the replay begins.
 
+## Audio, replays and goal speed
+
+The engine uses filtered combustion harmonics, a low engine layer, intake noise and a separate boost whoosh. Pitch, volume and boost changes fade smoothly; mute, volume and pause apply to all layers. Audio resumes from a user gesture when a browser suspends the audio context.
+
+Replays record distinct states on the physics clock at 30 samples per simulation second, retaining up to ten seconds. Timestamp-based playback interpolates positions and full car/ball orientations, including wall driving, ceiling driving and aerial flips. Press Space or click Skip Replay to return to kickoff. The match clock stays frozen during playback.
+
+The bottom-left car speedometer has been removed. Goal speed is the ball's three-dimensional speed at the scoring-line crossing, converted using 50 Unreal units = 0.5 metres and the exact metres-per-mile conversion. It displays one decimal place and remains fixed through the celebration and replay. Free Play goal callouts also show the captured goal speed.
+
 ## Controls and rules
 
 - **Drive:** W/S or arrows; **steer:** A/D; **jump/dodge:** Space; **boost:** Left Shift; **drift:** E; **air roll:** Q/E; **ball camera:** C; **pause:** P; **mute:** M.
@@ -49,6 +57,8 @@ node tests/wall-physics.test.js
 node tests/ai-regression.test.js
 node tests/match-clock.test.js
 node tests/aerial-controls.test.js
+node tests/replay.test.js
+node tests/car-audio.test.js
 node tests/goal-effects.test.js
 node tests/scene-utils.test.js
 node tests/browser-smoke.js
@@ -62,6 +72,7 @@ The browser suite requires system Chrome/Chromium and Node.js 22 or newer. `CHRO
 - `index.html`, `style.css`, `lobby.css`: lobby, settings and match HUD.
 - `lib/goal-effects.js`: original procedural 3D celebrations.
 - `lib/scene-utils.js`: static stadium batching.
+- `lib/replay.js`, `lib/car-audio.js`: replay sampling, speed conversion and layered engine audio.
 - `assets/octane/`: credited Octane model and textures; see [asset credits](assets/octane/CREDITS.txt).
 - Three.js is distributed under its included [MIT licence](lib/THREE-LICENSE.txt).
 
