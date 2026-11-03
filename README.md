@@ -12,7 +12,7 @@ The live 3D stadium is the backdrop to four lobby sections: **Play**, **Garage**
 
 Championship Dusk is the default stadium theme, with Day, Night, Winter and Sunset alternatives. The Arena section includes an orbiting stadium tour. The continuous rounded pitch and collision solver use the same surface function. Texture UVs follow world coordinates, so blue/orange markings stay at the correct goal and do not stretch over the rounded corners. Renderer and generated-texture colour settings use the API supported by the bundled Three.js version. Static stadium geometry is batched to reduce draw calls while preserving named and animated objects.
 
-Ball physics options have been removed. All modes use the same ball response, including Free Play; old saved ball-feel preferences are ignored. Keyboard aerial assistance remains available under Settings → Keyboard aerial handling.
+Ball physics options have been removed. All modes use the same ball response, including Free Play; old saved ball-feel preferences are ignored. Keyboard aerial assistance remains available under Settings → Keyboard aerial handling. The standard solver uses 650 UU/s² gravity, 0.6 floor/wall restitution, Bullet-style 0.03 damping, a 30:180 ball/car mass ratio, and friction that transfers surface slip into spin. Car touches use the relative-speed extra-hit curve and direction adjustment documented in [RocketSim](https://github.com/ZealanL/RocketSim/blob/main/src/Sim/Ball/Ball.cpp), without scripted boost/flip bonuses or upward pop. These are reference-based approximations in this custom solver, rather than an exact reproduction of Rocket League's engine.
 
 ## Moving 3D goal explosions
 

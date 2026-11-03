@@ -47,34 +47,22 @@ const PHYSICS_TUNING = {
   PITCH_TORQUE_SPEED: 3.4, YAW_TORQUE_SPEED: 2.85, ROLL_TORQUE_SPEED: 4.2,
   // Tuned to the existing arena's actual scale for predictable, playable ball movement.
   BALL_GRAVITY_FORCE: 650 / 50, MAX_BALL_SPEED: 6000 / 50, BALL_MAX_ANGULAR_SPEED: 6,
-  BALL_RESTITUTION: 0.6, BALL_FLOOR_RESTITUTION: 0.64, BALL_WALL_RESTITUTION: 0.6,
+  BALL_RESTITUTION: 0.6, BALL_FLOOR_RESTITUTION: 0.6, BALL_WALL_RESTITUTION: 0.6,
   // Material friction is not the same as rolling resistance. Keeping them
   // separate prevents a grounded ball losing speed too quickly.
-  BALL_ROLLING_RESISTANCE: 0.14, BALL_RAMP_IMPACT_RESTITUTION: 0.56,
-  BALL_RAMP_ROLL_RESTITUTION: 0.24, BALL_BOUNCE_CUTOFF_SPEED: 0.7,
+  BALL_ROLLING_RESISTANCE: 0, BALL_RAMP_IMPACT_RESTITUTION: 0.6,
+  BALL_BOUNCE_CUTOFF_SPEED: 0.7,
   BALL_WALL_LIP_EFFICIENCY: 0.96, BALL_CONTACT_SLOP: 0.045,
   CAR_LANDING_MIN_DOT: 0.28, CAR_ROOF_RESTITUTION: 0.23,
   DODGE_STICK_DEADZONE: 0.50,
-  BALL_CAR_TANGENT_TRANSFER: 0.13,
-  BALL_SURFACE_FRICTION: 0.35, BALL_HIT_MULTIPLIER: 1.0,
-  BALL_HIT_FORWARD_FORCE: 6, BALL_FORWARD_SPEED_FACTOR: 0.34,
-  BALL_FLIP_HIT_BONUS: 8, BALL_BOOST_HIT_BONUS: 5,
-  BALL_UPWARD_POP: 5.5, BALL_EXTRA_HIT_MAX_RELATIVE_SPEED: 4600 / 50,
-  BALL_CAR_MASS_RATIO: 180 / 30,
-  // Ball response is its own setting, independent of the car-physics preset.
-  // The reference gravity/mass above remain unchanged and documented.
-  BALL_FEEL_MODE: 'responsive',
-  BALL_FEEL: {gravity:0.97, floor:1.10, ramp:1.13, rolling:0.70,
-              impact:1.12, pop:1.22}
+  BALL_SURFACE_FRICTION: 0.35,
+  // RocketSim/RLConst: relative-speed curve (Unreal units per second).
+  BALL_EXTRA_HIT_CURVE: [[0,0.65],[500,0.65],[2300,0.55],[4600,0.30]],
+  BALL_EXTRA_HIT_VERTICAL_SCALE: 0.35, BALL_EXTRA_HIT_FORWARD_SCALE: 0.65,
+  BALL_EXTRA_HIT_COOLDOWN: 2 / 120,
+  BALL_EXTRA_HIT_MAX_RELATIVE_SPEED: 4600 / 50,
+  BALL_CAR_MASS_RATIO: 180 / 30
 };
-const BALL_FEEL_PROFILES = Object.freeze({
-  responsive: Object.freeze({gravity:0.97, floor:1.10, ramp:1.13,
-    rolling:0.70, impact:1.12, pop:1.22}),
-  classic: Object.freeze({gravity:1, floor:1, ramp:1,
-    rolling:1, impact:1, pop:1}),
-  airy: Object.freeze({gravity:0.88, floor:1.15, ramp:1.20,
-    rolling:0.65, impact:1.18, pop:1.3})
-});
 const MATCH = 300;
 const TEAM_COLOR_PRESETS = {
   normal: { blue: 0x2fb8ff, orange: 0xff8a1f },
@@ -105,7 +93,6 @@ try {
   }
   if (Object.prototype.hasOwnProperty.call(TEAM_COLOR_PRESETS, savedSettings.colourVisionMode)) colourVisionMode = savedSettings.colourVisionMode;
 } catch (_) {}
-PHYSICS_TUNING.BALL_FEEL = BALL_FEEL_PROFILES[PHYSICS_TUNING.BALL_FEEL_MODE];
 BLUE = TEAM_COLOR_PRESETS[colourVisionMode].blue;
 ORANGE = TEAM_COLOR_PRESETS[colourVisionMode].orange;
 const WALL_RAMP_WIDTH = 6.0, WALL_RAMP_HEIGHT = 256 / 50;
@@ -3431,60 +3418,51 @@ function hitBall(c) {
     c.nextRumbleAt = t + 0.15;
   }
 
-  const feel = PHYSICS_TUNING.BALL_FEEL;
   const inverseBallMass = 1 / PHYSICS_TUNING.BALL_MASS_REFERENCE;
   const inverseCarMass = 1 / PHYSICS_TUNING.CAR_MASS_REFERENCE;
   const impulse = closing * (1 + PHYSICS_TUNING.CAR_BALL_RESTITUTION) / (inverseBallMass + inverseCarMass);
   const ballChange = impulse * inverseBallMass, carChange = impulse * inverseCarMass;
-  // Faster *real* initial separation; limit the assist to the impact frame.
-  // No repeated acceleration during an air-dribble or while objects overlap.
-  const responsiveness = c.ground ? feel.impact : 1+(feel.impact-1)*0.40;
-  ball.vx += nx * ballChange * responsiveness;
-  ball.vy += ny * ballChange * responsiveness;
-  ball.vz += nz * ballChange * responsiveness;
+  ball.vx += nx * ballChange; ball.vy += ny * ballChange; ball.vz += nz * ballChange;
   c.vx -= nx * carChange; c.vy -= ny * carChange; c.vz -= nz * carChange;
-  // Gentle tangential contact gives the driver air-dribble steering authority
-  // without adding free energy or locking the sphere to the car's hitbox.
-  const tangentX=rvx+closing*nx,tangentY=rvy+closing*ny,tangentZ=rvz+closing*nz;
-  const tangentSpeed=Math.hypot(tangentX,tangentY,tangentZ);
-  if(tangentSpeed>0.001){
-    const tangentChange=Math.min(tangentSpeed*PHYSICS_TUNING.BALL_CAR_TANGENT_TRANSFER,
-      ballChange*0.24);
-    const blend=tangentChange/tangentSpeed;
-    ball.vx-=tangentX*blend;ball.vy-=tangentY*blend;ball.vz-=tangentZ*blend;
-    const carBlend=blend*inverseCarMass/inverseBallMass;
-    c.vx+=tangentX*carBlend;c.vy+=tangentY*carBlend;c.vz+=tangentZ*carBlend;
+  // Tangential impulses act at the surface of a solid sphere (I = 2/5 mr²).
+  // Include existing spin so a rolling contact is not mistaken for sliding.
+  const contactX=rvx-BR*((ball.wy||0)*nz-(ball.wz||0)*ny);
+  const contactY=rvy-BR*((ball.wz||0)*nx-(ball.wx||0)*nz);
+  const contactZ=rvz-BR*((ball.wx||0)*ny-(ball.wy||0)*nx);
+  const normalContact=contactX*nx+contactY*ny+contactZ*nz;
+  const tx=contactX-normalContact*nx,ty=contactY-normalContact*ny,tz=contactZ-normalContact*nz;
+  const slip=Math.hypot(tx,ty,tz);
+  if(slip>1e-6){
+    const change=Math.min(slip/(3.5+inverseCarMass/inverseBallMass),ballChange*PHYSICS_TUNING.CAR_BALL_FRICTION);
+    const k=change/slip;
+    const dvx=-tx*k,dvy=-ty*k,dvz=-tz*k;
+    ball.vx+=dvx;ball.vy+=dvy;ball.vz+=dvz;
+    const reaction=inverseCarMass/inverseBallMass;
+    c.vx-=dvx*reaction;c.vy-=dvy*reaction;c.vz-=dvz*reaction;
+    ball.wx-=2.5/BR*(ny*dvz-nz*dvy);
+    ball.wy-=2.5/BR*(nz*dvx-nx*dvz);
+    ball.wz-=2.5/BR*(nx*dvy-ny*dvx);
   }
 
-  // Only the first substantial impact in a short window receives additional
-  // shot power. This prevents the "sticky / accelerating ball" behaviour.
-  c.ballHitCooldown = Math.max(0, (c.ballHitCooldown || 0));
-  if (c.ballHitCooldown <= 0 && closing > 1.7) {
-    const aligned = clamp(fx * nx + fy * ny + fz * nz, 0, 1);
-    const forwardSpeed = Math.max(0, c.vx * fx + c.vy * fy + c.vz * fz);
-    const aerial = !c.ground && !c.wallRide;
-    // Air dribbles require a SERIES of light velocity-matching touches.
-    // Unlike dodges and ground shots, the nose must not inject a huge extra
-    // impulse on each frame of a close aerial carry.
-    const extra = aerial
-      ? aligned * (c.flip > 0 ? Math.min(7, closing*0.18+3) :
-          Math.min(1.35, closing*0.055 + forwardSpeed*0.012))
-      : aligned * Math.min(14.5, closing*0.13 + forwardSpeed*0.055 +
-          (c.flip > 0 ? 5 : 0) + (c.fl ? 2.2 : 0)) * feel.impact;
-    ball.vx += fx * extra; ball.vy += fy * extra; ball.vz += fz * extra;
-    if (ny > 0.2 && forward > -0.4) {
-      ball.vy += Math.min(aerial ? 0.4 : 2.7*feel.pop,
-        closing * (aerial ? 0.035 : 0.125*feel.pop));
+  // Match the public RocketSim extra-hit model: centre-to-centre direction,
+  // compressed vertical component, forward adjustment, and a speed curve.
+  // Boost and dodges already contribute through velocity; no fixed pop/bonus.
+  if((c.ballHitCooldown||0)<=0){
+    const speed=Math.min(Math.hypot(rvx+contactSpeed.x,rvy+contactSpeed.y,rvz+contactSpeed.z),
+      PHYSICS_TUNING.BALL_EXTRA_HIT_MAX_RELATIVE_SPEED);
+    const referenceSpeed=speed*PHYSICS_TUNING.REFERENCE_SCALE;
+    const curve=PHYSICS_TUNING.BALL_EXTRA_HIT_CURVE;
+    let factor=curve[curve.length-1][1];
+    for(let i=1;i<curve.length;i++)if(referenceSpeed<=curve[i][0]){
+      const [x0,y0]=curve[i-1],[x1,y1]=curve[i];
+      factor=y0+(y1-y0)*clamp((referenceSpeed-x0)/(x1-x0),0,1);break;
     }
-    c.ballHitCooldown = aerial ? 0.11 : 0.085;
+    const direction=new THREE.Vector3(dx,dy*PHYSICS_TUNING.BALL_EXTRA_HIT_VERTICAL_SCALE,dz).normalize();
+    const adjustment=direction.dot(nose)*(1-PHYSICS_TUNING.BALL_EXTRA_HIT_FORWARD_SCALE);
+    direction.addScaledVector(nose,-adjustment).normalize();
+    ball.vx+=direction.x*speed*factor;ball.vy+=direction.y*speed*factor;ball.vz+=direction.z*speed*factor;
+    c.ballHitCooldown=PHYSICS_TUNING.BALL_EXTRA_HIT_COOLDOWN;
   }
-
-  // Tangential contact velocity imparts a bounded amount of ball spin.
-  const tx = rvx + closing * nx, ty = rvy + closing * ny, tz = rvz + closing * nz;
-  const spinTransfer = 0.012;
-  ball.wx += (ny * tz - nz * ty) * spinTransfer;
-  ball.wy += (nz * tx - nx * tz) * spinTransfer;
-  ball.wz += (nx * ty - ny * tx) * spinTransfer;
   clampBallMotion();
 }
 function clampBallMotion(body=ball) {
@@ -3507,18 +3485,19 @@ function ballSurfaceImpulse(nx, ny, nz, restitution, body=ball) {
   const e=vn<-PHYSICS_TUNING.BALL_BOUNCE_CUTOFF_SPEED?restitution:0;
   const impulse=-(1+e)*vn;
   body.vx+=impulse*nx;body.vy+=impulse*ny;body.vz+=impulse*nz;
-  const tangentDot=body.vx*nx+body.vy*ny+body.vz*nz;
-  const tx=body.vx-tangentDot*nx,ty=body.vy-tangentDot*ny,tz=body.vz-tangentDot*nz;
+  const contactX=body.vx-BR*((body.wy||0)*nz-(body.wz||0)*ny);
+  const contactY=body.vy-BR*((body.wz||0)*nx-(body.wx||0)*nz);
+  const contactZ=body.vz-BR*((body.wx||0)*ny-(body.wy||0)*nx);
+  const normal=contactX*nx+contactY*ny+contactZ*nz;
+  const tx=contactX-normal*nx,ty=contactY-normal*ny,tz=contactZ-normal*nz;
   const speed=Math.hypot(tx,ty,tz);
-  if(speed>0.001){
-    // Bounded friction transfers only a small portion of the tangent velocity.
-    const slip=Math.min(speed*0.09,impulse*PHYSICS_TUNING.BALL_SURFACE_FRICTION*0.18);
-    const k=slip/speed;
-    body.vx-=tx*k;body.vy-=ty*k;body.vz-=tz*k;
-    const spin=slip/BR*0.36/speed;
-    body.wx+=(ny*tz-nz*ty)*spin;
-    body.wy+=(nz*tx-nx*tz)*spin;
-    body.wz+=(nx*ty-ny*tx)*spin;
+  if(speed>1e-6){
+    const change=Math.min(speed/3.5,impulse*PHYSICS_TUNING.BALL_SURFACE_FRICTION);
+    const k=change/speed,dvx=-tx*k,dvy=-ty*k,dvz=-tz*k;
+    body.vx+=dvx;body.vy+=dvy;body.vz+=dvz;
+    body.wx-=2.5/BR*(ny*dvz-nz*dvy);
+    body.wy-=2.5/BR*(nz*dvx-nx*dvz);
+    body.wz-=2.5/BR*(nx*dvy-ny*dvx);
   }
   return impulse;
 }
@@ -3592,9 +3571,8 @@ function stepBall(dt, body=ball, predicting=false) {
   const p = PHYSICS_TUNING;
   body.onWall=false;
   // Integrate velocity before contacts, keeping all motion in world space.
-  const feel=p.BALL_FEEL;
-  body.vy -= p.BALL_GRAVITY_FORCE * feel.gravity * dt;
-  const airDrag = Math.max(0, 1 - p.BALL_DRAG_REFERENCE * dt);
+  body.vy -= p.BALL_GRAVITY_FORCE * dt;
+  const airDrag = Math.pow(1-p.BALL_DRAG_REFERENCE,dt);
   body.vx *= airDrag; body.vy *= airDrag; body.vz *= airDrag;
   body.x += body.vx * dt; body.y += body.vy * dt; body.z += body.vz * dt;
 
@@ -3620,19 +3598,14 @@ function stepBall(dt, body=ball, predicting=false) {
   const wasSupported=!!(body.onGround||body.onRamp);
   if(body.y<surface || (wasSupported && touching)){
     body.y=Math.max(body.y,surface);
-    const hardImpact=normalSpeed < -1.5;
-    const restitution=ramp.height<=0.1?p.BALL_FLOOR_RESTITUTION*feel.floor:
-      (hardImpact?p.BALL_RAMP_IMPACT_RESTITUTION*feel.ramp:p.BALL_RAMP_ROLL_RESTITUTION);
+    const restitution=ramp.height<=0.1?p.BALL_FLOOR_RESTITUTION:p.BALL_RAMP_IMPACT_RESTITUTION;
     ballSurfaceImpulse(nx,ny,nz,restitution, body);
     // Airborne bounces should not be tagged as "rolling" and dragged flat.
     const outgoing=body.vx*nx+body.vy*ny+body.vz*nz;
     const supported=outgoing<0.36;
     body.onRamp=ramp.height>0.1&&supported;
     body.onGround=ramp.height<=0.1&&supported;
-    if(supported){
-      const rollDrag=Math.exp(-p.BALL_ROLLING_RESISTANCE*feel.rolling*dt);
-      body.vx*=rollDrag;body.vz*=rollDrag;
-    }
+
   }else{
     body.onRamp=false;body.onGround=false;
   }
@@ -3658,16 +3631,16 @@ function stepBall(dt, body=ball, predicting=false) {
     if (Math.abs(body.x) > GW - BR) {
       const sign = Math.sign(body.x);
       body.x = sign * (GW - BR);
-      ballSurfaceImpulse(-sign, 0, 0, 0.5, body);
+      ballSurfaceImpulse(-sign, 0, 0, p.BALL_RESTITUTION, body);
     }
     if (body.y > GH - BR) {
       body.y = GH - BR;
-      ballSurfaceImpulse(0, -1, 0, 0.5, body);
+      ballSurfaceImpulse(0, -1, 0, p.BALL_RESTITUTION, body);
     }
     if (Math.abs(body.z) > HL + GD - BR) {
       const sign = Math.sign(body.z);
       body.z = sign * (HL + GD - BR);
-      ballSurfaceImpulse(0, 0, -sign, 0.4, body);
+      ballSurfaceImpulse(0, 0, -sign, p.BALL_RESTITUTION, body);
     }
   } else if (Math.abs(body.z) > HL - BR &&
       !(Math.abs(body.x)>HW-CH && Math.abs(body.z)>HL-CH) &&
@@ -3677,20 +3650,7 @@ function stepBall(dt, body=ball, predicting=false) {
     resolveBallWall('z', sign, surface, body);
   }
 
-  // Rolling rotation follows ground velocity; airborne spin decays slowly.
-  if(body.onGround||body.onRamp){
-    // The spin axis tracks the curved surface instead of flat world Y.
-    const tx=(ny*body.vz-nz*body.vy)/BR;
-    const ty=(nz*body.vx-nx*body.vz)/BR;
-    const tz=(nx*body.vy-ny*body.vx)/BR;
-    const blend=Math.min(1,dt*8);
-    body.wx+=(tx-body.wx)*blend;
-    body.wy+=(ty-body.wy)*blend;
-    body.wz+=(tz-body.wz)*blend;
-  }else{
-    const decay=Math.exp(-0.12*dt);
-    body.wx*=decay;body.wy*=decay;body.wz*=decay;
-  }
+  // Spin changes through contact friction, not a forced rolling animation.
   clampBallMotion(body);
 }
 
@@ -4177,7 +4137,6 @@ window.rocketArena = {
   get lakesideScenery() { return lakesideScenery; },
   get pitch() { return pitchMesh; },
   get pads() { return pads; },
-  get ballFeel() { return PHYSICS_TUNING.BALL_FEEL_MODE; },
   get goalEffectCount() { return activeGoalEffects.length; },
   get goalEffects() { return activeGoalEffects.map(f=>({style:f.style,age:f.age,duration:f.duration,signature:[...f.signature],group:f.group})); },
   get renderStats() { return {calls:renderer.info.render.calls,triangles:renderer.info.render.triangles,geometries:renderer.info.memory.geometries,textures:renderer.info.memory.textures}; },

@@ -72,11 +72,11 @@ Object.assign(ball,{x:0,y:scaledBallRadius+0.003,z:0,vx:0,vy:-1.15,vz:0,
 stepBall(1/120);
 assert(ball.vy>0.6,'Small ground impacts are being killed instead of bouncing');
 
-// Rolling resistance must stay below material friction.
-Object.assign(ball,{x:0,y:scaledBallRadius,z:0,vx:20,vy:0,vz:0,
-  wx:0,wy:0,wz:0,onRamp:false,onGround:true});
+// Pure rolling must preserve momentum; a zero-spin sliding ball is a different contact.
+Object.assign(ball,{x:0,y:scaledBallRadius,z:0,vx:8,vy:0,vz:0,
+  wx:0,wy:0,wz:-8/scaledBallRadius,onRamp:false,onGround:true});
 for(let i=0;i<120;i++)stepBall(1/120);
-assert(ball.vx>16&&ball.vx<20,'Grounded ball loses too much momentum');
+assert(ball.vx>7.7&&ball.vx<8,'Rolling ball should lose only a little speed to air drag');
 
 // Falling onto a curved ramp should bounce; shallow uphill touches stay smooth.
 const dropX=76,dropRamp=arenaRampAt(dropX,0);
@@ -231,7 +231,8 @@ console.log('PASS: controller aerial pitch, independent throttle and analog dire
   Object.assign(ball,{x:80-radius+.04,y:19,z:0,vx:13,vy:-4,vz:6,
     wx:0,wy:0,wz:0,onGround:false,onRamp:false,onWall:false});
   stepBall(1/120);
-  assert(ball.vx<0 && ball.vy<0 && Math.abs(ball.vy+4)<.8,
+  const wallTangentY=(-4-13/120)*Math.pow(.97,1/120)*(1-1/3.5);
+  assert(ball.vx<0 && ball.vy<0 && Math.abs(ball.vy-wallTangentY)<.02,
     'A high wall hit should rebound sideways, not pop upward');
 
   Object.assign(ball,{x:80-radius,y:radius+3.1,z:0,vx:19,vy:2,vz:7,
@@ -367,46 +368,46 @@ console.log('PASS: controller aerial pitch, independent throttle and analog dire
 }
 
  
-// The responsive default should make the ball livelier without changing
-// the documented reference mass, capping speed or weakening Classic mode.
+// Calibrated standard ball: no hidden feel profiles or scripted lift.
 {
-  assert.equal(tuning.BALL_FEEL_MODE,'responsive',
-    'New players must start with the responsive ball feel');
   assert.equal(tuning.BALL_MASS_REFERENCE,30);
-  const saved=tuning.BALL_FEEL;
-  const classic={gravity:1,floor:1,ramp:1,rolling:1,impact:1,pop:1};
-  const responsive={gravity:.97,floor:1.1,ramp:1.13,rolling:.70,
-    impact:1.12,pop:1.22};
-  const start={x:0,y:scaledBallRadius+.002,z:0,vx:0,vy:-11,vz:0,
-    wx:0,wy:0,wz:0,onGround:false,onRamp:false,onWall:false};
-  tuning.BALL_FEEL=classic;
-  Object.assign(ball,start);
-  stepBall(1/120);
-  const classicBounce=ball.vy;
-  tuning.BALL_FEEL=responsive;
-  Object.assign(ball,start);
-  stepBall(1/120);
-  const livelyBounce=ball.vy;
-  assert(livelyBounce>classicBounce+.5,
-    'Responsive ball should bounce noticeably higher than Classic');
-  assert(livelyBounce<10,'Ball gained too much energy on a floor bounce');
+  assert.equal(tuning.BALL_FLOOR_RESTITUTION,.6);
+  assert.equal(tuning.BALL_FEEL,undefined,'Arcade ball multipliers must not override standard dynamics');
+  const reset=(changes={})=>Object.assign(ball,{x:0,y:20,z:0,vx:0,vy:0,vz:0,wx:0,wy:0,wz:0,onGround:false,onRamp:false,onWall:false},changes);
+  reset({vx:20});
+  for(let i=0;i<120;i++)stepBall(1/120);
+  assert(Math.abs(ball.vx-19.4)<.00001,'Air damping must retain 97% of horizontal speed per second');
+  const dragRate=-Math.log(.97);
+  const expectedFall=-13/dragRate*(1-Math.exp(-dragRate));
+  assert(Math.abs(ball.vy-expectedFall)<.005,'Ball must fall under standard gravity without floatiness');
+  reset({y:scaledBallRadius+.002,vy:-11});stepBall(1/120);
+  const expectedBounce=(11+13/120)*Math.pow(.97,1/120)*.6;
+  assert(Math.abs(ball.vy-expectedBounce)<.00001,'Floor rebound must use 0.6 restitution');
   const touchCar=cars[0];
-  const impact={x:0,y:.55,z:3.2,vx:0,vy:0,vz:0,
-    wx:0,wy:0,wz:0,onGround:false,onRamp:false,onWall:false};
-  Object.assign(touchCar,{x:0,y:.55,z:0,yaw:0,vx:0,vy:0,vz:26,
-    ground:true,wallRide:false,airQuat:null,pitch:0,roll:0,
-    ballHitCooldown:0});
-  tuning.BALL_FEEL=classic;
-  Object.assign(ball,impact);hitBall(touchCar);
-  const classicShot=ball.vz;
-  Object.assign(touchCar,{x:0,y:.55,z:0,yaw:0,vx:0,vy:0,vz:26,
-    ballHitCooldown:0});
-  tuning.BALL_FEEL=responsive;
-  Object.assign(ball,impact);hitBall(touchCar);
-  assert(ball.vz>classicShot+0.5,
-    'Responsive ground contact should produce a stronger clean touch');
-  assert(ball.vz<tuning.MAX_BALL_SPEED,
-    'Responsive touch exceeded the ball speed limit');
-  tuning.BALL_FEEL=saved;
-  console.log('PASS: live responsive ball bounce, touch power and Classic fallback');
+  function shot(ground,fl=0,flip=0,speed=20){
+    Object.assign(touchCar,{x:0,y:.55,z:0,yaw:0,vx:0,vy:0,vz:speed,ground,fl,flip,
+      wallRide:false,airQuat:null,pitch:0,roll:0,airOmega:null,ballHitCooldown:0,
+      hitbox:{length:1.7,width:1,height:.55,forward:0,up:0}});
+    reset({y:.55,z:3.2});hitBall(touchCar);return {vx:ball.vx,vy:ball.vy,vz:ball.vz};
+  }
+  const groundShot=shot(true);
+  const expectedShot=20*6/7+20*(.65+(.55-.65)*(1000-500)/(2300-500));
+  assert(Math.abs(groundShot.vz-expectedShot)<.00001,'Shot must match the relative-speed impulse curve');
+  assert(Math.abs(groundShot.vy)<.00001,'Level contact must not receive automatic upward pop');
+  assert.deepEqual(shot(false),groundShot,'Ground and airborne contact must use the same ball physics');
+  assert.deepEqual(shot(true,1,1),groundShot,'Boost/flip flags must not add magic shot power at identical velocity');
+  for(const [speed,factor] of [[10,.65],[46,.55],[92,.30]]){
+    const result=shot(true,0,0,speed);
+    assert(Math.abs(result.vz-Math.min(tuning.MAX_BALL_SPEED,speed*(6/7+factor)))<.00001,
+      'Shot curve knot must match reference at '+speed+' scaled units/s');
+  }
+  // A sliding ball should lose translation and gain spin, while total energy falls.
+  reset({y:scaledBallRadius,vx:8,onGround:true});
+  stepBall(1/120);
+  assert(ball.vx<8 && ball.wz<0,'Floor friction must convert sliding into correctly directed spin');
+  reset({y:scaledBallRadius,vx:8,wz:-8/scaledBallRadius,onGround:true});
+  const energy=b=>b.vx*b.vx+b.vy*b.vy+b.vz*b.vz+.4*scaledBallRadius**2*(b.wx*b.wx+b.wy*b.wy+b.wz*b.wz);
+  const before=energy(ball);for(let i=0;i<120;i++)stepBall(1/120);
+  assert(energy(ball)<=before+.0001,'Contact friction must not create kinetic energy');
+  console.log('PASS: standard gravity, drag, restitution, reference shot curve, no artificial lift and dissipative rolling friction');
 }
