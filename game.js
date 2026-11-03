@@ -5,6 +5,8 @@ if (typeof THREE === 'undefined') {
   $('menu').innerHTML = '<h1>Three.js not found</h1><p>Check your connection, or put three.min.js (r149) in the lib/ folder.</p>';
   return;
 }
+// Three.js r149 uses encoding; colourSpace is a later API.
+THREE.ColorManagement.legacyMode = false;
 // ---------- tuning (units are roughly metres) ----------
 const HW = 80, HL = 104, GW = 15, GH = 10.5, GD = 14, CEIL = 44, CH = 14, BR = 91.25 / 50;
 const PHYSICS_TUNING = {
@@ -73,21 +75,7 @@ const BALL_FEEL_PROFILES = Object.freeze({
   airy: Object.freeze({gravity:0.88, floor:1.15, ramp:1.20,
     rolling:0.65, impact:1.18, pop:1.3})
 });
-function setBallFeel(mode, persist=true) {
-  PHYSICS_TUNING.BALL_FEEL_MODE = Object.hasOwn(BALL_FEEL_PROFILES, mode)
-    ? mode : 'responsive';
-  PHYSICS_TUNING.BALL_FEEL = BALL_FEEL_PROFILES[PHYSICS_TUNING.BALL_FEEL_MODE];
-  const select = $('ballFeel');
-  if (select) select.value = PHYSICS_TUNING.BALL_FEEL_MODE;
-  const hint = $('ballFeelHint');
-  if (hint) hint.textContent = PHYSICS_TUNING.BALL_FEEL_MODE === 'classic'
-    ? 'Original bounce and touch response.'
-    : PHYSICS_TUNING.BALL_FEEL_MODE === 'airy'
-      ? 'Higher bounces and longer air time.'
-      : 'Sharper touches, brighter bounces, easier ball lifts.';
-  if (persist) saveGeneralSettings();
-}
-const MATCH = 180;
+const MATCH = 300;
 const TEAM_COLOR_PRESETS = {
   normal: { blue: 0x2fb8ff, orange: 0xff8a1f },
   'blue-amber': { blue: 0x0072b2, orange: 0xe69f00 },
@@ -108,8 +96,6 @@ try {
   if (Number.isFinite(savedSettings.steeringSensitivity)) controllerSteeringSensitivity = Math.max(1, Math.min(2.5, savedSettings.steeringSensitivity));
   if (Number.isFinite(savedSettings.aerialSensitivity)) controllerAerialSensitivity = Math.max(1, Math.min(2.5, savedSettings.aerialSensitivity));
   if (typeof savedSettings.controllerVibration === 'boolean') controllerVibrationEnabled = savedSettings.controllerVibration;
-  if (Object.hasOwn(BALL_FEEL_PROFILES, savedSettings.ballFeelMode))
-    PHYSICS_TUNING.BALL_FEEL_MODE = savedSettings.ballFeelMode;
   if (['assist', 'manual'].includes(savedSettings.keyboardFlightMode)) keyboardFlightMode = savedSettings.keyboardFlightMode;
   if (savedSettings.camera && typeof savedSettings.camera === 'object') {
     for (const key of ['fov', 'distance', 'height', 'stiffness']) {
@@ -199,6 +185,9 @@ const CAR_HITBOXES = {
 
 // ---------- renderer / scene ----------
 const renderer = new THREE.WebGLRenderer({ canvas: $('c'), antialias: true });
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
 renderer.shadowMap.enabled = true;
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x8ac7ec);
@@ -216,9 +205,9 @@ function resize() {
 }
 addEventListener('resize', resize); resize();
 
-scene.add(new THREE.HemisphereLight(0xd8efff, 0x315a43, 1.3));
-const fill = new THREE.DirectionalLight(0xb4dcff, 0.75); fill.position.set(-40, 50, -60); scene.add(fill);
-const sun = new THREE.DirectionalLight(0xfff1d9, 1.6);
+scene.add(new THREE.HemisphereLight(0xd8efff, 0x315a43, 0.85));
+const fill = new THREE.DirectionalLight(0xb4dcff, 0.4); fill.position.set(-40, 50, -60); scene.add(fill);
+const sun = new THREE.DirectionalLight(0xfff1d9, 1.05);
 sun.position.set(30, 70, 20); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
 Object.assign(sun.shadow.camera, { left: -45, right: 45, top: 45, bottom: -45, near: 10, far: 240 });
 scene.add(sun); scene.add(sun.target);
@@ -234,7 +223,8 @@ function buildArena() {
   const tile = 9 * resolution;
   for (let x = 0; x < TW; x += tile) for (let y = 0; y < TH; y += tile) {
     const ix = Math.floor(x / tile), iy = Math.floor(y / tile);
-    g.fillStyle = (ix + iy) % 2 ? '#356f35' : '#3e7c3d';
+    // Alternating mown bands read clearly at chase-camera height.
+    g.fillStyle = iy % 2 ? '#245c48' : '#307457';
     g.fillRect(x, y, tile, tile);
     // fine mowing lines give the turf some texture without external downloads
     g.fillStyle = 'rgba(240,255,195,.032)';
@@ -247,7 +237,17 @@ function buildArena() {
   };
   const px = x => (x + HW) * resolution;
   const pz = z => (HL - z) * resolution;
-  g.lineWidth = 3.3 * resolution; g.strokeStyle = 'rgba(246,252,238,.8)';
+  // Subtle team-coloured goal areas and a split kickoff ring.
+  for (const sign of [-1, 1]) {
+    g.fillStyle = sign < 0 ? 'rgba(40,145,255,.16)' : 'rgba(255,142,40,.16)';
+    g.fillRect(px(-GW-12), pz(sign < 0 ? -HL+27 : HL),
+      (GW+12)*2*resolution, 27*resolution);
+    g.beginPath();
+    g.arc(px(0),pz(0),16*resolution,sign < 0 ? 0 : Math.PI,sign < 0 ? Math.PI : Math.PI*2);
+    g.strokeStyle = sign < 0 ? '#36aaff' : '#ffaa47';
+    g.lineWidth = .65*resolution; g.stroke();
+  }
+  g.lineWidth = 0.7 * resolution; g.strokeStyle = 'rgba(246,252,238,.8)';
   g.strokeRect(px(-HW + 10), pz(HL - 10), (2 * HW - 20) * resolution, (2 * HL - 20) * resolution);
   line([[px(-HW + 7),pz(0)],[px(HW - 7),pz(0)]], 'rgba(247,255,248,.76)', 0.65 * resolution);
   g.beginPath(); g.arc(px(0),pz(0),14 * resolution,0,Math.PI*2);
@@ -270,10 +270,11 @@ function buildArena() {
   }
   const texture = new THREE.CanvasTexture(canvas);
   texture.anisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), 8);
-  texture.colorSpace = THREE.SRGBColorSpace || texture.colorSpace;
+  texture.encoding = THREE.sRGBEncoding;
   const surfaceGeo = new THREE.PlaneGeometry(2*HW,2*HL,160,208);
   surfaceGeo.rotateX(-Math.PI/2);
   const pos = surfaceGeo.attributes.position;
+  const surfaceUV = surfaceGeo.attributes.uv;
   for (let i=0;i<pos.count;i++) {
     const z=pos.getZ(i);
     // Quarter-circle floor edge meets the curved glass without triangular gaps.
@@ -282,14 +283,18 @@ function buildArena() {
     const x=pos.getX(i)*maxX/HW;
     pos.setX(i,x);
     pos.setY(i,arenaRampAt(x,z).height);
+    // Canvas top is the orange end (+Z); map after rounding the corners.
+    surfaceUV.setXY(i,(x+HW)/(2*HW),(z+HL)/(2*HL));
   }
+  surfaceUV.needsUpdate = true;
   pos.needsUpdate = true; surfaceGeo.computeVertexNormals();
   pitchMesh = new THREE.Mesh(surfaceGeo,new THREE.MeshStandardMaterial({map:texture,roughness:.94,side:THREE.DoubleSide}));
   pitchMesh.receiveShadow = true; scene.add(pitchMesh);
 
   // The external concourse lives behind the collision walls, not over the turf.
   const stone = new THREE.MeshStandardMaterial({color:0xb6a78c,roughness:.83});
-  const concourse = new THREE.Mesh(new THREE.PlaneGeometry(2400,2400),stone);
+  const concourse = new THREE.Mesh(new THREE.CircleGeometry(1,96),stone);
+  concourse.name='Stadium Concourse';concourse.scale.set(182,216,1);
   concourse.rotation.x = -Math.PI/2; concourse.position.y = -.28; scene.add(concourse);
 
   const wallBottom = WALL_RAMP_HEIGHT + 0.28;
@@ -315,8 +320,8 @@ function buildArena() {
   scene.add(new THREE.LineSegments(roofMesh,
     new THREE.LineBasicMaterial({color:0x77bae9,transparent:true,
       opacity:0.14,depthWrite:false})));
-  const glass = new THREE.MeshPhysicalMaterial({
-    color:0xa8deef,roughness:.12,metalness:.04,transparent:true,opacity:.095,
+  const glass = new THREE.MeshBasicMaterial({
+    color:0xa8deef,transparent:true,opacity:.035,
     depthWrite:false,side:THREE.DoubleSide
   });
   const barrier = new THREE.MeshStandardMaterial({color:0x29465a,metalness:.45,roughness:.49,side:THREE.DoubleSide});
@@ -440,7 +445,7 @@ function buildArena() {
     const netGeom=new THREE.BufferGeometry();
     netGeom.setAttribute('position',new THREE.Float32BufferAttribute(goalMesh,3));
     scene.add(new THREE.LineSegments(netGeom,netMat));
-    const light=new THREE.PointLight(sign<0?BLUE:ORANGE,1.1,62);
+    const light=new THREE.PointLight(sign<0?BLUE:ORANGE,1.8,62);
     light.userData.teamSide=sign<0?'blue':'orange';
     light.position.set(0,7,sign*(HL-5));scene.add(light);
   }
@@ -520,7 +525,7 @@ function makeCrowdFaceTexture(cheering=false) {
     c.beginPath();c.arc(64,63,17,.15,Math.PI-.15);c.stroke();
   }
   const tex=new THREE.CanvasTexture(cv);
-  tex.colorSpace=THREE.SRGBColorSpace || undefined;
+  tex.encoding=THREE.sRGBEncoding;
   tex.needsUpdate=true;
   return tex;
 }
@@ -532,7 +537,7 @@ function buildMiniCrowd(stadium, ringPoint) {
     0x82a8ff,0xbc94ff,0xffa2dc,0xf2f5f9,0xa57e59,0x63d4b6,0xf5bca2];
   // Subtly deform the sphere's lower half to make a bean-shaped potato
   // silhouette without the cost of a unique geometry for each character.
-  const bodyGeometry=new THREE.SphereGeometry(.72,12,9);
+  const bodyGeometry=new THREE.SphereGeometry(.72,8,6);
   const a=bodyGeometry.attributes.position;
   for(let i=0;i<a.count;i++){
     const y=a.getY(i),x=a.getX(i);
@@ -734,7 +739,7 @@ function buildLakesideScenery(stadium) {
     const texture=new THREE.CanvasTexture(canvas);
     texture.wrapS=texture.wrapT=THREE.RepeatWrapping;
     texture.repeat.set(9,9);
-    texture.colorSpace=THREE.SRGBColorSpace||texture.colorSpace;
+    texture.encoding=THREE.sRGBEncoding;
     return texture;
   })();
   const lake=new THREE.Mesh(new THREE.PlaneGeometry(2050,2050),
@@ -911,6 +916,7 @@ function buildStadium() {
     new THREE.MeshBasicMaterial({
       map:new THREE.CanvasTexture(cv),side:THREE.BackSide,fog:false,depthWrite:false
     }));
+  skyMesh.material.map.encoding=THREE.sRGBEncoding;
   skyMesh.renderOrder=-2; scene.add(skyMesh);
 
   // Squircle outline covers every corner of the rectangular playing field.
@@ -1152,6 +1158,7 @@ function buildStadium() {
   const screenMaterial=new THREE.MeshBasicMaterial({
     map:new THREE.CanvasTexture(screen),side:THREE.DoubleSide
   });
+  screenMaterial.map.encoding=THREE.sRGBEncoding;
   for(const sign of [-1,1]){
     const display=new THREE.Mesh(new THREE.PlaneGeometry(42,19),screenMaterial);
     display.position.set(0,77,sign*219);
@@ -1219,6 +1226,7 @@ function buildStadium() {
 buildStadium();
 function applyArenaStyle(style) {
   const palettes = {
+    championship: { sky: 0x334d70, fog: 0x6c8aab, ground: 0xffffff, glow: 0xa9dcff },
     sunset: { sky: 0x8ac7ec, fog: 0xbcd9e8, ground: 0xffffff, glow: 0x68d0ff },
     neon: { sky: 0x07142d, fog: 0x101d3b, ground: 0xb7c7ff, glow: 0x8c4dff },
     ice: { sky: 0x9ac8e6, fog: 0x9ac8e6, ground: 0xd6f4ff, glow: 0x7be8ff },
@@ -1226,12 +1234,14 @@ function applyArenaStyle(style) {
   };
   const p = palettes[style] || palettes.sunset;
   scene.background.setHex(p.sky); scene.fog.color.setHex(p.fog);
-  if (skyMesh) skyMesh.material.color.setHex(style === 'ice' ? 0x8ab9d8 : style === 'neon' ? 0x697bff : style === 'desert' ? 0xffa15e : 0xffffff);
+  if (skyMesh) skyMesh.material.color.setHex(style === 'championship' ? 0x8ca8cc : style === 'ice' ? 0x8ab9d8 : style === 'neon' ? 0x697bff : style === 'desert' ? 0xffa15e : 0xffffff);
   if (pitchMesh) pitchMesh.material.color.setHex(p.ground);
   if (rampMeshMaterial) rampMeshMaterial.color.setHex(style === 'ice' ? 0x9fdaef : style === 'neon' ? 0x596db9 : style === 'desert' ? 0xbca06d : 0x59b849);
   scene.traverse(o => { if (o.isLineLoop && o.material && o.material.color) o.material.color.setHex(p.glow); });
 }
-applyArenaStyle('sunset');
+applyArenaStyle('championship');
+// Batch the arena before cars and effects add animated geometry.
+RocketSceneUtils.batchStaticMeshes(scene);
 
 // Full-resolution Octane visual model; hitboxes and controls remain independent.
 let octaneSceneTemplate = null, octaneModelLoading = false, octaneModelReady = false;
@@ -1472,7 +1482,9 @@ const ballTex = (() => {
   const c = document.createElement('canvas'); c.width = 256; c.height = 128; const g = c.getContext('2d');
   g.fillStyle = '#dfe9ef'; g.fillRect(0, 0, 256, 128); g.fillStyle = '#2b3a47';
   for (let i = 0; i < 16; i++) { g.beginPath(); g.arc((i * 83) % 256, 14 + (i * 47) % 100, 15, 0, 7); g.fill(); }
-  return new THREE.CanvasTexture(c);
+  const texture = new THREE.CanvasTexture(c);
+  texture.encoding = THREE.sRGBEncoding;
+  return texture;
 })();
 const ballMesh = new THREE.Mesh(new THREE.SphereGeometry(BR, 32, 24),
   new THREE.MeshStandardMaterial({ map: ballTex, roughness: 0.4, emissive: 0xffffff, emissiveIntensity: 0.12 }));
@@ -1753,6 +1765,7 @@ function kickoff() {
   }
 }
 function start(freePlay = false) {
+  stopGoalPreview();lobbyArenaTour=false;camera.clearViewOffset();
   sfx.init(); // read UI choices
   trainingMode = !!freePlay;
   trainingGoals = 0;
@@ -2295,33 +2308,65 @@ if (name2Input) name2Input.addEventListener('input', () => {
   const tag = $('p2Tag'); if (tag) tag.textContent = player2Name.toUpperCase();
   const p2 = cars[mode]; if (p2 && localTwoPlayer) p2.displayName = player2Name;
 });
+let lobbyArenaTour = false;
 const explosionInput = $('explosion');
-if(explosionInput)explosionInput.value=goalExplosionStyle;
-if (explosionInput) explosionInput.addEventListener('change', () => {
-  goalExplosionStyle = explosionInput.value;
-  try {localStorage.setItem('rocketArenaExplosionV1',goalExplosionStyle);}catch(_){}
-  const value=$('explosionName');
-  if(value)value.textContent=explosionInput.options[explosionInput.selectedIndex].text;
-});
-const explosionPreview = $('explosionPreview');
-if(explosionPreview)explosionPreview.addEventListener('click',()=>{
-  goalExplosionStyle = explosionInput?.value || 'classic';
-  goalExplosion(false,true);
-  const tip=$('explosionPreviewStatus');
-  if(tip)tip.textContent='PREVIEWING '+goalExplosionStyle.toUpperCase();
-});
+const effectIcons={classic:'01',fire:'02',galaxy:'03',lightning:'04',blackhole:'05',supernova:'06',pixel:'07',aurora:'08'};
+const effectCards=$('effectCards');
+if(effectCards){
+  for(const [style,data] of Object.entries(RocketGoalEffects.STYLES)){
+    const card=document.createElement('button');card.type='button';card.className='effect-card';card.dataset.effect=style;
+    card.style.setProperty('--effect-colour','#'+data.colour.toString(16).padStart(6,'0'));
+    const icon=document.createElement('span');icon.className='effect-icon';icon.textContent=effectIcons[style];icon.setAttribute('aria-hidden','true');
+    const label=document.createElement('b');label.textContent=data.name.toUpperCase();card.append(icon,label);
+    card.addEventListener('click',()=>{explosionInput.value=style;explosionInput.dispatchEvent(new Event('change'));});effectCards.append(card);
+  }
+}
+function syncGoalSelection(){
+  const data=RocketGoalEffects.STYLES[goalExplosionStyle];
+  if(!data)return;
+  document.querySelectorAll('[data-effect]').forEach(card=>{const active=card.dataset.effect===goalExplosionStyle;card.classList.toggle('active',active);card.setAttribute('aria-pressed',String(active));});
+  if($('effectDescription'))$('effectDescription').textContent=data.description;
+  if($('menu').dataset.panel==='effects'){
+    $('previewKicker').textContent='GOAL EXPLOSION COLLECTION';$('previewTitle').textContent=data.name.toUpperCase();$('previewHint').textContent='Select a celebration to watch it in 3D';
+  }
+}
+if(explosionInput){
+  for(const option of explosionInput.options)if(RocketGoalEffects.STYLES[option.value])option.textContent=RocketGoalEffects.STYLES[option.value].name;
+  explosionInput.value=goalExplosionStyle;
+  explosionInput.addEventListener('change',()=>{
+    goalExplosionStyle=explosionInput.value;
+    try{localStorage.setItem('rocketArenaExplosionV1',goalExplosionStyle);}catch(_){}
+    syncGoalSelection();
+    if(state==='menu' && $('menu').dataset.panel==='effects')goalExplosion(false,true);
+  });
+}
+const explosionPreview=$('explosionPreview');
+if(explosionPreview)explosionPreview.addEventListener('click',()=>{goalExplosionStyle=explosionInput.value;syncGoalSelection();goalExplosion(false,true);});
+function stopGoalPreview(){
+  goalPreviewUntil=0;goalEffects.clear();document.body.classList.remove('goal-preview','preview-fullscreen');
+}
+function selectLobbyPanel(name){
+  if(!['play','garage','effects','arena'].includes(name))return;
+  stopGoalPreview();lobbyArenaTour=name==='arena';$('menu').dataset.panel=name;
+  document.querySelectorAll('.lobby-panel').forEach(panel=>panel.hidden=panel.id!=='panel-'+name);
+  document.querySelectorAll('.lobby-nav [data-panel]').forEach(button=>{const active=button.dataset.panel===name;button.classList.toggle('active',active);button.setAttribute('aria-pressed',String(active));});
+  const labels={play:['YOUR NEXT MATCH','LAKESIDE CHAMPIONSHIP','Choose a mode to get started'],garage:['YOUR RIDE',playerCarModel.toUpperCase(),'Choose your body and paint'],arena:['STADIUM TOUR','LAKESIDE CHAMPIONSHIP','Decorative stands stay outside the playing surface']};
+  if(labels[name])['previewKicker','previewTitle','previewHint'].forEach((id,i)=>$(id).textContent=labels[name][i]);
+  syncGoalSelection();if(name==='effects')goalExplosion(false,true);
+  const panels=document.querySelector('.lobby-panels');if(panels)panels.scrollTop=0;
+}
+document.querySelectorAll('.lobby-nav [data-panel]').forEach(button=>button.addEventListener('click',()=>selectLobbyPanel(button.dataset.panel)));
+$('lobbySettings')?.addEventListener('click',()=>{$('controlsSettings').open=!$('controlsSettings').open;});
+$('stopGoalPreview')?.addEventListener('click',stopGoalPreview);
+$('fullGoalPreview')?.addEventListener('click',()=>{goalExplosion(false,true);document.body.classList.add('preview-fullscreen');});
+$('returnGoalPreview')?.addEventListener('click',stopGoalPreview);
+$('arenaTour')?.addEventListener('click',()=>{lobbyArenaTour=!lobbyArenaTour;});
+syncGoalSelection();
 function updateGaragePreview() {
-  const car = $('menuCarShowcase');
-  if (!car) return;
-  const chosen = CAR_MODELS.find(m => m.name === playerCarModel) || CAR_MODELS[0];
-  car.style.setProperty('--garage-paint', playerPaint || '#2fb8ff');
-  const body = car.querySelector('.car-body'), nose = car.querySelector('.car-nose'), roof = car.querySelector('.car-roof'), glow = car.querySelector('.car-glow');
-  if (body) body.style.background = 'linear-gradient(165deg,#ffffff,' + (playerPaint || '#2fb8ff') + ' 35%,#10283c 125%)';
-  if (nose) nose.style.background = 'linear-gradient(145deg,' + (playerPaint || '#2fb8ff') + ',#10283c)';
-  if (roof) roof.style.background = 'linear-gradient(145deg,' + (playerPaint || '#2fb8ff') + ',#12344d)';
-  if (glow) glow.style.background = playerPaint || '#2fb8ff';
-  const label = car.querySelector('.showcase-label');
-  if (label) label.textContent = (chosen.label || chosen.name || playerCarModel).toUpperCase() + ' · ' + (playerPaint || '#2fb8ff').toUpperCase();
+  if($('menu').dataset.panel!=='garage')return;
+  const chosen=CAR_MODELS.find(model=>model.name===playerCarModel);
+  $('previewTitle').textContent=(chosen?.label||playerCarModel).toUpperCase();
+  $('previewHint').textContent='YOUR PAINT · '+playerPaint.toUpperCase();
 }
 const paintInput = $('paint');
 if (paintInput) paintInput.addEventListener('input', () => { playerPaint = paintInput.value || '#2fb8ff'; playerPaintCustom = true; updateGaragePreview(); if (state === 'menu' || state === 'over') { buildTeams(); kickoff(); } });
@@ -2336,7 +2381,6 @@ function saveGeneralSettings() {
       volume: gameVolume, colourVisionMode, deadZone: controllerDeadZone,
       steeringSensitivity: controllerSteeringSensitivity, aerialSensitivity: controllerAerialSensitivity,
       controllerVibration: controllerVibrationEnabled, keyboardFlightMode,
-      ballFeelMode: PHYSICS_TUNING.BALL_FEEL_MODE,
       camera: cameraSettings, graphicsQuality
     }));
   } catch (_) {}
@@ -2491,11 +2535,8 @@ applyColourVisionMode(colourVisionMode, false, false);
 sfx.setVolume(gameVolume);
 const stadiumInput = $('stadium');
 if (stadiumInput) stadiumInput.addEventListener('change', () => applyArenaStyle(stadiumInput.value));
-const ballFeelInput = $('ballFeel');
-if (ballFeelInput) {
-  setBallFeel(PHYSICS_TUNING.BALL_FEEL_MODE, false);
-  ballFeelInput.addEventListener('change', () => setBallFeel(ballFeelInput.value));
-}
+for(const id of ['name2','profile2'])$(id)?.closest('.opts')?.classList.add('p2-configuration');
+document.querySelector('.car-opts-p2')?.classList.add('p2-configuration');
 const localTwoInput = $('localTwo');
 if (localTwoInput) localTwoInput.addEventListener('change', () => {
   localTwoPlayer = localTwoInput.checked;
@@ -2527,7 +2568,6 @@ function handleMenuChoice(e) {
     }
   }
 }
-$('menu').addEventListener('pointerdown', handleMenuChoice);
 $('menu').addEventListener('click', handleMenuChoice);
 // One-click quick modes use the real start path, not a separate fake arena.
 for(const button of document.querySelectorAll('[data-quick]')){
@@ -2535,7 +2575,6 @@ for(const button of document.querySelectorAll('[data-quick]')){
     event.stopPropagation();
     const choice=button.dataset.quick;
     if(choice==='freestyle'){
-      setBallFeel('airy');
       start(true);
       const preset=$('trainingPreset');
       if(preset){
@@ -2546,7 +2585,6 @@ for(const button of document.querySelectorAll('[data-quick]')){
     }
     pick('mode',choice==='competitive'?2:1);
     pick('diff',choice==='competitive'?2:0);
-    setBallFeel('responsive');
     start();
   });
 }
@@ -3488,154 +3526,37 @@ function ballSurfaceImpulse(nx, ny, nz, restitution, body=ball) {
 // goal explosion helpers
 let camShakeTime = 0;
 
-const activeGoalEffects = [];
-const GOAL_EFFECT_DATA = Object.freeze({
-  classic: {colour:0x36bfff, accent:0xffffff, n:340, style:'burst'},
-  fire: {colour:0xff5b18, accent:0xffeb6c, n:425, style:'flames'},
-  galaxy: {colour:0xa45bff, accent:0x22e9ff, n:420, style:'spiral'},
-  lightning: {colour:0x61d8ff, accent:0xf6fbff, n:400, style:'sparks'},
-  blackhole: {colour:0x7b37ff, accent:0xff57cb, n:450, style:'implosion'},
-  supernova: {colour:0xffdd69, accent:0xffffff, n:500, style:'nova'},
-  pixel: {colour:0x3efaac, accent:0xff54be, n:290, style:'pixels'},
-  aurora: {colour:0x48f5c5, accent:0xb48cff, n:390, style:'spiral'}
-});
-// This is scene geometry, not a flat particle colour swap. Each style has
-// expanding torus shockwaves, a light source, a glowing 3D core and optionally
-// individually animated shards. Every object is disposed after the explosion.
-function clearGoalEffect(effect) {
-  scene.remove(effect.group);
-  effect.group.traverse(object => {
-    if (object.geometry) object.geometry.dispose();
-    const materials=Array.isArray(object.material) ? object.material : [object.material];
-    for (const mat of materials) if(mat && mat.dispose)mat.dispose();
-  });
-  const index=activeGoalEffects.indexOf(effect);
-  if(index>=0)activeGoalEffects.splice(index,1);
-}
-function tickGoalEffects(dt) {
-  for(let i=activeGoalEffects.length-1;i>=0;i--){
-    const fx=activeGoalEffects[i];
-    // Scene effects are visual and should expire by wall-clock time, even
-    // on a GPU that renders below 10 FPS (physics remains fixed at 120Hz).
-    fx.age=Math.max(fx.age+Math.min(dt,0.1),
-      (performance.now()-fx.startedAt)/1000);
-    const progress=fx.age/fx.duration;
-    if(progress>=1){clearGoalEffect(fx);continue;}
-    const remain=Math.max(0,1-progress);
-    fx.light.intensity=fx.maxLight*remain*remain;
-    if(fx.core){
-      const scale=fx.style==='implosion' ? 1.4-1.3*progress :
-        fx.style==='nova' ? 1+3*progress : 1+1.8*progress;
-      fx.core.scale.setScalar(Math.max(0.04,scale));
-      fx.core.material.opacity=fx.style==='implosion'?Math.min(0.9,remain):remain*0.8;
-      fx.core.rotation.y+=dt*2.2;
-    }
-    fx.rings.forEach((ring,index)=>{
-      ring.scale.setScalar(1+(index+1)*0.2+progress*(fx.style==='nova'?8:5));
-      ring.rotation.z+=dt*(index%2?1.8:-1.2);
-      ring.material.opacity=Math.max(0,remain*remain*0.8);
-    });
-    for(const shard of fx.shards){
-      shard.mesh.position.addScaledVector(shard.velocity,dt);
-      shard.velocity.y-=dt*(fx.style==='pixels'?5:9);
-      shard.mesh.rotation.x+=dt*shard.spin;
-      shard.mesh.rotation.y+=dt*shard.spin*1.3;
-      shard.mesh.material.opacity=remain;
-    }
-  }
-}
+const GOAL_EFFECT_DATA = RocketGoalEffects.STYLES;
+const goalEffects = new RocketGoalEffects.Manager(scene, {quality:graphicsQuality});
+const activeGoalEffects = goalEffects.effects;
+let goalPreviewUntil = 0;
+let goalCameraView = null;
+function clearGoalEffect(effect) { goalEffects.remove(effect); }
+function tickGoalEffects(dt) { goalEffects.update(dt); }
 function goalExplosion(team, preview=false) {
-  const style=Object.hasOwn(GOAL_EFFECT_DATA,goalExplosionStyle)
-    ? goalExplosionStyle:'classic';
-  const data=GOAL_EFFECT_DATA[style];
-  const cx=preview ? 28 : ball.x;
-  const cy=preview ? 3 : Math.max(ball.y,2.5);
-  const cz=preview ? 0 : ball.z;
-  // Keep menu previews and consecutive goals from building up GPU objects.
-  while(activeGoalEffects.length>=3)clearGoalEffect(activeGoalEffects[0]);
-  const group=new THREE.Group();
-  group.position.set(cx,cy,cz);
-  group.name='Goal Explosion · '+style;
-  scene.add(group);
-  const baseColour=style==='classic' ? (team ? ORANGE:BLUE):data.colour;
-  const coreMaterial=new THREE.MeshBasicMaterial({
-    color:style==='blackhole'?0x0b061b:data.accent,
-    transparent:true,opacity:0.9,depthWrite:false,
-    blending:style==='blackhole'?THREE.NormalBlending:THREE.AdditiveBlending
-  });
-  const core=new THREE.Mesh(
-    style==='pixel'?new THREE.BoxGeometry(2.2,2.2,2.2):
-      new THREE.IcosahedronGeometry(style==='blackhole'?3.1:2.3,1),
-    coreMaterial);
-  group.add(core);
-  const rings=[];
-  const ringCount=style==='nova'?4:
-    style==='blackhole'?3:style==='pixel'?2:3;
-  for(let n=0;n<ringCount;n++){
-    const ring=new THREE.Mesh(
-      new THREE.TorusGeometry(2.8+n*0.5,0.12+n*0.07,8,64),
-      new THREE.MeshBasicMaterial({
-        color:n%2?data.accent:baseColour,transparent:true,
-        opacity:0.75,depthWrite:false,blending:THREE.AdditiveBlending
-      })
-    );
-    ring.rotation.x=(n%2?Math.PI/3:Math.PI/2);
-    ring.rotation.y=n*0.72;
-    group.add(ring);
-    rings.push(ring);
+  const style=Object.hasOwn(GOAL_EFFECT_DATA,goalExplosionStyle)?goalExplosionStyle:'classic';
+  const end=preview?1:(ball.z>=0?1:-1);
+  // Anchor the whole celebration at the goal mouth, facing into the pitch.
+  const position=new THREE.Vector3(preview?0:clamp(ball.x,-GW+3,GW-3),6,end*(HL-1));
+  goalEffects.quality=graphicsQuality;
+  if(preview)goalEffects.clear();
+  const effect=goalEffects.spawn(style,position,{teamColour:team?ORANGE:BLUE,direction:-end});
+  if(preview){
+    goalPreviewUntil=performance.now()+effect.duration*1000+600;
+    document.body.classList.add('goal-preview');
+    const tip=$('explosionPreviewStatus');
+    if(tip)tip.textContent=GOAL_EFFECT_DATA[style].name+' · LIVE 3D PREVIEW';
+  }else {
+    camShakeTime=cameraSettings.shake ? .65 : 0;
+    goalCameraView={x:position.x,y:position.y,z:position.z,end,startedAt:performance.now()};
   }
-  const shards=[];
-  const totalShards=graphicsQuality==='low'?12:style==='pixel'?64:style==='blackhole'?36:24;
-  if(['pixel','blackhole','supernova','aurora'].includes(style)) {
-    for(let n=0;n<totalShards;n++){
-      const a=(n/totalShards)*Math.PI*2;
-      const elevation=(n%9)/9*Math.PI-Math.PI/2;
-      const dir=new THREE.Vector3(Math.cos(a)*Math.cos(elevation),
-        Math.sin(elevation),Math.sin(a)*Math.cos(elevation));
-      const startRadius=style==='blackhole'?10+Math.random()*8:2;
-      const shard=new THREE.Mesh(
-        style==='pixel'?new THREE.BoxGeometry(0.7,0.7,0.7):
-          new THREE.TetrahedronGeometry(0.5+Math.random()*0.35),
-        new THREE.MeshBasicMaterial({color:n%3?baseColour:data.accent,
-          transparent:true,opacity:0.95,depthWrite:false,
-          blending:THREE.AdditiveBlending})
-      );
-      shard.position.copy(dir).multiplyScalar(startRadius);
-      group.add(shard);
-      const v=dir.clone().multiplyScalar(style==='blackhole'?-20:14+Math.random()*17);
-      v.y+=style==='supernova'?6:3;
-      shards.push({mesh:shard,velocity:v,spin:1+(n%7)});
-    }
-  }
-  const light=new THREE.PointLight(baseColour,7,145);
-  group.add(light);
-  activeGoalEffects.push({
-    group,core,rings,shards,light,style:data.style,
-    age:0,startedAt:performance.now(),
-    duration:style==='blackhole'?1.7:style==='supernova'?2.0:1.45,maxLight:7
-  });
-  const rgb=new THREE.Color(baseColour),alt=new THREE.Color(data.accent);
-  const count=Math.floor(data.n*(graphicsQuality==='low'?0.42:1));
-  for(let i=0;i<count;i++){
-    const a=Math.random()*2*Math.PI,e=(Math.random()-0.5)*Math.PI;
-    const ux=Math.cos(a)*Math.cos(e),uy=Math.sin(e),uz=Math.sin(a)*Math.cos(e);
-    const speed=style==='blackhole'?(-17-Math.random()*12):
-      style==='supernova'?(26+Math.random()*31):(13+Math.random()*31);
-    const radius=style==='blackhole'?14:0.5;
-    const colour=i%4===0?alt:rgb;
-    emit(cx+ux*radius,cy+uy*radius,cz+uz*radius,
-      ux*speed,uy*speed+(style==='fire'?13:0),uz*speed,
-      0.65+Math.random()*0.95,colour.r,colour.g,colour.b);
-  }
-  if(!preview)camShakeTime=cameraSettings.shake?0.65:0;
-  // The preview button and normal goals both use the selected animation.
   if(sfx && sfx.init){
     if(preview)sfx.init();
-    [196,392,587].forEach((frequency,index)=>
-      setTimeout(()=>sfx.tone(frequency+(style==='supernova'?100:0),
-        0.15,'sine',0.10),index*75));
+    const notes=style==='fire'?[98,147,196]:style==='blackhole'?[82,65,49]:[196,392,587];
+    notes.forEach((frequency,index)=>setTimeout(()=>sfx.tone(frequency,.22,'sine',.10),index*100));
   }
 }
+
 
 // Transfer momentum from the curved ramp into VERTICAL wall rolling. Without
 // this the ball hits a flat invisible barrier at the ramp lip and rebounds.
@@ -3798,7 +3719,7 @@ function goal(team) {
   if (assistIndex >= 0 && assistIndex !== scorerIndex && cars[assistIndex].team === team && playerStats[assistIndex]) playerStats[assistIndex].assists++;
   if (scorerIndex >= 0 && playerStats[scorerIndex]) playerStats[scorerIndex].shotsOnGoal++;
   state = 'goal';
-  cd = 2.5; // let the scorer message and goal explosion play before the replay
+  cd = GOAL_EFFECT_DATA[goalExplosionStyle]?.duration || 4.3; // let the full 3D celebration play
   // Keep ten seconds of live gameplay plus the frame in which the goal was scored.
   saveReplayFrame();
   replayFrames = replayHistory.slice(-301);
@@ -3826,12 +3747,7 @@ function goal(team) {
   goalExplosion(team);
   cheerMiniCrowd(team);
 
-  // legacy confetti particles (complementary)
-  const cs = team ? [1, 0.54, 0.12] : [0.18, 0.72, 1];
-  for (let i = 0; i < 180; i++) {
-    const a = Math.random() * 6.28, e = Math.random() * 1.2, s = 8 + Math.random() * 22, k = i % 3 ? cs : [1, 0.85, 0.3];
-    emit(ball.x, ball.y, ball.z, Math.cos(a) * Math.cos(e) * s, Math.sin(e) * s + 6, Math.sin(a) * Math.cos(e) * s, 1.8, k[0], k[1], k[2]);
-  }
+  // The selected 3D celebration owns its particles; no generic burst obscures it.
   [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => sfx.tone(f, 0.35, 'triangle', 0.2), i * 120));
 }
 function update(dt) {
@@ -4110,6 +4026,9 @@ function updateCam(dt, carIndex = 0, targetCamera = camera, camState = cam) {
   targetCamera.updateProjectionMatrix();
 }
 function render(dt) {
+  document.body.classList.toggle('in-menu',state==='menu');
+  document.body.classList.toggle('goal-celebration',state==='goal');
+  document.body.classList.toggle('local-two-enabled',localTwoPlayer);
   if (state === 'play' && !trainingMode) {
     // Sample gameplay at a fixed 30fps instead of one frame per render.
     // A 301-frame buffer now represents approximately ten seconds.
@@ -4163,21 +4082,30 @@ function render(dt) {
   document.body.classList.toggle('split-screen', splitActive);
   // During a replay, follow the player who scored instead of always following P1.
   if (state === 'menu') {
-    // Actual selected 3D car in the arena, not a black/empty garage backdrop.
-    const preview = cars[0];
-    cars.forEach(c => { c.mesh.root.visible = false; });
-    if (preview) {
-      preview.mesh.root.visible = true;
-      preview.mesh.root.position.set(28, 0.55, 0);
-      preview.mesh.root.rotation.set(0, Math.PI * 0.63 + Math.sin(performance.now() * 0.00045) * 0.2, 0);
-      preview.mesh.flame.visible = false;
+    const preview=cars[0];
+    const showingGoal=performance.now()<goalPreviewUntil;
+    document.body.classList.toggle('goal-preview',showingGoal);
+    cars.forEach(c=>{c.mesh.root.visible=false;});
+    ballMesh.visible=false;
+    if(!showingGoal)document.body.classList.remove('preview-fullscreen');
+    const shift=document.body.classList.contains('preview-fullscreen')?0:innerWidth>700?.19:showingGoal?.22:0;
+    camera.setViewOffset(innerWidth,innerHeight,-innerWidth*shift,0,innerWidth,innerHeight);
+    if(showingGoal){
+      const previewDistance=Math.max(34,18/(Math.tan(31*Math.PI/180)*(innerWidth/innerHeight)));
+      camera.position.set(1.5,10,HL-previewDistance);camera.lookAt(0,8,HL-1);camera.fov=62;
+    }else if(lobbyArenaTour){
+      const orbit=performance.now()*.000075;
+      camera.position.set(Math.sin(orbit)*153,67,Math.cos(orbit)*177);camera.lookAt(0,7,0);camera.fov=65;
+    }else{
+      if(preview){
+        preview.mesh.root.visible=true;preview.mesh.root.position.set(28,.55,0);
+        preview.mesh.root.rotation.set(0,Math.PI*.64+Math.sin(performance.now()*.0003)*.3,0);preview.mesh.flame.visible=false;
+      }
+      camera.position.set(36,3.4,10);camera.lookAt(28,1,0);camera.fov=48;
     }
-    ballMesh.visible = true;
-    ballMesh.position.set(36, BR + 0.35, -12);
-    camera.position.set(47, 8, 22);
-    camera.lookAt(27, 1.5, 0);
-    camera.fov = 64; camera.updateProjectionMatrix();
+    camera.updateProjectionMatrix();
   } else if (state === 'over') {
+    camera.clearViewOffset();
     // Hold a close, centred camera on the straight winning lineup.
     const winTeam = score[0] === score[1] ? null : score[1] > score[0];
     cars.forEach(c => { c.mesh.root.visible = winTeam !== null && !!c.team === winTeam && c.demoTimer <= 0; });
@@ -4185,7 +4113,16 @@ function render(dt) {
     camera.position.set(0, 6.5, winTeam ? -24 : 24);
     camera.lookAt(0, 1.15, winTeam ? -15 : 15);
     camera.fov = 48; camera.updateProjectionMatrix();
+  } else if (state === 'goal' && goalCameraView) {
+    // A bot or long shot can score far from the player's chase camera.
+    // Give the complete 3D celebration a clear three-quarter goal view.
+    camera.clearViewOffset();
+    cars.forEach(c=>{c.mesh.root.visible=c.demoTimer<=0;});ballMesh.visible=false;
+    const age=(performance.now()-goalCameraView.startedAt)/1000;
+    camera.position.set(goalCameraView.x+12+Math.sin(age*.5)*3,11,goalCameraView.end*(HL-34));
+    camera.lookAt(goalCameraView.x,goalCameraView.y+1,goalCameraView.z);camera.fov=68;camera.updateProjectionMatrix();
   } else {
+    camera.clearViewOffset();
     cars.forEach(c => { c.mesh.root.visible = c.demoTimer <= 0; }); ballMesh.visible = true;
     updateCam(dt, state === 'replay' ? replayCameraCarIndex : 0);
     if (splitActive) updateCam(dt, state === 'replay' ? replayCameraCarIndex : mode, camera2, cam2);
@@ -4207,7 +4144,7 @@ function render(dt) {
   }
   $('bt').textContent = trainingMode ? '∞' : Math.round(b);
   $('bf').style.width = '84%';
-  $('bf').style.background = 'conic-gradient(' + (b > 66 ? '#ffd35a' : '#37f2c0') +
+  $('bf').style.background = 'conic-gradient(' + (b <= 20 ? '#ff7547' : '#ffba52') +
     ' ' + (b * 3.6) + 'deg, rgba(12,29,59,.65) ' + (b * 3.6) + 'deg)';
   const p2 = cars[mode];
   const bf2 = $('bf2'), bt2 = $('bt2');
@@ -4242,6 +4179,8 @@ window.rocketArena = {
   get pads() { return pads; },
   get ballFeel() { return PHYSICS_TUNING.BALL_FEEL_MODE; },
   get goalEffectCount() { return activeGoalEffects.length; },
+  get goalEffects() { return activeGoalEffects.map(f=>({style:f.style,age:f.age,duration:f.duration,signature:[...f.signature],group:f.group})); },
+  get renderStats() { return {calls:renderer.info.render.calls,triangles:renderer.info.render.triangles,geometries:renderer.info.memory.geometries,textures:renderer.info.memory.textures}; },
   get ballShadow() { return ballGroundShadow; },
   get ballTrail() { return ballTrail; },
   get miniCrowd() { return miniCrowd; },
@@ -4256,7 +4195,9 @@ window.rocketArena = {
 };
 let last = performance.now();
 (function loop(now) {
-  const wallDt = Math.min(0.25, Math.max(0, (now - last) / 1000)); last = now;
+  // Match clocks follow elapsed time even when software rendering is slow.
+  // Keep the physics step bounded independently to avoid unstable collisions.
+  const wallDt = Math.max(0, (now - last) / 1000); last = now;
   const frameDt = Math.min(0.09, wallDt);
   pollControllers();
   // Physics remains deterministic at 120Hz. The clock, countdown, goal intro,

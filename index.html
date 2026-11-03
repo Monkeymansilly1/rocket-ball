@@ -5,8 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Rocket Arena Reloaded | Rocket Ball</title>
 <link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="lobby.css">
 </head>
-<body>
+<body class="in-menu">
 <canvas id="c"></canvas>
   <div id="referenceToolbar" aria-label="Game controls">
     <button id="garageToggle" type="button" title="Open garage">🚘 <span>GARAGE</span></button>
@@ -41,7 +42,7 @@
     </div>
   </div>
 <div id="hud">
-  <div id="score"><b id="s0">0</b><span id="clock">2:00</span><b id="s1">0</b></div>
+  <div id="score"><b id="s0">0</b><span id="clock">5:00</span><b id="s1">0</b></div>
   <div id="player">PLAYER</div>
   <div id="speedHud" aria-label="Current car speed"><b id="speedValue">0</b><small>MPH</small></div>
   <div id="boost"><i id="bf"></i><span id="bt">34</span></div>
@@ -60,43 +61,51 @@
       <button id="victoryPlayAgain" type="button">BACK TO GARAGE</button>
     </div>
   </section>
-  <div id="menu">
-    <div id="menuCarShowcase" aria-hidden="true"><div class="showcase-platform"></div><div class="showcase-car"><div class="car-spoiler"></div><div class="car-roof"></div><div class="car-window"></div><div class="car-body"></div><div class="car-nose"></div><div class="car-wheel wheel-a"></div><div class="car-wheel wheel-b"></div><div class="car-glow"></div></div><div class="showcase-label">YOUR RIDE</div></div>
-    <div class="reloaded-banner" aria-label="New game update">
-      <span class="reloaded-badge">RELOADED · NOV 2026</span>
-      <span class="reloaded-copy">LIGHTER BALL FEEL <span aria-hidden="true">✦</span> NEW 3D GOAL EXPLOSIONS <span aria-hidden="true">✦</span> REBUILT GARAGE</span>
-    </div>
-    <h1 id="mt">ROCKET ARENA 3D</h1>
-    <div class="quickmodes" aria-label="Quick modes">
-      <button id="quickCasual" type="button" data-quick="casual"><b>CASUAL</b><small>1v1 · EASY</small></button>
-      <button id="quickCompetitive" type="button" data-quick="competitive"><b>COMPETITIVE</b><small>2v2 · HARD</small></button>
-      <button id="quickFreestyle" type="button" data-quick="freestyle"><b>FREESTYLE</b><small>WALL AIR DRIBBLES</small></button>
-    </div>
+    <div id="menu" data-panel="play" style="display:grid">
+    <header class="lobby-header"><div class="lobby-brand"><span class="brand-mark" aria-hidden="true">R</span><div><span class="brand-eyebrow">CAR SOCCER · REBUILT</span><h1 id="mt">ROCKET ARENA</h1></div></div><span class="lobby-season">CHAMPIONSHIP SERIES <b>01</b></span></header>
+    <nav class="lobby-nav" aria-label="Garage sections">
+      <button type="button" data-panel="play" class="active" aria-pressed="true"><span>01</span> PLAY</button>
+      <button type="button" data-panel="garage" aria-pressed="false"><span>02</span> GARAGE</button>
+      <button type="button" data-panel="effects" aria-pressed="false"><span>03</span> GOAL FX</button>
+      <button type="button" data-panel="arena" aria-pressed="false"><span>04</span> ARENA</button>
+      <button type="button" id="lobbySettings"><span>⚙</span> SETTINGS</button>
+      <div class="nav-note">BUILT FOR<br><b>THE NEXT SHOT.</b></div>
+    </nav>
+    <main class="lobby-panels">
+      <section class="lobby-panel" id="panel-play" aria-label="Play modes">
+        <span class="panel-eyebrow">FIND YOUR GAME</span><h2>HIT THE PITCH.</h2><p class="panel-description">Five minutes. Two teams. One more goal.</p>
 
-    <div class="opts">
+        <div class="quickmodes" aria-label="Quick modes">
+          <button id="quickCasual" type="button" data-quick="casual"><b>CASUAL</b><small>1v1 · EASY BOTS</small><span aria-hidden="true">&gt;</span></button>
+          <button id="quickCompetitive" type="button" data-quick="competitive"><b>COMPETITIVE</b><small>2v2 · HARD BOTS</small><span aria-hidden="true">&gt;</span></button>
+          <button id="quickFreestyle" type="button" data-quick="freestyle"><b>FREE PLAY</b><small>WALL AIR DRIBBLES</small><span aria-hidden="true">&gt;</span></button>
+        </div>
+        <details class="custom-match"><summary>CUSTOM MATCH OPTIONS</summary><div class="opts"><span>Players</span><label class="toggle-label"><input id="localTwo" type="checkbox"> Local 2-player</label></div><div class="opts"><span>Match</span><button data-mode="1">1v1</button><button data-mode="2">2v2</button><button data-mode="3">3v3</button></div><div class="opts"><span>Bots</span><button data-diff="0">Easy</button><button data-diff="1">Medium</button><button data-diff="2">Hard</button></div>
+</details>
+        <div class="start-actions"><button id="playBtn" class="play-btn" type="button">PLAY MATCH <span>→</span></button><button id="freePlayBtn" class="free-play-btn" type="button">TRAINING</button></div>
+        <p class="go" id="go">Choose your setup, then press PLAY</p>
+      </section>
+      <section class="lobby-panel" id="panel-garage" aria-label="Car customisation" hidden>
+        <span class="panel-eyebrow">MAKE IT YOURS</span><h2>YOUR GARAGE.</h2><p class="panel-description">Pick your body, paint and player identity.</p>
+<div class="opts">
       <span>Player 1</span>
       <input id="name" type="text" placeholder="Your name" maxlength="12" value="PLAYER">
-    </div>
-    <div class="opts profile-row">
+    </div><div class="opts profile-row">
       <span>P1 Picture</span>
       <img id="profilePreview1" class="profile-preview" alt="Player 1 profile picture" hidden>
       <label class="profile-pick" for="profile1">Choose image</label>
       <input id="profile1" class="profile-file" type="file" accept="image/*">
       <button id="clearProfile1" class="profile-clear" type="button">Clear</button>
-    </div>
-    <div class="opts">
+    </div><div class="opts">
       <span>Player 2</span>
       <input id="name2" type="text" placeholder="Player 2 name" maxlength="12" value="PLAYER 2">
-    </div>
-    <div class="opts profile-row">
+    </div><div class="opts profile-row">
       <span>P2 Picture</span>
       <img id="profilePreview2" class="profile-preview" alt="Player 2 profile picture" hidden>
       <label class="profile-pick" for="profile2">Choose image</label>
       <input id="profile2" class="profile-file" type="file" accept="image/*">
       <button id="clearProfile2" class="profile-clear" type="button">Clear</button>
-    </div>
-
-    <div class="opts car-opts"><span>P1 Car</span>
+    </div><div class="opts car-opts"><span>P1 Car</span>
       <button data-car="octane" class="carbtn on">Octane</button>
       <button data-car="dominus" class="carbtn">Dominus</button>
       <button data-car="breakout" class="carbtn">Breakout</button>
@@ -104,8 +113,7 @@
       <button data-car="striker" class="carbtn">Striker</button>
       <button data-car="raptor" class="carbtn">Raptor</button>
       <button data-car="hyperion" class="carbtn">Hyperion</button>
-    </div>
-    <div class="opts car-opts car-opts-p2"><span>P2 Car</span>
+    </div><div class="opts car-opts car-opts-p2"><span>P2 Car</span>
       <button data-car2="octane" class="carbtn2">Octane</button>
       <button data-car2="dominus" class="carbtn2 on">Dominus</button>
       <button data-car2="breakout" class="carbtn2">Breakout</button>
@@ -113,9 +121,12 @@
       <button data-car2="striker" class="carbtn2">Striker</button>
       <button data-car2="raptor" class="carbtn2">Raptor</button>
       <button data-car2="hyperion" class="carbtn2">Hyperion</button>
-    </div>
-
-    <div class="opts explosion-select-row">
+    </div><div class="opts"><span>Garage</span><label class="paint-label" for="paint">P1 Paint</label><input id="paint" type="color" value="#2fb8ff" aria-label="Player 1 car paint colour"><label class="paint-label" for="paint2">P2 Paint</label><input id="paint2" type="color" value="#ff8a1f" aria-label="Player 2 car paint colour"></div>
+        <p class="model-credit"><span id="modelLoadStatus" role="status" aria-live="polite">Loading detailed Octane model…</span><small>Octane by Jako · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a></small></p>
+      </section>
+      <section class="lobby-panel" id="panel-effects" aria-label="Goal explosion garage" hidden>
+        <span class="panel-eyebrow">MAKE AN ENTRANCE</span><h2>LEAVE A MARK.</h2><p class="panel-description">Eight different 3D celebrations. Real geometry. Real movement.</p>
+<div class="opts explosion-select-row">
       <span>Explosion</span>
       <select id="explosion" aria-label="Choose goal explosion">
         <option value="classic">Classic Blast</option>
@@ -130,30 +141,22 @@
       <button id="explosionPreview" class="preview-explosion" type="button" aria-label="Preview selected goal explosion">✦ PREVIEW</button>
       <small id="explosionPreviewStatus" role="status" aria-live="polite">Eight animated explosions</small>
     </div>
-    <div class="opts ball-feel-row">
-      <span>Ball Feel</span>
-      <select id="ballFeel" aria-label="Choose ball feel">
-        <option value="responsive" selected>Responsive (new default)</option>
-        <option value="classic">Classic physics</option>
-        <option value="airy">Airy freestyle</option>
-      </select>
-      <small id="ballFeelHint" role="status" aria-live="polite">Sharper touches, brighter bounces, easier ball lifts.</small>
-    </div>
-    <div class="opts"><span>Garage</span><label class="paint-label" for="paint">P1 Paint</label><input id="paint" type="color" value="#2fb8ff" aria-label="Player 1 car paint colour"><label class="paint-label" for="paint2">P2 Paint</label><input id="paint2" type="color" value="#ff8a1f" aria-label="Player 2 car paint colour"><label for="stadium">Stadium</label><select id="stadium"><option value="sunset">Lakeside Day</option><option value="neon">Lakeside Night</option><option value="ice">Alpine Winter</option><option value="desert">Golden Sunset</option></select></div>
-    <div class="opts"><span>Players</span><label class="toggle-label"><input id="localTwo" type="checkbox"> Local 2-player</label></div>
-    <div class="opts"><span>Match</span><button data-mode="1">1v1</button><button data-mode="2">2v2</button><button data-mode="3">3v3</button></div>
-    <div class="opts"><span>Bots</span><button data-diff="0">Easy</button><button data-diff="1">Medium</button><button data-diff="2">Hard</button></div>
-
-    <p>Keyboard defaults — P1: <b>W A S D</b>, jump <b>Space</b>, boost <b>Left Shift</b>, drift <b>E</b>, air roll <b>Q/E</b>. Change any binding above.</p>
-    <p>Controller defaults — steer with the <b>left stick</b>, accelerate <b>RT/R2</b>, reverse <b>LT/L2</b>, jump <b>A/✕</b>, boost <b>X/□</b>, drift/air roll <b>LB/L1</b>, ball cam <b>Y/△</b>, <b>right stick</b> to look around, and pause <b>Options/Start</b>. Enable Local 2-player to use a second controller. Keyboard camera <b>C</b> · Mute <b>M</b> · Pause <b>P</b></p>
-    <p><b>Controller aerials:</b> Pull the left stick <b>down</b> to lift the nose, push <b>up</b> to point down. Move it left/right to yaw, or hold <b>LB/L1 + left stick</b> to air roll. Jump again while moving the stick to dodge, or keep it centred for a neutral double jump. RT/R2 does not control aerial pitch.</p>
-    <div class="start-actions">
-      <button id="playBtn" class="play-btn" type="button">▶ PLAY MATCH</button>
-      <button id="freePlayBtn" class="free-play-btn" type="button">⚽ FREE PLAY</button>
-    </div>
-    <p class="go" id="go">Choose your setup, then press PLAY</p>
-    <p class="model-credit"><span id="modelLoadStatus" role="status" aria-live="polite">Loading detailed Octane model…</span>
-    <small>3D Octane model based on <a href="https://sketchfab.com/3d-models/octane-rocket-league-car-9910f0a5d158425bbc7deb60c7a81f69" target="_blank" rel="noopener">Octane by Jako</a>, licensed <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>.</small></p>
+        <div id="effectCards" class="effect-cards" aria-label="Goal explosion collection"></div>
+        <p id="effectDescription" class="effect-description">An expanding energy dome and a crown of flying shards.</p>
+        <button id="fullGoalPreview" type="button" class="secondary-action">FULL VIEW</button>
+        <button id="stopGoalPreview" type="button" class="secondary-action">BACK TO CAR VIEW</button>
+      </section>
+      <section class="lobby-panel" id="panel-arena" aria-label="Stadium selection" hidden>
+        <span class="panel-eyebrow">HOME FIELD ADVANTAGE</span><h2>THE ARENA.</h2><p class="panel-description">An uninterrupted pitch. Rounded walls. A clear view of every shot.</p>
+        <div class="arena-preview-card"><span>LAKESIDE</span><strong>CHAMPIONSHIP<br>STADIUM</strong><small>CURVED WALLS · OPEN GOALS · LIVE CROWD</small></div>
+        <div class="opts arena-choice"><label for="stadium">Stadium</label><select id="stadium"><option value="championship">Championship Dusk</option><option value="sunset">Lakeside Day</option><option value="neon">Lakeside Night</option><option value="ice">Alpine Winter</option><option value="desert">Golden Sunset</option></select></div>
+        <button id="arenaTour" type="button" class="secondary-action">TOUR THE STADIUM ↗</button>
+        <p class="panel-description">Change the time of day. The playable surface and boundaries stay consistent.</p>
+      </section>
+    </main>
+    <aside class="lobby-preview-label"><span id="previewKicker">YOUR NEXT MATCH</span><strong id="previewTitle">LAKESIDE CHAMPIONSHIP</strong><span id="previewHint">Choose a mode to get started</span></aside>
+    <button id="returnGoalPreview" type="button" class="preview-return">← BACK TO GOAL FX</button>
+    <footer class="lobby-footer"><span><kbd>W A S D</kbd> DRIVE <i>·</i> <kbd>SPACE</kbd> JUMP <i>·</i> <kbd>SHIFT</kbd> BOOST</span><span>CONTROLLER READY <b>●</b></span></footer>
   </div>
     <details id="controlsSettings" class="controls-settings">
       <summary>⚙ SETTINGS</summary>
@@ -265,6 +268,8 @@
 <!-- Bundled Three.js r149 (MIT licence in lib/THREE-LICENSE.txt). -->
 <script src="lib/three.min.js"></script>
 <script src="lib/GLTFLoader.legacy.js"></script>
+<script src="lib/scene-utils.js"></script>
+<script src="lib/goal-effects.js"></script>
 <script src="game.js"></script>
 </body>
 </html>

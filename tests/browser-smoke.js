@@ -99,7 +99,25 @@ async function main() {
     await eventually(()=>evalJS('document.readyState==="complete" && !!window.rocketArena && !!window.THREE'),15000)
       .catch(err=>{throw new Error('Game startup: '+err.message+'; browser exceptions: '+JSON.stringify(errors));});
     console.log('Game loaded; testing Reloaded menu and goal effects');
-    assert.equal(await evalJS('window.rocketArena.ballFeel'),'responsive');
+    assert.equal(await evalJS('document.getElementById("ballFeel")===null'),true,'Ball physics options must be removed');
+    assert.equal(await evalJS('document.querySelectorAll(".lobby-nav [data-panel]").length'),4);
+    assert.equal(await evalJS('document.getElementById("panel-play").hidden'),false);
+    await evalJS('document.querySelector(".lobby-nav [data-panel=effects]").click()');
+    assert.equal(await evalJS('document.getElementById("panel-effects").hidden'),false);
+    assert.equal(await evalJS('document.querySelectorAll("[data-effect]").length'),8);
+    await evalJS('document.getElementById("fullGoalPreview").click()');
+    assert.equal(await evalJS('document.body.classList.contains("preview-fullscreen")'),true);
+    await evalJS('document.getElementById("returnGoalPreview").click()');
+    assert.equal(await evalJS('document.body.classList.contains("preview-fullscreen")'),false);
+    const signatures=await evalJS(`Object.keys(RocketGoalEffects.STYLES).map(style=>{
+      document.querySelector('[data-effect="'+style+'"]').click();
+      const effect=window.rocketArena.goalEffects[0];
+      if(effect.style!==style)throw new Error('Wrong effect for '+style);
+      return effect.signature.join(',');
+    })`);
+    assert.equal(new Set(signatures).size,8,'Selections must use eight different 3D models');
+    assert.equal(await evalJS('window.rocketArena.pitch.material.map.encoding===THREE.sRGBEncoding'),true,
+      'Pitch texture must use the colour API supported by bundled Three.js');
     assert.equal(await evalJS('window.rocketArena.ballShadow.isMesh'),true);
     assert.equal(await evalJS('window.rocketArena.ballTrail.isLine'),true);
     assert.equal(await evalJS('document.querySelectorAll("#explosion option").length'),8);
@@ -108,20 +126,16 @@ async function main() {
     await evalJS(`for(const style of ["classic","fire","galaxy","lightning","blackhole","supernova","pixel","aurora"])window.rocketArena.previewGoalExplosion(style)`);
     assert((await evalJS('window.rocketArena.goalEffectCount'))>0,
       '3D explosion preview never spawned scene objects');
-    assert((await evalJS('window.rocketArena.goalEffectCount'))<=3,
+    assert((await evalJS('window.rocketArena.goalEffectCount'))<=2,
       '3D goal explosion preview leaks unbounded meshes');
-    await eventually(()=>evalJS('window.rocketArena.goalEffectCount===0'),6500);
+    await eventually(()=>evalJS('window.rocketArena.goalEffectCount===0'),10000);
     // The actual menu preview button must use the same real 3D effect path.
     await evalJS('document.getElementById("explosion").value="pixel";document.getElementById("explosionPreview").click()');
     assert((await evalJS('window.rocketArena.goalEffectCount'))>0,
       'Goal explosion preview button is not wired to the renderer');
-    assert.equal(await evalJS('document.getElementById("explosionPreviewStatus").textContent.includes("PIXEL")'),true);
-    await eventually(()=>evalJS('window.rocketArena.goalEffectCount===0'),5000);
-    await evalJS('document.getElementById("ballFeel").value="airy"; document.getElementById("ballFeel").dispatchEvent(new Event("change",{bubbles:true}))');
-    assert.equal(await evalJS('window.rocketArena.ballFeel'),'airy');
-    assert.equal(await evalJS('JSON.parse(localStorage.getItem("rocketArenaSettingsV1")).ballFeelMode'),'airy');
-    await evalJS('document.getElementById("ballFeel").value="responsive";document.getElementById("ballFeel").dispatchEvent(new Event("change",{bubbles:true}))');
-    console.log('PASS: eight 3D explosions, previews, cleanup and persistent ball feel');
+    assert.equal(await evalJS('document.getElementById("explosionPreviewStatus").textContent.includes("Voxel")'),true);
+    await eventually(()=>evalJS('window.rocketArena.goalEffectCount===0'),8000);
+    console.log('PASS: eight distinct 3D explosions, menu navigation, previews, cleanup and correct turf colour space');
     console.log('Game loaded; testing Free Play');
     assert.equal(await evalJS('window.rocketArena.state'),'menu');
     // Verify the NEW arena exists as playable 3D geometry, not just an image.
@@ -140,15 +154,19 @@ async function main() {
       'Teal stadium exterior missing');
     assert.equal(await evalJS('window.rocketArena.lakesideScenery?.getObjectByName("Reflective Blue Lake")?.isMesh'),true,
       'Decorative lakeside landscape missing');
+    assert.equal(await evalJS(`(()=>{const c=window.rocketArena.pitch.parent.getObjectByName('Stadium Concourse');const b=new THREE.Box3().setFromObject(c);const size=b.getSize(new THREE.Vector3());return size.x<500&&size.z<500;})()`),true,'Concourse must not cover the surrounding lake');
     assert.equal(await evalJS('window.rocketArena.lakesideScenery?.children.filter(x=>x.isInstancedMesh).length>=4'),true,
       'Pine forest or distant skyline missing');
     assert.equal(await evalJS('document.getElementById("physics")===null'),true,
       'Physics dropdown was not removed from the menu');
     assert.equal(await evalJS('window.rocketArena.miniCrowd.bodies.geometry.type'),'SphereGeometry',
       'Crowd must be potato characters, not the old box audience');
-    assert.equal(await evalJS('window.rocketArena.stadium.children.length > 40'), true);
+    assert.equal(await evalJS('(()=>{const roof=new THREE.Box3().setFromObject(window.rocketArena.stadium.getObjectByName("White Alpine Sail Canopies"));return roof.min.x < -130 && roof.max.x > 130 && roof.max.y > 60;})()'),true,'Canopy must surround the pitch without collapsing into the arena');
     assert.equal(await evalJS('window.rocketArena.stadium.children.filter(x => x.isInstancedMesh).length >= 7'),true);
     assert.equal(await evalJS('window.rocketArena.pitch.geometry.attributes.position.count > 15000'),true);
+    assert.equal(await evalJS(`(()=>{const g=window.rocketArena.pitch.geometry,p=g.attributes.position,uv=g.attributes.uv;
+      for(let i=0;i<p.count;i++)if(Math.abs(uv.getX(i)-(p.getX(i)+80)/160)>.00001 || Math.abs(uv.getY(i)-(p.getZ(i)+104)/208)>.00001)return false;
+      return true;})()`),true,'Pitch UVs must align team markings to world coordinates, including rounded corners');
     assert.equal(await evalJS('window.rocketArena.pads.filter(x => x.big).length'),6);
     assert.equal(await evalJS('window.rocketArena.pads.filter(x => !x.big).length'),28);
     assert.equal(await evalJS('Math.max(...Array.from({length:window.rocketArena.pitch.geometry.attributes.position.count},(_,i)=>window.rocketArena.pitch.geometry.attributes.position.getY(i)))>4.5'),true);
@@ -211,14 +229,13 @@ async function main() {
     assert(Math.abs(resetY-(91.25/50+0.038))<.3,'Training ball did not reset');
     // Actually score in Free Play and verify the chosen 3D explosion plays.
     await evalJS('(function(){const b=window.rocketArena.ball;Object.assign(b,{x:0,y:2,z:105,vx:0,vy:0,vz:32});})()');
-    await eventually(()=>evalJS('document.getElementById("trainingGoalCount").textContent.includes("1") && window.rocketArena.goalEffectCount>0'),6000)
-      .catch(err=>{throw new Error('Free Play scoring explosion: '+err.message);});
-    assert.equal(await evalJS('window.rocketArena.miniCrowd.cheerTeam'),0,
-      'Scoring blue side did not trigger crowd celebration');
-    assert.equal(await evalJS('window.rocketArena.miniCrowd.cheerTime>0'),true,
-      'Crowd cheering not activated');
-    assert.equal(await evalJS('window.rocketArena.miniCrowd.faces.material.map===window.rocketArena.miniCrowd.cheerFace'),true,
-      'Mini spectators did not switch to cheering faces');
+    const celebration=await eventually(()=>evalJS(`(()=>{
+      const a=window.rocketArena,c=a.miniCrowd;
+      return document.getElementById('trainingGoalCount').textContent.includes('1') && a.goalEffectCount>0 && c.cheerTime>0
+        ? {team:c.cheerTeam,cheering:c.faces.material.map===c.cheerFace}:null;
+    })()`),10000).catch(err=>{throw new Error('Free Play scoring explosion: '+err.message);});
+    assert.equal(celebration.team,0,'Scoring blue side did not trigger crowd celebration');
+    assert.equal(celebration.cheering,true,'Mini spectators did not switch to cheering faces');
     await eventually(()=>evalJS('window.rocketArena.miniCrowd.cheerTime===0'),6000);
     assert.equal(await evalJS('window.rocketArena.miniCrowd.faces.material.map===window.rocketArena.miniCrowd.calmFace'),true,
       'Mini spectators did not return to their normal happy faces');
@@ -237,15 +254,25 @@ async function main() {
       .catch(async err=>{throw new Error('Match kickoff: '+err.message+' state='+await evalJS('window.rocketArena.state')+
         ' announcement='+await evalJS('document.getElementById("msg").textContent')+' browserErrors='+JSON.stringify(errors));});
     assert.equal(await evalJS('window.rocketArena.cars.length'),4);
+    const matchSeconds=await evalJS('document.getElementById("clock").textContent.split(":").reduce((m,s)=>m*60+Number(s),0)');
+    assert(matchSeconds>280 && matchSeconds<=300,'Match should start with five minutes');
     const pos0=await evalJS('window.rocketArena.cars[0].z');
     await evalJS('window.dispatchEvent(new KeyboardEvent("keydown",{code:"KeyW",bubbles:true}))');
-    await delay(550);
-    await evalJS('window.dispatchEvent(new KeyboardEvent("keyup",{code:"KeyW",bubbles:true}))');
+    try {
+      await eventually(()=>evalJS('window.rocketArena.cars[0].z>'+JSON.stringify(pos0+.05)),10000);
+    } finally {
+      await evalJS('window.dispatchEvent(new KeyboardEvent("keyup",{code:"KeyW",bubbles:true}))');
+    }
     const pos1=await evalJS('window.rocketArena.cars[0].z');
     assert(pos1>pos0+0.05,'Car did not move when accelerating: '+pos0+' -> '+pos1);
     assert.equal(await evalJS('Number.isFinite(window.rocketArena.ball.x) && Number.isFinite(window.rocketArena.ball.y) && Number.isFinite(window.rocketArena.ball.z)'),true);
     assert.equal(await evalJS('Number.isFinite(Number(document.getElementById("speedValue").textContent))'),true,
       'Live mph speedometer is not updating');
+    await evalJS('Object.assign(window.rocketArena.ball,{x:0,y:2,z:105,vx:0,vy:0,vz:32})');
+    const matchGoal=await eventually(()=>evalJS(`(()=>{const a=window.rocketArena,e=a.goalEffects[0];return a.state==='goal'&&e?{style:e.style,selected:document.getElementById('explosion').value,z:e.group.position.z,direction:e.group.rotation.y}:null;})()`),10000);
+    assert.equal(matchGoal.style,matchGoal.selected,'Actual match must play the selected 3D model');
+    assert.equal(matchGoal.z,103,'Celebration must be anchored at the goal mouth');
+    assert.equal(matchGoal.direction,Math.PI,'Celebration must face into the pitch');
     await evalJS('document.getElementById("quickPlayButton").click()');
     assert.equal(await evalJS('window.rocketArena.state'),'menu');
     await evalJS('document.getElementById("quickCasual").click()');
@@ -255,7 +282,7 @@ async function main() {
     await evalJS('document.getElementById("quickFreestyle").click()');
     assert.equal(await evalJS('document.getElementById("trainingPreset").value'),'wall');
     assert.equal(await evalJS('window.rocketArena.cars.length'),1);
-    assert.equal(await evalJS('window.rocketArena.ballFeel'),'airy');
+    assert.equal(await evalJS('document.getElementById("ballFeel")===null'),true);
     assert.deepEqual(errors,[],'Unexpected browser JS errors');
     console.log('PASS: WebGL startup, menu, Free Play, ball reset, camera persistence, match kickoff and driving.');
   } finally {

@@ -1,77 +1,67 @@
-# Rocket Arena Reloaded (Rocket Ball)
+# Rocket Arena (Rocket Ball)
 
-A 3D rocket-car soccer game built with plain JavaScript and [Three.js](https://threejs.org) (r149). No build step, and no 3D model files: the cars, ball, pitch and goals are all made from basic shapes in code.
+A 3D car-soccer game built with JavaScript and bundled Three.js r149. No package installation, build step, accounts or downloaded runtime assets are needed.
 
-## Play locally
-Open `index.html` in a browser. Three.js loads from a CDN. To play offline, save
-[three.min.js (r149)](https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js) as `lib/three.min.js`.
+## Run locally
 
-## Put it on GitHub (and host it free)
-1. Create a repository and upload everything in this folder.
-2. Go to **Settings → Pages**, choose your main branch (root folder), and save.
-3. Your game goes live at `https://<your-username>.github.io/<repo-name>/`.
+From the repository root, run `python3 -m http.server 8000`, then open the served game in your browser. All libraries, textures and the credited Octane model are included in the repository.
 
-## Controls
-| Action | Keys |
+## The rebuilt arena and lobby
+
+The live 3D stadium is the backdrop to four lobby sections: **Play**, **Garage**, **Goal FX** and **Arena**. Play a casual 1v1, competitive 2v2, custom 1v1/2v2/3v3, or Free Play. Custom match options expand when needed. Garage contains car bodies, paint and player identities; player-two customisation appears when local two-player is enabled.
+
+Championship Dusk is the default stadium theme, with Day, Night, Winter and Sunset alternatives. The Arena section includes an orbiting stadium tour. The continuous rounded pitch and collision solver use the same surface function. Texture UVs follow world coordinates, so blue/orange markings stay at the correct goal and do not stretch over the rounded corners. Renderer and generated-texture colour settings use the API supported by the bundled Three.js version. Static stadium geometry is batched to reduce draw calls while preserving named and animated objects.
+
+Ball physics options have been removed. All modes use the same ball response, including Free Play; old saved ball-feel preferences are ignored. Keyboard aerial assistance remains available under Settings → Keyboard aerial handling.
+
+## Moving 3D goal explosions
+
+Select a celebration in **Goal FX** to watch it at the actual goal with a dedicated preview camera. The same model plays when you score, including in Free Play. Each effect has its own geometry and animation:
+
+| Effect | Animation |
 | --- | --- |
-| Throttle / reverse | W / S or ↑ / ↓ |
-| Steer | A / D or ← / → |
-| Jump, press again to flip | Space (hold a direction while pressing for a directional flip) |
-| Boost | Shift |
-| Chase cam / ball cam | C |
-| Mute / unmute sound | M |
-| Pick match size / bot level (menu) | 1 2 3 / 4 5 6, or click the buttons |
-| Start / restart | Enter or click |
+| Shockwave | Expanding dome and flying shard crown |
+| Inferno Dragon | Sculpted dragon, moving jaw, flapping wings and fire breath |
+| Galaxy Rift | Rotating wormhole, spiral arms and orbiting worlds |
+| Thunderstrike | Storm cloud and flickering, branching 3D lightning |
+| Singularity | Black event horizon, accretion disc and inward-spiralling debris |
+| Supernova | Collapsing star, solar spikes and expanding blast shell |
+| Voxel Victory | GOAL letters assemble from cubes, then scatter |
+| Aurora Wings | Flowing ribbon wings and a rising, rotating crystal |
 
-In the air, I/K pitch the nose and A/D turn. Under Settings → Flight control mode, choose Rocket-style Manual to use W/S for aerial pitch, or Assisted for W + Shift upward climbing. Boost always follows the car's nose.
+Effects last roughly 3–5 seconds, remain distinct at every graphics quality, and dispose their geometries and materials after finishing. Rapid previews replace previous previews instead of accumulating GPU resources. Match goal celebrations finish before the replay begins.
 
-## Rules
-- Pick 1v1, 2v2 or 3v3 and Easy, Medium or Hard bots. In team modes you play with bot teammates who take chaser, support and goalie roles.
-- Three-minute match, blue (you) against orange. A tie means sudden-death overtime.
-- You attack the orange goal at the far end. Boost pads refill boost: large pads give 100, small pads give 30.
+## Controls and rules
 
-## Files
-- `index.html`, `style.css`: page and HUD
-- `game.js`: arena, physics, AI, camera (tuning constants are at the top)
+- **Drive:** W/S or arrows; **steer:** A/D; **jump/dodge:** Space; **boost:** Left Shift; **drift:** E; **air roll:** Q/E; **ball camera:** C; **pause:** P; **mute:** M.
+- Assisted aerial mode uses K/I for nose up/down and W + Shift for assisted climb. Manual aerial mode uses W/S for pitch. Controls can be rebound in Settings.
+- Controllers use the left stick to steer/pitch, triggers to drive/reverse, A/✕ to jump, X/□ to boost, LB/L1 for drift/air roll and Y/△ for ball camera. A second controller enables local split screen.
+- Matches last five minutes. A tie goes to sudden-death overtime. Large boost pads refill to 100; small pads add 12. Free Play provides unlimited boost and aerial, wall-dribble, save and kickoff drills.
 
-## Ideas to add
-Wall driving, instant replays, two-player split screen, car models (`.glb` via GLTFLoader), touch controls.
+## Validation
 
-## Physics overhaul (November 2026)
-- Ball contacts now distinguish a **rebound** from true rolling support, with bounded slip, rolling drag and spin aligned to curved ramps.
-- Ramp-to-wall transfers redirect the ball's outward momentum upward without creating extra speed. High wall hits still rebound normally.
-- Car/ball contacts include a small reciprocal sideways impulse for controlled aerial carries rather than sticky nose hits.
-- Wall jumps preserve the original jump direction as the car rotates, allowing players to aim the nose and feather boost independently while airborne.
-- Free Play → **Wall Air Dribble** is the repeatable practice drill. Use Space/A to detach, hold boost in bursts, and adjust pitch/air roll with the left stick and shoulder buttons.
+Run these commands from the repository root:
 
-Run local automated checks with `node tests/physics-smoke.js` and `node tests/wall-physics.test.js`. Browser gameplay is checked by `node tests/browser-smoke.js` when Chrome is installed.
+```sh
+node --check game.js
+node tests/physics-smoke.js
+node tests/wall-physics.test.js
+node tests/ai-regression.test.js
+node tests/match-clock.test.js
+node tests/goal-effects.test.js
+node tests/scene-utils.test.js
+node tests/browser-smoke.js
+```
 
-## Keyboard aerial controls (November 2026)
-W/S are **drive and reverse**, no longer full-time pitch controls. A/D steer and yaw, Space jumps/dodges, Shift boosts, Q/E air-roll, **K points the nose UP**, and **I points it DOWN**. During a jump, **W + Shift** now gently pitches toward a stable upward angle instead of continuously diving. Use K/I to override the assist for precise flight. Jump off the ground first; boost alone does not lift a grounded car.
+The browser suite requires system Chrome/Chromium and Node.js 22 or newer. `CHROME_BIN` can select a different installed Chrome executable. It starts its own local HTTP server and checks WebGL startup, the lobby, explosion selection and cleanup, the real arena geometry, Free Play, scoring, camera settings, kickoff and driving. The effects suite checks all eight animations at three quality levels and verifies resource disposal. The clock suite covers slow-frame timing and pause. CI runs these checks.
 
-## Ground traction and authentic-flight option
-The ground solver now preserves *world-space momentum* through steering and applies side-slip damping as tyre traction. This creates a genuine difference between a grippy turn and low-grip powersliding, instead of moving the entire velocity vector instantly wherever the nose points. Wall and curved-ramp steering use the same model.
+## Files and credits
 
-In **Settings → Keyboard aerial handling**, switch to **Rocket-style manual** for W/S nose pitch (W noses down, S noses up); it deliberately does not auto-level or auto-climb the car, so holding W + boost while airborne can dive just as pushing the stick forward can in Rocket League. **Assisted** retains the previous W + Shift upward flight so keyboard users can fly more easily. The choice is saved locally.
+- `game.js`: gameplay, arena, physics, AI and cameras.
+- `index.html`, `style.css`, `lobby.css`: lobby, settings and match HUD.
+- `lib/goal-effects.js`: original procedural 3D celebrations.
+- `lib/scene-utils.js`: static stadium batching.
+- `assets/octane/`: credited Octane model and textures; see [asset credits](assets/octane/CREDITS.txt).
+- Three.js is distributed under its included [MIT licence](lib/THREE-LICENSE.txt).
 
- 
-## Reloaded upgrade (November 2026)
-
-This build adds a **configurable ball feel** independent of car handling. The new default, **Responsive**, preserves the reference mass and nominal gravity while adding livelier car-ball first contact, slightly brighter floor/ramp bounces, controlled ball lift and less rolling drag. **Classic** restores the original ball dynamics; **Airy** is tuned for aerial practice. The selection saves to the browser and applies to live ball physics as well as AI ball predictions.
-
-The expanded 3D goal explosion garage has eight animated designs: **Classic Blast, Firestorm, Galaxy Rift, Lightning Storm, Black Hole, Supernova, Pixel Party and Aurora Pulse**. Click **Preview** to display the actual 3D goal effect in the garage before choosing it. Effects use short-lived lights, rings, glowing cores, styled particles and (on certain effects) 3D shards. Geometry and material resources are removed when each effect ends; no extra image assets required.
-
-The garage now has three one-click routes: **Casual** (1v1, easy bots), **Competitive** (2v2, hard bots) and **Freestyle** (Free Play with wall-air-dribble drill). A real **MPH speedometer** appears during play, and the garage has updated visual styling. All original match, car, stadium, replay, multiplayer and training functionality is retained.
-
-Tests: run `node tests/physics-smoke.js`, `node tests/wall-physics.test.js`, `node tests/ai-regression.test.js` and `node tests/browser-smoke.js`. The browser suite verifies every explosion preview and its resource cleanup, as well as saved ball-feel selection.
-
-A dynamic ball-contact shadow and a compact 3D speed trail help you judge aerial height, the path of powerful shots and fast bounces. The trail uses a fixed 16-vertex GPU buffer rather than allocating particle geometry each frame. Goal explosions also play when you score in Free Play.
-
- 
-## Lakeside Stadium & Potato Crowd visual rebuild — November 2026
-
-The default arena now draws a **white, 24-section scalloped canopy** over a modern turquoise/white stadium, with brightly coloured grandstands, taller scoreboards and a decorative, collision-free exterior: painted blue water, a grassy island, pale walking paths, a forest of 230 low-poly pine trees, snowy mountains and a futuristic city beyond the lake. The sky has larger white cotton clouds. These are original procedural Three.js shapes based on the supplied visual references, not imported game assets.
-
-The stadium seats a **denser 4,096-character crowd**. Every spectator is an instanced rounded, slightly flat-bottomed potato/blob with a vivid pastel colour, a dark silhouette outline, visible smiling face and a cheering expression during goals. Team flags and a travelling jump/sway wave still activate after a goal in matches or Free Play. Bodies, outlines and faces all use instanced geometry, with updates throttled during idle for performance.
-
-The **Physics dropdown has been removed** from the garage for a simpler menu. The game still runs its normal physics engine; the existing dedicated Ball Feel choice is separate and remains available. The old car-handling modes are no longer exposed as a user-facing toggle. Other controls, cars, matches, training and goal explosions are unchanged.
+This project uses original procedural arena and effect geometry. It is an independent car-soccer game.

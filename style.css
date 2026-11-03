@@ -736,3 +736,25 @@ body.split-screen #speedHud {left:50%;transform:translateX(-50%);bottom:12px;}
   #menu .quickmodes button {transition:none;}
   #menu .quickmodes button:hover {transform:none;}
 }
+
+/* Broadcast-style match HUD. Keep the centre of the pitch unobstructed. */
+#score { top:0; gap:2px; background:transparent; filter:drop-shadow(0 3px 8px #0006); }
+#score b { min-width:58px; padding:8px 12px; color:#fff; font-size:36px; font-style:normal; border:0; }
+#score #s0 { background:linear-gradient(180deg,var(--team-blue,#2fb8ff),#1451a1); border-radius:0 0 0 5px; }
+#score #s1 { background:linear-gradient(180deg,var(--team-orange,#ff8a1f),#ae4e12); border-radius:0 0 5px 0; }
+#score #clock { align-self:stretch; display:grid; place-items:center; padding:6px 14px; min-width:90px!important; background:#071321e8; font-size:29px!important; font-style:normal; font-variant-numeric:tabular-nums; }
+#boost { background:radial-gradient(circle,#101c29e8 0 57%,#815b2944 59% 70%,transparent 72%); border-color:#ffbb5266!important; box-shadow:none; }
+#bt { color:#fff1d4; font-style:normal; font-variant-numeric:tabular-nums; }
+#boost::after { color:#ffbb52; letter-spacing:.18em; }
+#speedHud { border:0; background:#071321a8; box-shadow:none; bottom:68px; }
+#speedHud small { color:#c2cedd; }
+#cam { color:#ffad47; text-transform:uppercase; letter-spacing:.12em; font-size:14px; text-shadow:0 2px 5px #000; }
+#leaguePreset { justify-self:center; padding:10px 18px; border:1px solid #70bfff; border-radius:3px; background:linear-gradient(110deg,#10529b,#0878bb); color:#fff; font:800 13px "Trebuchet MS",sans-serif; letter-spacing:.08em; cursor:pointer; }
+#leaguePreset:hover { filter:brightness(1.18); }
+#leaguePresetHint { max-width:540px; font-size:12px!important; color:#b9d8ed!important; }
+@media(max-width:600px) {
+  #speedHud { bottom:62px; }
+  #score b { min-width:34px; padding:6px 8px; font-size:28px; }
+  #score #clock { min-width:64px!important; font-size:23px!important; }
+  #leaguePresetHint { font-size:10px!important; }
+}

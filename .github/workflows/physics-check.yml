@@ -21,5 +21,10 @@ jobs:
         run: node tests/wall-physics.test.js
       - name: AI steering and pursuit regression checks
         run: node tests/ai-regression.test.js
+      - name: Stadium, animation and match clock regression checks
+        run: |
+          node tests/scene-utils.test.js
+          node tests/goal-effects.test.js
+          node tests/match-clock.test.js
       - name: Browser gameplay smoke check
         run: node tests/browser-smoke.js
