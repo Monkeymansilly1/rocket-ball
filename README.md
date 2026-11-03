@@ -66,3 +66,12 @@ The garage now has three one-click routes: **Casual** (1v1, easy bots), **Compet
 Tests: run `node tests/physics-smoke.js`, `node tests/wall-physics.test.js`, `node tests/ai-regression.test.js` and `node tests/browser-smoke.js`. The browser suite verifies every explosion preview and its resource cleanup, as well as saved ball-feel selection.
 
 A dynamic ball-contact shadow and a compact 3D speed trail help you judge aerial height, the path of powerful shots and fast bounces. The trail uses a fixed 16-vertex GPU buffer rather than allocating particle geometry each frame. Goal explosions also play when you score in Free Play.
+
+ 
+## Lakeside Stadium & Potato Crowd visual rebuild — November 2026
+
+The default arena now draws a **white, 24-section scalloped canopy** over a modern turquoise/white stadium, with brightly coloured grandstands, taller scoreboards and a decorative, collision-free exterior: painted blue water, a grassy island, pale walking paths, a forest of 230 low-poly pine trees, snowy mountains and a futuristic city beyond the lake. The sky has larger white cotton clouds. These are original procedural Three.js shapes based on the supplied visual references, not imported game assets.
+
+The stadium seats a **denser 4,096-character crowd**. Every spectator is an instanced rounded, slightly flat-bottomed potato/blob with a vivid pastel colour, a dark silhouette outline, visible smiling face and a cheering expression during goals. Team flags and a travelling jump/sway wave still activate after a goal in matches or Free Play. Bodies, outlines and faces all use instanced geometry, with updates throttled during idle for performance.
+
+The **Physics dropdown has been removed** from the garage for a simpler menu. The game still runs its normal physics engine; the existing dedicated Ball Feel choice is separate and remains available. The old car-handling modes are no longer exposed as a user-facing toggle. Other controls, cars, matches, training and goal explosions are unchanged.
