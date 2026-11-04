@@ -47,7 +47,14 @@ for kind, source in zip(('fennec', 'scorpion'), sources):
             shader.inputs['Roughness'].default_value = 0.18
             shader.inputs['Metallic'].default_value = 0.25
         # Source Scorpion textures are already embedded; keep maps and UVs intact.
-    target = root / 'assets' / kind / 'scene.glb'
-    bpy.ops.export_scene.gltf(filepath=str(target), export_format='GLB', export_yup=True,
+    # Match Octane's external glTF loading path for Scorpion. Smaller separate
+    # image files avoid one large embedded-image decode on mobile browsers.
+    if kind == 'scorpion':
+        for image in bpy.data.images:
+            if max(image.size) > 1024:
+                factor = 1024 / max(image.size)
+                image.scale(max(1, round(image.size[0] * factor)), max(1, round(image.size[1] * factor)))
+    target = root / 'assets' / kind / ('scene.gltf' if kind == 'scorpion' else 'scene.glb')
+    bpy.ops.export_scene.gltf(filepath=str(target), export_format='GLTF_SEPARATE' if kind == 'scorpion' else 'GLB', export_yup=True,
         export_animations=False, export_cameras=False, export_lights=False)
     print('EXPORTED', kind, target.stat().st_size)

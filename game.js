@@ -510,15 +510,33 @@ function makeCrowdFaceTexture(cheering=false) {
   tex.needsUpdate=true;
   return tex;
 }
-function buildMiniCrowd(stadium, ringPoint) {
-  // Denser rows like the supplied jellybean-crowd reference.
-  // Instancing keeps a few draw calls despite thousands of individual fans.
-  const rows=16,perRow=256,count=rows*perRow;
-  const palette=[0xff8c83,0xffc36a,0xffe889,0x91eb90,0x82dfff,
-    0x82a8ff,0xbc94ff,0xffa2dc,0xf2f5f9,0xa57e59,0x63d4b6,0xf5bca2];
+// Sample terraces by distance, rather than angle, so corners and the middle
+// of every stand have the same tightly packed seating density.
+function miniCrowdSeats(ringPoint) {
+  const seats=[];
+  for(let row=0;row<18;row++){
+    const samples=2048,points=[],distances=[0];
+    for(let j=0;j<=samples;j++){
+      const point=ringPoint(j/samples*Math.PI*2,101.3+row*2.65,126.3+row*2.55,9.02+row*1.83);
+      points.push(point);
+      if(j)distances.push(distances[j-1]+point.distanceTo(points[j-1]));
+    }
+    const perimeter=distances[samples],perRow=Math.floor(perimeter/2.05);
+    let segment=1;
+    for(let col=0;col<perRow;col++){
+      const distance=(col+.25+(row%2)*.5)/perRow*perimeter;
+      while(segment<samples&&distances[segment]<distance)segment++;
+      const t=(distance-distances[segment-1])/(distances[segment]-distances[segment-1]);
+      seats.push({row,col,point:points[segment-1].clone().lerp(points[segment],t)});
+    }
+  }
+  return seats;
+}
+
+function miniFanGeometry(low) {
   // Subtly deform the sphere's lower half to make a bean-shaped potato
   // silhouette without the cost of a unique geometry for each character.
-  const bodyGeometry=new THREE.SphereGeometry(.72,8,6);
+  const bodyGeometry=new THREE.SphereGeometry(.72,low?6:8,low?4:6);
   const a=bodyGeometry.attributes.position;
   for(let i=0;i<a.count;i++){
     const y=a.getY(i),x=a.getX(i);
@@ -529,6 +547,16 @@ function buildMiniCrowd(stadium, ringPoint) {
   }
   a.needsUpdate=true;
   bodyGeometry.computeVertexNormals();
+  return bodyGeometry;
+}
+
+function buildMiniCrowd(stadium, ringPoint) {
+  // Denser rows like the supplied jellybean-crowd reference.
+  // Instancing keeps a few draw calls despite thousands of individual fans.
+  const seats=miniCrowdSeats(ringPoint),count=seats.length;
+  const palette=[0xff8c83,0xffc36a,0xffe889,0x91eb90,0x82dfff,
+    0x82a8ff,0xbc94ff,0xffa2dc,0xf2f5f9,0xa57e59,0x63d4b6,0xf5bca2];
+  const bodyGeometry=miniFanGeometry(graphicsQuality==='low');
   const bodies=new THREE.InstancedMesh(bodyGeometry,
     new THREE.MeshStandardMaterial({color:0xffffff,roughness:.8,
       metalness:0,emissive:0x10222e,emissiveIntensity:.08}),count);
@@ -561,12 +589,8 @@ function buildMiniCrowd(stadium, ringPoint) {
   const forwardAxis=new THREE.Vector3(0,0,1);
   const tint=new THREE.Color(),qTemp=new THREE.Quaternion();
   const temp=new THREE.Object3D();
-  for(let row=0;row<rows;row++){
-    for(let col=0;col<perRow;col++){
-      const i=row*perRow+col;
-      const angle=(col+(row%2)*.5)/perRow*Math.PI*2;
-      const point=ringPoint(angle,100.65+row*2.65,125.7+row*2.55,
-        10.0+row*1.83);
+  for(const {row,col,point} of seats){
+      const i=fans.length;
       const towardPitch=new THREE.Vector3(-point.x,0,-point.z).normalize();
       rot.setFromUnitVectors(forwardAxis,towardPitch);
       const team=point.z<0?0:1;
@@ -586,17 +610,29 @@ function buildMiniCrowd(stadium, ringPoint) {
         flags.setColorAt(flagData.length-1,
           new THREE.Color(team===0?0x52adff:0xff9d4a));
       }
-    }
   }
   flags.count=flagData.length;poles.count=flagData.length;
   bodies.instanceColor.needsUpdate=true;flags.instanceColor.needsUpdate=true;
   const crowd={fans,bodies,outlines,faces,flags,poles,flagData,calmFace,cheerFace,
     cheerTeam:-1,cheerTime:0,elapsed:0,drawTick:0,matrix:mtx,
-    temp,position:pos,rotation:qTemp,scale,up};
+    temp,position:pos,rotation:qTemp,scale,up,lowDetail:graphicsQuality==='low'};
+  outlines.visible=!crowd.lowDetail;
   // Set initial transforms immediately; the menu must also show the crowd.
   updateMiniCrowdTransforms(crowd,0);
   return crowd;
 }
+function updateMiniCrowdQuality() {
+  if(!miniCrowd)return;
+  const low=graphicsQuality==='low';
+  if(low!==miniCrowd.lowDetail){
+    const previous=miniCrowd.bodies.geometry;
+    miniCrowd.bodies.geometry=miniCrowd.outlines.geometry=miniFanGeometry(low);
+    previous.dispose();
+    miniCrowd.lowDetail=low;
+  }
+  miniCrowd.outlines.visible=!low;
+}
+
 function cheerMiniCrowd(team) {
   if (!miniCrowd) return;
   miniCrowd.cheerTeam=team===1?1:0;
@@ -1228,7 +1264,7 @@ RocketSceneUtils.batchStaticMeshes(scene);
 const carModelAssets = {
   octane: { url:'assets/octane/scene.gltf', rotation:-Math.PI/2, axle:new THREE.Vector3(0,1,0) },
   fennec: { url:'assets/fennec/scene.glb', rotation:0, axle:new THREE.Vector3(1,0,0) },
-  scorpion: { url:'assets/scorpion/scene.glb', rotation:0, axle:new THREE.Vector3(1,0,0) }
+  scorpion: { url:'assets/scorpion/scene.gltf?v=scorpion-2', rotation:0, axle:new THREE.Vector3(1,0,0) }
 };
 function makeDetailedCar(car) {
   const asset = car && carModelAssets[car.model];
@@ -1273,6 +1309,8 @@ function makeDetailedCar(car) {
   m.body.add(fitted);
   cacheCarBodyBounds(m);
   m.detailed = true;
+  fitted.name = car.model + ' Imported Vehicle';
+  fitted.userData.vehicleModel = car.model;
   m.detailedRoot = fitted;
   m.detailedWheels = wheelNodes;
   m.detailedWheelAxis = asset.axle;
@@ -1282,15 +1320,18 @@ function updateCarModelStatus() {
   const status = $('modelLoadStatus');
   if (!status) return;
   const loaded = Object.entries(carModelAssets).filter(([,asset]) => asset.template).map(([name]) => name[0].toUpperCase()+name.slice(1));
-  const failed = Object.entries(carModelAssets).filter(([,asset]) => asset.failed).map(([name]) => name);
-  status.textContent = (loaded.length ? '✓ ' + loaded.join(', ') + ' loaded' : 'Loading car models…') +
-    (failed.length ? ' · Lightweight fallback: ' + failed.join(', ') : '');
+  const selected=carModelAssets[playerCarModel];
+  const title=playerCarModel[0].toUpperCase()+playerCarModel.slice(1);
+  status.textContent = selected?.failed ? title+' model could not load · select it again to retry' :
+    selected?.loading ? 'Loading '+title+' 3D body…' :
+    '✓ '+loaded.join(', ')+' 3D bodies loaded';
 }
 function loadDetailedCars() {
   for (const [name, asset] of Object.entries(carModelAssets)) {
     if (asset.loading || asset.template) continue;
     if (!THREE.GLTFLoader) { asset.failed = true; updateCarModelStatus(); continue; }
-    asset.loading = true;
+    asset.loading = true; asset.failed = false;
+    updateCarModelStatus();
     new THREE.GLTFLoader().load(asset.url, gltf => {
       asset.template = gltf.scene; asset.loading = false; asset.failed = false;
       for (const car of cars) if (car.model === name) makeDetailedCar(car);
@@ -2479,6 +2520,7 @@ if (graphicsSetting) {
     graphicsQuality = ['low', 'balanced', 'high'].includes(graphicsSetting.value) ?
       graphicsSetting.value : 'balanced';
     renderer.shadowMap.enabled = graphicsQuality !== 'low';
+    updateMiniCrowdQuality();
     resize();
     saveGeneralSettings();
   });
@@ -2506,10 +2548,13 @@ function handleMenuChoice(e) {
   else if (b.dataset.car || b.dataset.car2) {
     if (b.dataset.car) {
       playerCarModel = b.dataset.car;
+      if(carModelAssets[playerCarModel]?.failed)loadDetailedCars();
+      updateCarModelStatus();
       updateGaragePreview();
       document.querySelectorAll('.car-opts:not(.car-opts-p2) button').forEach(x => x.classList.toggle('on', x === b));
     } else {
       player2CarModel = b.dataset.car2;
+      if(carModelAssets[player2CarModel]?.failed)loadDetailedCars();
       document.querySelectorAll('.car-opts-p2 button').forEach(x => x.classList.toggle('on', x === b));
     }
     // Rebuild in the menu so each player's garage choice is immediately visible.

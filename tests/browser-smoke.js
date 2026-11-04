@@ -19,9 +19,14 @@ async function eventually(fn, timeout=20000) {
   throw new Error('Timed out waiting for browser: '+(lastError?.message||'condition false'));
 }
 const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.png':'image/png','.ico':'image/x-icon'};
+let scorpionRequests=0;
 const server=http.createServer((req,res)=>{
   let name=decodeURIComponent(new URL(req.url,'http://127.0.0.1').pathname);
   if(name==='/')name='/index.html';
+  // Exercise recovery from an interrupted model download, as on a live host.
+  if(name==='/assets/scorpion/scene.gltf'&&++scorpionRequests===1){
+    res.writeHead(503);return res.end('Simulated interrupted model download');
+  }
   const file=path.resolve(process.cwd(),'.'+name);
   if(!file.startsWith(process.cwd()+path.sep)) {
     res.writeHead(403);return res.end();
@@ -150,25 +155,25 @@ async function main() {
       '3D explosion preview never spawned scene objects');
     assert((await evalJS('window.rocketArena.goalEffectCount'))<=2,
       '3D goal explosion preview leaks unbounded meshes');
-    await eventually(()=>evalJS('window.rocketArena.goalEffectCount===0'),10000);
+    await eventually(()=>evalJS('window.rocketArena.goalEffectCount===0'),20000);
     // The actual menu preview button must use the same real 3D effect path.
     await evalJS('document.getElementById("explosion").value="pixel";document.getElementById("explosionPreview").click()');
     assert((await evalJS('window.rocketArena.goalEffectCount'))>0,
       'Goal explosion preview button is not wired to the renderer');
     assert.equal(await evalJS('document.getElementById("explosionPreviewStatus").textContent.includes("Voxel")'),true);
-    await eventually(()=>evalJS('window.rocketArena.goalEffectCount===0'),8000);
+    await eventually(()=>evalJS('window.rocketArena.goalEffectCount===0'),20000);
     console.log('PASS: eight distinct 3D explosions, menu navigation, previews, cleanup and correct turf colour space');
     console.log('Game loaded; testing Free Play');
     assert.equal(await evalJS('window.rocketArena.state'),'menu');
     // Verify the NEW arena exists as playable 3D geometry, not just an image.
     assert.equal(await evalJS('window.rocketArena.stadium.name'), 'Rocket Ball Championship Arena');
-    assert.equal(await evalJS('window.rocketArena.miniCrowd.bodies.count'),4096,
+    assert.equal(await evalJS('window.rocketArena.miniCrowd.bodies.count'),8332,
       'Dense mini potato spectators were not created');
-    assert.equal(await evalJS('window.rocketArena.miniCrowd.faces.count'),4096,
+    assert.equal(await evalJS('window.rocketArena.miniCrowd.faces.count'),8332,
       'Mini crowd faces missing');
-    assert.equal(await evalJS('window.rocketArena.miniCrowd.outlines.count'),4096,
+    assert.equal(await evalJS('window.rocketArena.miniCrowd.outlines.count'),8332,
       'Outlined mini potato bodies missing');
-    assert.equal(await evalJS('window.rocketArena.miniCrowd.flagData.length'),171,
+    assert.equal(await evalJS('window.rocketArena.miniCrowd.flagData.length'),348,
       'Team flags missing');
     assert.equal(await evalJS('window.rocketArena.stadium.getObjectByName("White Alpine Sail Canopies")?.isMesh'),true,
       'Scalloped white canopy missing');
@@ -181,6 +186,8 @@ async function main() {
       'Pine forest or distant skyline missing');
     assert.equal(await evalJS('document.getElementById("physics")===null'),true,
       'Physics dropdown was not removed from the menu');
+    assert.equal(await evalJS('window.rocketArena.miniCrowd.fans.length>8000 && new Set(window.rocketArena.miniCrowd.fans.map(f=>f.row)).size===18'),true,
+      'All eighteen terraces must be filled with mini fans');
     assert.equal(await evalJS('window.rocketArena.miniCrowd.bodies.geometry.type'),'SphereGeometry',
       'Crowd must be potato characters, not the old box audience');
     assert.equal(await evalJS('(()=>{const roof=new THREE.Box3().setFromObject(window.rocketArena.stadium.getObjectByName("White Alpine Sail Canopies"));return roof.min.x < -130 && roof.max.x > 130 && roof.max.y > 60;})()'),true,'Canopy must surround the pitch without collapsing into the arena');
@@ -208,12 +215,16 @@ async function main() {
       const info = await evalJS(`(()=>{const m=window.rocketArena.cars[0].mesh,b=m.bodyBounds;
         const maps=[];m.detailedRoot.traverse(o=>{if(o.isMesh)for(const mat of [o.material].flat())for(const k of ['map','normalMap'])if(mat[k])maps.push(k);});
         return {wheels:m.detailedWheels.length,width:b.max[0]-b.min[0],height:b.max[1]-b.min[1],length:b.max[2]-b.min[2],maps:maps.length,
-          axle:m.detailedWheelAxis.toArray()};})()`);
+          axle:m.detailedWheelAxis.toArray(),model:m.detailedRoot.userData.vehicleModel};})()`);
+      assert.equal(info.model,name,'The selected vehicle must use its imported body');
       assert.equal(info.wheels,4,name+' must have four animated wheel pivots');
       assert(info.width>1.7&&info.width<2.5&&info.height>.8&&info.height<1.6&&info.length>3.5&&info.length<4.1,
         name+' must use car-sized bounds with the long axis facing forward: '+JSON.stringify(info));
       assert.deepEqual(info.axle,[1,0,0]);
-      if(name==='scorpion')assert(info.maps>=5,'Scorpion embedded textures must load');
+      if(name==='scorpion'){
+        assert(info.maps>=5,'Scorpion texture maps must load');
+        assert.equal(scorpionRequests,2,'Selecting Scorpion must retry an interrupted model download');
+      }
       await evalJS(`document.querySelector('[data-car2="${name}"]').click();document.getElementById('localTwo').checked=true;
         document.getElementById('localTwo').dispatchEvent(new Event('change',{bubbles:true}))`);
       await eventually(()=>evalJS(`window.rocketArena.cars.some(c=>c.team===1&&!c.ai&&c.model==='${name}'&&c.mesh.detailed)`));

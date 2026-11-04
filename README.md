@@ -10,7 +10,7 @@ From the repository root, run `python3 -m http.server 8000`, then open the serve
 
 The live 3D stadium is the backdrop to four lobby sections: **Play**, **Garage**, **Goal FX** and **Arena**. Play a casual 1v1, competitive 2v2, custom 1v1/2v2/3v3, or Free Play. Custom match options expand when needed. Garage offers exactly **Octane, Fennec and Scorpion**, with paint and player identities; player-two customisation appears when local two-player is enabled.
 
-Championship Dusk is the default stadium theme, with Day, Night, Winter and Sunset alternatives. The Arena section includes an orbiting stadium tour. The continuous rounded pitch and collision solver use the same surface function. Texture UVs follow world coordinates, so blue/orange markings stay at the correct goal and do not stretch over the rounded corners. Renderer and generated-texture colour settings use the API supported by the bundled Three.js version. Static stadium geometry is batched to reduce draw calls while preserving named and animated objects.
+Championship Dusk is the default stadium theme, with Day, Night, Winter and Sunset alternatives. The Arena section includes an orbiting stadium tour. The continuous rounded pitch and collision solver use the same surface function. Texture UVs follow world coordinates, so blue/orange markings stay at the correct goal and do not stretch over the rounded corners. Renderer and generated-texture colour settings use the API supported by the bundled Three.js version. Static stadium geometry is batched to reduce draw calls while preserving named and animated objects. All 18 terrace rows contain 8,332 mini fans, spaced evenly along the stands. Performance mode keeps the full crowd with simpler bodies.
 
 Ball physics options have been removed. All modes use the same ball response, including Free Play; old saved ball-feel preferences are ignored. Keyboard aerial assistance remains available under Settings → Keyboard aerial handling. The standard solver uses 650 UU/s² gravity, 0.6 floor/wall restitution, Bullet-style 0.03 damping, a 30:180 ball/car mass ratio, and friction that transfers surface slip into spin. Car touches use the relative-speed extra-hit curve and direction adjustment documented in [RocketSim](https://github.com/ZealanL/RocketSim/blob/main/src/Sim/Ball/Ball.cpp), without scripted boost/flip bonuses or upward pop. These are reference-based approximations in this custom solver, rather than an exact reproduction of Rocket League's engine.
 
@@ -67,6 +67,7 @@ node tests/replay.test.js
 node tests/car-audio.test.js
 node tests/ball-camera.test.js
 node tests/car-recovery.test.js
+node tests/mini-crowd.test.js
 node tests/goal-effects.test.js
 node tests/scene-utils.test.js
 node tests/browser-smoke.js
@@ -83,7 +84,7 @@ The browser suite requires system Chrome/Chromium and Node.js 22 or newer. `CHRO
 - `lib/replay.js`, `lib/car-audio.js`: replay sampling, speed conversion and layered engine audio.
 - `lib/ball-camera.js`: stable ball/chase camera rig with the original FOV behaviour.
 - `assets/octane/`: credited Octane model and textures; see [asset credits](assets/octane/CREDITS.txt).
-- `assets/fennec/`, `assets/scorpion/`: models supplied by the project owner, converted to GLB with four wheel pivots. Scorpion includes its embedded maps. Fennec retains its materials; its three external normal maps were absent from the FBX.
+- `assets/fennec/`, `assets/scorpion/`: models supplied by the project owner, converted to web assets with four wheel pivots. Scorpion uses external glTF geometry and resized texture maps for reliable loading. Fennec retains its materials; its three external normal maps were absent from the FBX.
 - `tools/convert-car-assets.py`: Blender conversion script for the supplied FBX files.
 - Three.js is distributed under its included [MIT licence](lib/THREE-LICENSE.txt).
 
