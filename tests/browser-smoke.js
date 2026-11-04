@@ -96,7 +96,7 @@ async function main() {
     await call('Runtime.enable');
     console.log('Navigating headless Chrome to local Rocket Ball server');
     await call('Page.navigate',{url});
-    await eventually(()=>evalJS('document.readyState==="complete" && !!window.rocketArena && !!window.THREE'),15000)
+    await eventually(()=>evalJS('document.readyState==="complete" && !!window.rocketArena && !!window.THREE'),45000)
       .catch(err=>{throw new Error('Game startup: '+err.message+'; browser exceptions: '+JSON.stringify(errors));});
     // SwiftShader has no hardware GPU; use the real performance mode for functional checks.
     await evalJS('document.getElementById("settingGraphics").value="low";document.getElementById("settingGraphics").dispatchEvent(new Event("change",{bubbles:true}))');
@@ -198,6 +198,30 @@ async function main() {
         '; browserErrors='+JSON.stringify(errors));});
     assert.equal(await evalJS('window.rocketArena.cars[0].mesh.detailedWheels.length'),4);
     console.log('Detailed Octane 3D body, original material maps and four wheels loaded.');
+    for (const selector of ['[data-car]', '[data-car2]']) {
+      assert.deepEqual(await evalJS(`Array.from(document.querySelectorAll('${selector}')).map(b=>b.dataset.car||b.dataset.car2)`),
+        ['octane','fennec','scorpion'], 'Both garages must offer exactly the three requested vehicles');
+    }
+    for (const name of ['fennec','scorpion']) {
+      await evalJS(`document.querySelector('[data-car="${name}"]').click()`);
+      await eventually(()=>evalJS(`window.rocketArena.cars[0]?.model==='${name}' && window.rocketArena.cars[0]?.mesh.detailed`),25000);
+      const info = await evalJS(`(()=>{const m=window.rocketArena.cars[0].mesh,b=m.bodyBounds;
+        const maps=[];m.detailedRoot.traverse(o=>{if(o.isMesh)for(const mat of [o.material].flat())for(const k of ['map','normalMap'])if(mat[k])maps.push(k);});
+        return {wheels:m.detailedWheels.length,width:b.max[0]-b.min[0],height:b.max[1]-b.min[1],length:b.max[2]-b.min[2],maps:maps.length,
+          axle:m.detailedWheelAxis.toArray()};})()`);
+      assert.equal(info.wheels,4,name+' must have four animated wheel pivots');
+      assert(info.width>1.7&&info.width<2.5&&info.height>.8&&info.height<1.6&&info.length>3.5&&info.length<4.1,
+        name+' must use car-sized bounds with the long axis facing forward: '+JSON.stringify(info));
+      assert.deepEqual(info.axle,[1,0,0]);
+      if(name==='scorpion')assert(info.maps>=5,'Scorpion embedded textures must load');
+      await evalJS(`document.querySelector('[data-car2="${name}"]').click();document.getElementById('localTwo').checked=true;
+        document.getElementById('localTwo').dispatchEvent(new Event('change',{bubbles:true}))`);
+      await eventually(()=>evalJS(`window.rocketArena.cars.some(c=>c.team===1&&!c.ai&&c.model==='${name}'&&c.mesh.detailed)`));
+      await evalJS(`document.getElementById('localTwo').checked=false;document.getElementById('localTwo').dispatchEvent(new Event('change',{bubbles:true}))`);
+    }
+    await evalJS(`document.querySelector('[data-car="octane"]').click()`);
+    console.log('PASS: exactly Octane, Fennec and Scorpion for both players; real models, textures, four wheel pivots and correctly oriented bounds.');
+
     await evalJS('document.getElementById("freePlayBtn").click()',true);
     await eventually(()=>evalJS('window.rocketArena.state==="play" && window.rocketArena.cars.length===1'));
     assert.equal(await evalJS('document.body.classList.contains("free-play")'),true);

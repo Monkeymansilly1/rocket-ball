@@ -4,11 +4,11 @@ A 3D car-soccer game built with JavaScript and bundled Three.js r149. No package
 
 ## Run locally
 
-From the repository root, run `python3 -m http.server 8000`, then open the served game in your browser. All libraries, textures and the credited Octane model are included in the repository.
+From the repository root, run `python3 -m http.server 8000`, then open the served game in your browser. All runtime assets are bundled, including Octane and the supplied Fennec and Scorpion models.
 
 ## The rebuilt arena and lobby
 
-The live 3D stadium is the backdrop to four lobby sections: **Play**, **Garage**, **Goal FX** and **Arena**. Play a casual 1v1, competitive 2v2, custom 1v1/2v2/3v3, or Free Play. Custom match options expand when needed. Garage contains car bodies, paint and player identities; player-two customisation appears when local two-player is enabled.
+The live 3D stadium is the backdrop to four lobby sections: **Play**, **Garage**, **Goal FX** and **Arena**. Play a casual 1v1, competitive 2v2, custom 1v1/2v2/3v3, or Free Play. Custom match options expand when needed. Garage offers exactly **Octane, Fennec and Scorpion**, with paint and player identities; player-two customisation appears when local two-player is enabled.
 
 Championship Dusk is the default stadium theme, with Day, Night, Winter and Sunset alternatives. The Arena section includes an orbiting stadium tour. The continuous rounded pitch and collision solver use the same surface function. Texture UVs follow world coordinates, so blue/orange markings stay at the correct goal and do not stretch over the rounded corners. Renderer and generated-texture colour settings use the API supported by the bundled Three.js version. Static stadium geometry is batched to reduce draw calls while preserving named and animated objects.
 
@@ -83,6 +83,8 @@ The browser suite requires system Chrome/Chromium and Node.js 22 or newer. `CHRO
 - `lib/replay.js`, `lib/car-audio.js`: replay sampling, speed conversion and layered engine audio.
 - `lib/ball-camera.js`: stable ball/chase camera rig with the original FOV behaviour.
 - `assets/octane/`: credited Octane model and textures; see [asset credits](assets/octane/CREDITS.txt).
+- `assets/fennec/`, `assets/scorpion/`: models supplied by the project owner, converted to GLB with four wheel pivots. Scorpion includes its embedded maps. Fennec retains its materials; its three external normal maps were absent from the FBX.
+- `tools/convert-car-assets.py`: Blender conversion script for the supplied FBX files.
 - Three.js is distributed under its included [MIT licence](lib/THREE-LICENSE.txt).
 
 This project uses original procedural arena and effect geometry. It is an independent car-soccer game.

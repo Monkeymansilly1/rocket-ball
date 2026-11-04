@@ -152,25 +152,16 @@ const wrap = a => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a
 // Car model presets (visuals + physical tweaks)
 const CAR_MODELS = [
   { name: 'octane', len: 3.4, width: 2.0, height: 0.6, wheelR: 0.45, mass: 1.0, hit: 1.7, cap: 1.0 },
-  { name: 'dominus', len: 3.8, width: 2.05, height: 0.5, wheelR: 0.42, mass: 1.05, hit: 1.9, cap: 0.95 },
-  { name: 'breakout', len: 3.6, width: 1.9, height: 0.45, wheelR: 0.42, mass: 0.95, hit: 1.6, cap: 1.05 },
-  { name: 'vortex', len: 3.55, width: 2.05, height: 0.48, wheelR: 0.43, mass: 1.0, hit: 1.75, cap: 1.04 },
-  { name: 'striker', len: 3.25, width: 1.88, height: 0.52, wheelR: 0.4, mass: 0.92, hit: 1.62, cap: 1.1 },
-  { name: 'raptor', len: 3.7, width: 2.15, height: 0.68, wheelR: 0.48, mass: 1.08, hit: 1.85, cap: 0.96 },
-  { name: 'hyperion', len: 3.9, width: 2.02, height: 0.46, wheelR: 0.41, mass: 1.02, hit: 1.88, cap: 1.02 }
+  { name: 'fennec', len: 3.4, width: 2.0, height: 0.6, wheelR: 0.45, mass: 1.0, hit: 1.7, cap: 1.0 },
+  { name: 'scorpion', len: 3.8, width: 2.0, height: 0.6, wheelR: 0.45, mass: 1.0, hit: 1.7, cap: 1.0 }
 ];
 
-// Collision hitboxes are independent of the visible body mesh. Each car keeps
-// its own dimensions, while all vehicles use the same movement/boost rules.
-// The Octane half-extents/offset use the supplied reference scaled by 1/50.
+// Fennec shares the Octane hitbox. Scorpion uses the longer, lower Dominus shape.
+// Body meshes stay independent of collision and all cars use the same controls.
 const CAR_HITBOXES = {
-  octane:   { length:120.507/50, width:86.699/50, height:38.659/50, forward:13.876/50, up:20.755/50 },
-  dominus:  { length:2.57, width:1.64, height:0.64, forward:0.18, up:0.38 },
-  breakout: { length:2.50, width:1.62, height:0.59, forward:0.18, up:0.39 },
-  vortex:   { length:2.44, width:1.74, height:0.70, forward:0.20, up:0.40 },
-  striker:  { length:2.58, width:1.52, height:0.54, forward:0.19, up:0.33 },
-  raptor:   { length:2.35, width:1.82, height:0.85, forward:0.18, up:0.48 },
-  hyperion: { length:2.55, width:1.69, height:0.65, forward:0.22, up:0.36 }
+  octane: { length:120.507/50, width:86.699/50, height:38.659/50, forward:13.876/50, up:20.755/50 },
+  fennec: { length:120.507/50, width:86.699/50, height:38.659/50, forward:13.876/50, up:20.755/50 },
+  scorpion: { length:127.926/50, width:83.279/50, height:31.3/50, forward:9/50, up:18.66/50 }
 };
 
 // ---------- renderer / scene ----------
@@ -1233,39 +1224,43 @@ applyArenaStyle('championship');
 // Batch the arena before cars and effects add animated geometry.
 RocketSceneUtils.batchStaticMeshes(scene);
 
-// Full-resolution Octane visual model; hitboxes and controls remain independent.
-let octaneSceneTemplate = null, octaneModelLoading = false, octaneModelReady = false;
-const octaneWheelAxis = new THREE.Vector3(0, 1, 0);
-function makeDetailedOctane(car) {
-  if (!octaneSceneTemplate || !car || car.model !== 'octane' || car.mesh.detailed) return;
-  const m = car.mesh, model = octaneSceneTemplate.clone(true);
+// Detailed car assets share one fitting path; hitboxes and controls stay independent.
+const carModelAssets = {
+  octane: { url:'assets/octane/scene.gltf', rotation:-Math.PI/2, axle:new THREE.Vector3(0,1,0) },
+  fennec: { url:'assets/fennec/scene.glb', rotation:0, axle:new THREE.Vector3(1,0,0) },
+  scorpion: { url:'assets/scorpion/scene.glb', rotation:0, axle:new THREE.Vector3(1,0,0) }
+};
+function makeDetailedCar(car) {
+  const asset = car && carModelAssets[car.model];
+  if (!asset?.template || car.mesh.detailed) return;
+  const m = car.mesh, model = asset.template.clone(true);
   const col = car.ai ? (car.team ? hexCss(ORANGE) : hexCss(BLUE)) :
     car.team ? (localTwoPlayer && !car.ai ? player2Paint : hexCss(ORANGE)) : playerPaint;
   const paint = new THREE.Color(col);
   const wheelNodes = [];
   model.traverse(object => {
-    if (/^Dieci/i.test(object.name) && object.children.length >= 2) wheelNodes.push(object);
+    if ((/^Dieci/i.test(object.name) && object.children.length >= 2) || /^Wheel_/.test(object.name)) wheelNodes.push(object);
     if (!object.isMesh) return;
     object.castShadow = true; object.receiveShadow = true;
     const originalMaterials = Array.isArray(object.material) ? object.material : [object.material];
     const materials = originalMaterials.map(material => {
       const mat = material.clone();
       const matName = (mat.name || '').toLowerCase().replace(/\s+/g, '_');
-      if (matName === 'paint' || matName === 'octane_body') {
+      if ((car.model === 'octane' && (matName === 'paint' || matName === 'octane_body')) || matName === 'bodypaint') {
         mat.color.copy(paint); mat.roughness = 0.3; mat.metalness = 0.25; mat.needsUpdate = true;
       }
       return mat;
     });
     object.material = Array.isArray(object.material) ? materials : materials[0];
   });
-  // Exported Octane points forward along X; Rocket Ball points forward along Z.
+  // Converted FBX cars already face +Z; the original Octane faces +X.
   const fitted = new THREE.Group(); fitted.add(model);
-  model.rotation.y -= Math.PI / 2;
+  model.rotation.y += asset.rotation;
   fitted.updateMatrixWorld(true);
   const box = new THREE.Box3().setFromObject(fitted);
   const size = box.getSize(new THREE.Vector3());
   if (![size.x, size.y, size.z].every(v => Number.isFinite(v) && v > 1e-5)) {
-    console.warn('Octane model bounds invalid, using standard car.');
+    console.warn(car.model + ' model bounds invalid, using standard car.');
     return;
   }
   model.scale.multiplyScalar(Math.min(2.42 / size.x, 1.5 / size.y, 3.95 / size.z));
@@ -1280,26 +1275,32 @@ function makeDetailedOctane(car) {
   m.detailed = true;
   m.detailedRoot = fitted;
   m.detailedWheels = wheelNodes;
+  m.detailedWheelAxis = asset.axle;
   m.wheels = [];
 }
-function loadDetailedOctane() {
-  if (octaneModelLoading || octaneModelReady) return;
+function updateCarModelStatus() {
   const status = $('modelLoadStatus');
-  if (!THREE.GLTFLoader) {
-    if (status) status.textContent = 'Using lightweight car (3D importer unavailable)';
-    return;
+  if (!status) return;
+  const loaded = Object.entries(carModelAssets).filter(([,asset]) => asset.template).map(([name]) => name[0].toUpperCase()+name.slice(1));
+  const failed = Object.entries(carModelAssets).filter(([,asset]) => asset.failed).map(([name]) => name);
+  status.textContent = (loaded.length ? '✓ ' + loaded.join(', ') + ' loaded' : 'Loading car models…') +
+    (failed.length ? ' · Lightweight fallback: ' + failed.join(', ') : '');
+}
+function loadDetailedCars() {
+  for (const [name, asset] of Object.entries(carModelAssets)) {
+    if (asset.loading || asset.template) continue;
+    if (!THREE.GLTFLoader) { asset.failed = true; updateCarModelStatus(); continue; }
+    asset.loading = true;
+    new THREE.GLTFLoader().load(asset.url, gltf => {
+      asset.template = gltf.scene; asset.loading = false; asset.failed = false;
+      for (const car of cars) if (car.model === name) makeDetailedCar(car);
+      updateCarModelStatus();
+    }, undefined, err => {
+      asset.loading = false; asset.failed = true;
+      console.warn(name + ' model unavailable; retaining playable fallback:', err);
+      updateCarModelStatus();
+    });
   }
-  octaneModelLoading = true;
-  new THREE.GLTFLoader().load('assets/octane/scene.gltf', gltf => {
-    octaneSceneTemplate = gltf.scene;
-    octaneModelReady = true; octaneModelLoading = false;
-    for (const car of cars) makeDetailedOctane(car);
-    if (status) status.textContent = '✓ Detailed Octane and Dieci wheels loaded';
-  }, undefined, err => {
-    octaneModelLoading = false;
-    console.warn('Full Octane could not load; retaining playable car:', err);
-    if (status) status.textContent = 'Using lightweight car (model unavailable)';
-  });
 }
 
 // Cache the visible model's local bounds once, excluding hidden placeholders
@@ -1345,15 +1346,9 @@ function carMesh(col, typeName) {
   };
 
   // Each car gets a noticeably different chassis silhouette (front is +Z).
-  const chassis = {
-    octane:   [0.94, 0.42, 0.82, 0.84, 0.25, 0.32, 0.58, 0.58, 0.40, -0.01],
-    dominus:  [0.98, 0.32, 0.90, 0.72, 0.18, 0.25, 0.52, 0.40, 0.30, -0.04],
-    breakout: [0.82, 0.27, 0.88, 0.66, 0.15, 0.25, 0.50, 0.34, 0.34, -0.01],
-    vortex:   [0.98, 0.30, 0.86, 0.78, 0.18, 0.28, 0.48, 0.42, 0.30, -0.03],
-    striker:  [0.86, 0.34, 0.78, 0.68, 0.22, 0.30, 0.56, 0.52, 0.36, 0.00],
-    raptor:   [1.00, 0.46, 0.82, 0.82, 0.28, 0.32, 0.64, 0.62, 0.40, -0.02],
-    hyperion: [0.94, 0.28, 0.92, 0.66, 0.16, 0.30, 0.42, 0.38, 0.34, -0.02]
-  }[type.name] || [0.94, 0.42, 0.82, 0.84, 0.25, 0.32, 0.58, 0.58, 0.40, -0.01];
+  const chassis = type.name === 'fennec' ?
+    [0.94, 0.45, 0.84, 0.85, 0.28, 0.32, 0.68, 0.68, 0.44, -0.02] :
+    [0.94, 0.42, 0.82, 0.84, 0.25, 0.32, 0.58, 0.58, 0.40, -0.01];
   add(new THREE.BoxGeometry(type.width * chassis[0], type.height * chassis[1], type.len * chassis[2]),
       paint, 0, 0.02, 0);
   add(new THREE.BoxGeometry(type.width * chassis[3], type.height * chassis[4], type.len * chassis[5]),
@@ -1365,7 +1360,7 @@ function carMesh(col, typeName) {
 
   // Cabin proportions differ per car so the profiles are easy to tell apart.
   const cabin = new THREE.Mesh(new THREE.BoxGeometry(type.width * chassis[6], type.height * chassis[7], type.len * chassis[8]), glass);
-  cabin.position.set(0, type.height * (type.name === 'raptor' ? 0.54 : 0.47), type.len * chassis[9]);
+  cabin.position.set(0, type.height * 0.47, type.len * chassis[9]);
   cabin.castShadow = true;
   body.add(cabin);
   add(new THREE.BoxGeometry(type.width * 0.66, 0.07, type.len * 0.16), trim,
@@ -1387,64 +1382,6 @@ function carMesh(col, typeName) {
         paint, 0, type.height * 0.24, type.len * 0.34);
     add(new THREE.BoxGeometry(type.width * 0.62, 0.09, type.len * 0.13),
         trim, 0, type.height * 0.31, type.len * 0.36);
-  } else if (type.name === 'dominus') {
-    add(new THREE.BoxGeometry(type.width * 0.94, 0.1, type.len * 0.22),
-        paint, 0, type.height * 0.28, -type.len * 0.39);
-    add(new THREE.BoxGeometry(type.width * 0.78, 0.07, 0.12),
-        trim, 0, type.height * 0.48, -type.len * 0.49);
-    for (const sx of [-1, 1]) {
-      add(new THREE.BoxGeometry(0.06, 0.36, 0.06), trim, sx * type.width * 0.32,
-          type.height * 0.43, -type.len * 0.43);
-    }
-  } else if (type.name === 'breakout') {
-    add(new THREE.BoxGeometry(type.width * 0.72, 0.11, type.len * 0.28),
-        paint, 0, type.height * 0.34, type.len * 0.34);
-    add(new THREE.BoxGeometry(type.width * 0.88, 0.08, type.len * 0.18),
-        trim, 0, type.height * 0.28, -type.len * 0.42);
-    // Long low nose and a slim rear wing.
-    add(new THREE.BoxGeometry(type.width * 0.58, 0.055, type.len * 0.28),
-        paint, 0, 0.02, type.len * 0.43);
-  } else if (type.name === 'vortex') {
-    // Wide electric supercar with sculpted front splitter and rear diffuser.
-    add(new THREE.BoxGeometry(type.width * 0.96, 0.08, type.len * 0.2),
-        trim, 0, -0.12, type.len * 0.47);
-    add(new THREE.BoxGeometry(type.width * 0.78, 0.1, type.len * 0.17),
-        paint, 0, type.height * 0.34, -type.len * 0.4);
-    add(new THREE.BoxGeometry(type.width * 0.72, 0.08, 0.12),
-        trim, 0, type.height * 0.48, -type.len * 0.48);
-  } else if (type.name === 'striker') {
-    // Compact track coupe with a long bonnet and twin racing stripes.
-    add(new THREE.BoxGeometry(type.width * 0.8, 0.12, type.len * 0.3),
-        paint, 0, type.height * 0.28, type.len * 0.34);
-    for (const sx of [-1, 1]) {
-      add(new THREE.BoxGeometry(0.055, 0.018, type.len * 0.58),
-          new THREE.MeshStandardMaterial({ color: 0xf5f8ff, metalness: 0.25, roughness: 0.3 }),
-          sx * type.width * 0.13, type.height * 0.23, 0);
-    }
-    add(new THREE.BoxGeometry(type.width * 0.82, 0.08, 0.12),
-        trim, 0, type.height * 0.46, -type.len * 0.47);
-  } else if (type.name === 'raptor') {
-    // Rally-inspired wide-body car with chunky arches and a tall spoiler.
-    for (const sx of [-1, 1]) {
-      for (const sz of [-type.len * 0.31, type.len * 0.31]) {
-        add(new THREE.BoxGeometry(0.16, 0.17, 0.68), trim,
-            sx * type.width * 0.48, -0.015, sz);
-      }
-    }
-    add(new THREE.BoxGeometry(type.width * 0.95, 0.12, 0.16),
-        trim, 0, type.height * 0.72, -type.len * 0.48);
-    add(new THREE.BoxGeometry(0.08, 0.2, 0.08), trim,
-        -type.width * 0.3, type.height * 0.56, -type.len * 0.43);
-    add(new THREE.BoxGeometry(0.08, 0.2, 0.08), trim,
-        type.width * 0.3, type.height * 0.56, -type.len * 0.43);
-  } else if (type.name === 'hyperion') {
-    // Sleek futuristic hypercar: narrow cabin and angular rear aero.
-    add(new THREE.BoxGeometry(type.width * 0.54, type.height * 0.3, type.len * 0.3),
-        glass, 0, type.height * 0.58, -type.len * 0.02);
-    add(new THREE.BoxGeometry(type.width * 0.98, 0.075, type.len * 0.16),
-        paint, 0, -0.08, -type.len * 0.43);
-    add(new THREE.BoxGeometry(type.width * 0.86, 0.06, 0.1),
-        trim, 0, type.height * 0.47, -type.len * 0.48);
   }
 
   // Four proper tyres with metallic hubcaps. The wheel cylinders face outwards.
@@ -1629,7 +1566,7 @@ function initProfilePictureControls() {
 }
 let playerCarModel = 'octane';
 let playerPaint = '#2fb8ff', playerPaintCustom = false;
-let player2CarModel = 'dominus';
+let player2CarModel = 'fennec';
 let player2Paint = '#ff8a1f', player2PaintCustom = false;
 let physicsStyle = 'standard';
 let localTwoPlayer = false;
@@ -1687,7 +1624,7 @@ const SKILL = [
   { thr: 0.85, boost: true, steer: 3, cap: 0.82, wait: 0.8, sloppy: 4, flip: 0.4, aerial: false, drift: false },
   { thr: 1, boost: true, steer: 4, cap: 1, wait: 0.25, sloppy: 1.2, flip: 0.9, aerial: true, drift: true }];
 function mkCar(team, k, ai, modelName) {
-  const model = modelName || CAR_MODELS[(k) % CAR_MODELS.length].name;
+  const model = CAR_MODELS.some(m => m.name === modelName) ? modelName : CAR_MODELS[k % CAR_MODELS.length].name;
   const col = new THREE.Color(!ai && k === 0 ? (team ? player2Paint : playerPaint) : (team ? ORANGE : BLUE)).offsetHSL(0, 0, -0.09 * k);
   const car = { team, k, x: 0, y: 0.55, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, pitch: 0, roll: 0, airQuat: null, airOmega: null, surfaceQuat: null, surfaceNormal: null, surfaceForward: null, ceilingRide:false, wallRide: false, wallVerticalAxis: null, wallVerticalSign: 0, ai, aiCd: 0, boost: 34, jumps: 0, jt: 0, flip: 0, fx: 0, fz: 0, fl: 0, ground: true, demoTimer: 0, demoCooldown: 0, boostImpactTimer: 0 };
   car.mesh = carMesh(col, model);
@@ -1696,7 +1633,7 @@ function mkCar(team, k, ai, modelName) {
   // model-based properties
   const mdef = CAR_MODELS.find(m => m.name === model);
   car.hit = mdef.hit; car.hitbox = CAR_HITBOXES[model] || CAR_HITBOXES.octane; car.mass = 4; car.cap = 1; car.baseCap = 1;
-  if (model === 'octane' && octaneModelReady) makeDetailedOctane(car); // scale mass multiplier into existing physics constants
+  makeDetailedCar(car);
   return car;
 }
 function buildTeams() {
@@ -4044,7 +3981,7 @@ function render(dt) {
     // Detailed wheels use their real axle pivots.
     const wheelSpeed = Math.hypot(c.vx, c.vz) * 0.6;
     if (m.detailedWheels && m.detailedWheels.length) {
-      for (const wheel of m.detailedWheels) wheel.rotateOnAxis(octaneWheelAxis, wheelSpeed * dt);
+      for (const wheel of m.detailedWheels) wheel.rotateOnAxis(m.detailedWheelAxis, wheelSpeed * dt);
     } else if (m.wheels && m.wheels.length) {
       for (const wheel of m.wheels) wheel.rotation.x += wheelSpeed * dt;
     }
@@ -4147,7 +4084,7 @@ function render(dt) {
 
 // ---------- loop ----------
 buildTeams(); kickoff(); pick('mode', 2); pick('diff', 1);
-loadDetailedOctane();
+loadDetailedCars();
 window.rocketArena = {
   ball, physics: PHYSICS_TUNING,
   get cars() { return cars; },
