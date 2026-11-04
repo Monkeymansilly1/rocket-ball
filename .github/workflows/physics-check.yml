@@ -30,5 +30,6 @@ jobs:
           node tests/replay.test.js
           node tests/car-audio.test.js
           node tests/ball-camera.test.js
+          node tests/car-recovery.test.js
       - name: Browser gameplay smoke check
         run: node tests/browser-smoke.js

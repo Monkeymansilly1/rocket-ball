@@ -35,7 +35,7 @@ Effects last roughly 3–5 seconds, remain distinct at every graphics quality, a
 
 Ball cam preserves the original 105° FOV, existing speed/boost FOV response, and saved custom FOV values. There is no aspect-ratio FOV conversion. The competitive camera retains the updated 280 UU distance and 110 UU height. The orbit turns smoothly, retains its heading when the ball passes over the roof or bumper, and frames both the car and high balls. The camera follows the car's translation without boost lag, keeps a level horizon, and supports right-stick look with a smooth return to ball tracking. Camera height follows ramps, and wall orbits stay clear of the stands. Free Play tools collapse to a compact panel and the centre name badge is hidden during play to keep the ball-camera sightline clear. Saved camera settings are retained without automatic preset migration.
 
-Normal tyre grip is firmer while powerslide keeps its lower grip. Reverse acceleration stops at 1200 UU/s, braking stops at zero before reversing, analogue brake pressure changes deceleration, and existing boost momentum is preserved. Fixed-step physics can catch up through 250 ms render frames so movement no longer slows down at five FPS while the match clock keeps running.
+Normal tyre grip is firmer while powerslide keeps its lower grip. Sideways body contacts settle back onto the tyres; press Space to self-right a car resting on its roof, even if its aerial jumps were already used. Recovery requires body contact and cannot grant a mid-air jump. Visible-body bounds keep a tilted roof or flank above the pitch. Reverse acceleration stops at 1200 UU/s, braking stops at zero before reversing, analogue brake pressure changes deceleration, and existing boost momentum is preserved. Fixed-step physics can catch up through 250 ms render frames so movement no longer slows down at five FPS while the match clock keeps running.
 
 ## Audio, replays and goal speed
 
@@ -66,6 +66,7 @@ node tests/aerial-controls.test.js
 node tests/replay.test.js
 node tests/car-audio.test.js
 node tests/ball-camera.test.js
+node tests/car-recovery.test.js
 node tests/goal-effects.test.js
 node tests/scene-utils.test.js
 node tests/browser-smoke.js

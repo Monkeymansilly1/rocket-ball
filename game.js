@@ -1276,6 +1276,7 @@ function makeDetailedOctane(car) {
   // Keep the existing body rotation pivot and boost flame; hide placeholder geometry only.
   for (const child of m.body.children) if (child !== m.flame) child.visible = false;
   m.body.add(fitted);
+  cacheCarBodyBounds(m);
   m.detailed = true;
   m.detailedRoot = fitted;
   m.detailedWheels = wheelNodes;
@@ -1299,6 +1300,21 @@ function loadDetailedOctane() {
     console.warn('Full Octane could not load; retaining playable car:', err);
     if (status) status.textContent = 'Using lightweight car (model unavailable)';
   });
+}
+
+// Cache the visible model's local bounds once, excluding hidden placeholders
+// and boost flames. Body-ground contact then follows the actual tilted car.
+function cacheCarBodyBounds(mesh) {
+  mesh.body.updateWorldMatrix(true,true);
+  const inverse=new THREE.Matrix4().copy(mesh.body.matrixWorld).invert();
+  const bounds=new THREE.Box3();bounds.makeEmpty();
+  mesh.body.traverseVisible(object=>{
+    if(!object.isMesh||object===mesh.flame)return;
+    if(!object.geometry.boundingBox)object.geometry.computeBoundingBox();
+    const transform=new THREE.Matrix4().multiplyMatrices(inverse,object.matrixWorld);
+    bounds.union(object.geometry.boundingBox.clone().applyMatrix4(transform));
+  });
+  if(!bounds.isEmpty())mesh.bodyBounds={min:bounds.min.toArray(),max:bounds.max.toArray()};
 }
 
 // build car mesh for different model types (improved visuals)
@@ -1466,7 +1482,7 @@ function carMesh(col, typeName) {
   body.add(glow);
 
   scene.add(root);
-  return { root, body, flame, type, wheels };
+  const mesh={root,body,flame,type,wheels};cacheCarBodyBounds(mesh);return mesh;
 }
 const ballTex = (() => {
   const c = document.createElement('canvas'); c.width = 256; c.height = 128; const g = c.getContext('2d');
@@ -1744,6 +1760,7 @@ for (const [x,z,big] of [...bigPads,...smallPads]) {
 }
 const FORM = [[0, 4608 / 50 / HL], [-40.96, 2560 / 50 / HL], [40.96, 2560 / 50 / HL]];
 function kickoff() {
+  for(const c of cars){c.recoveryTimer=0;c.recoveryTarget=null;c.bodyRestTime=0;c.bodyContact=false;}
   previousTouch = null;
   eventCooldown = {};
   resetBallTrail();
@@ -1823,6 +1840,7 @@ function resetTrainingBall() {
 }
 function resetTrainingCar() {
   const car = cars[0]; if (!car) return;
+  car.recoveryTimer=0;car.recoveryTarget=null;car.bodyRestTime=0;
   Object.assign(car, {
     x: 0, y: 0.55, z: -34, vx: 0, vy: 0, vz: 0,
     yaw: 0, pitch: 0, roll: 0, jumps: 0, jt: 0,
@@ -2673,6 +2691,7 @@ function predict() {
 function aiCtl(c, dt) {
   c.aiCd -= dt; c.errT = (c.errT || 0) - dt;
   const sk = SKILL[diff], ct = { throttle: sk.thr, steer: 0, jump: false, jumpHeld: false, boost: false, hand: false };
+  if(c.bodyContact&&!c.ground&&c.aiCd<=0){ct.jump=true;ct.throttle=0;c.aiCd=.8;return ct;}
   // Difficulty cap must not be multiplied into itself every physics tick.
   c.cap = sk.cap * (c.baseCap || 1);
   if (c.wait > 0) { c.wait -= dt; ct.throttle = 0; return ct; }
@@ -2986,7 +3005,7 @@ function stepCar(c, ct, dt) {
       c.x = 0; c.z = c.team ? HL - 14 : -HL + 14; c.yaw = c.team ? Math.PI : 0;
       c.pitch = 0; c.roll = 0; c.wallRide = false; c.wallVerticalAxis = null; c.wallVerticalSign = 0;
       c.surfaceQuat=null;c.surfaceNormal=null;c.surfaceForward=null;c.ceilingRide=false;
-      c.airQuat=null;c.airOmega=null;c.jumpNormal=null;
+      c.airQuat=null;c.airOmega=null;c.jumpNormal=null;c.recoveryTimer=0;c.recoveryTarget=null;c.bodyRestTime=0;c.bodyContact=false;
       c.boost = 34; c.jumps = 0; c.jt = 0; c.ground = true; c.boostImpactTimer = 0;
       c.mesh.root.visible = true;
     } else {
@@ -2999,6 +3018,41 @@ function stepCar(c, ct, dt) {
   // Brief separation grace after a wall/ramp jump. Otherwise the same ramp
   // snaps the car back onto its surface in the next physics step.
   c.wallDetachTimer = Math.max(0, (c.wallDetachTimer || 0) - dt);
+  const bounds=c.mesh?.bodyBounds||{min:[-1.25,-.48,-2],max:[1.25,1,2]};
+  function bodyClearance(normal) {
+    const local=normal.clone().applyQuaternion(getCarOrientation(c).clone().invert());
+    const components=[local.x,local.y,local.z];let support=0;
+    for(let i=0;i<3;i++)support-=components[i]*(components[i]>=0?bounds.min[i]:bounds.max[i]);
+    return Math.max(CAR_CLEARANCE,support+.025);
+  }
+  const floorRamp=arenaRampAt(c.x,c.z);
+  const floorNormal=new THREE.Vector3(-floorRamp.dx,1,-floorRamp.dz).normalize();
+  const bodyHeight=floorRamp.height+bodyClearance(floorNormal)/Math.max(.7,floorNormal.y);
+  const wheelAlignment=AIR_Y.clone().applyQuaternion(getCarOrientation(c)).dot(floorNormal);
+  const bodyTouch=floorNormal.y>.7 && c.wallDetachTimer<=0 && c.y<=bodyHeight+.10 &&
+    c.vx*floorNormal.x+c.vy*floorNormal.y+c.vz*floorNormal.z<2.5 && wheelAlignment<PHYSICS_TUNING.CAR_LANDING_MIN_DOT;
+  c.bodyContact=bodyTouch;
+  c.bodyRestTime=bodyTouch?(c.bodyRestTime||0)+dt:0;
+  const manualRotation=Math.abs(ct.roll||0)>.1 || Math.abs(ct.pitch||0)>.1;
+  const settling=bodyTouch && wheelAlignment>-.75 && c.bodyRestTime>.18 &&
+    Math.hypot(c.vx,c.vz)<5 && !manualRotation && !(c.flip>0);
+  if((bodyTouch&&ct.jump)||settling){
+    const forward=getCarForward(c);forward.addScaledVector(floorNormal,-forward.dot(floorNormal));
+    if(forward.lengthSq()<.001)forward.set(Math.sin(c.yaw||0),0,Math.cos(c.yaw||0)).addScaledVector(floorNormal,-Math.cos(c.yaw||0)*floorNormal.z-Math.sin(c.yaw||0)*floorNormal.x);
+    forward.normalize();
+    const right=new THREE.Vector3().crossVectors(floorNormal,forward).normalize();
+    c.recoveryTarget=new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(right,floorNormal,forward));
+    c.recoveryTimer=.5;c.airQuat=getCarOrientation(c).clone();c.airOmega={pitch:0,yaw:0,roll:0};
+    c.flip=0;c.flipAxis=null;c.hold=0;c.jumpNormal=null;
+    if(ct.jump){
+      // A body-contact recovery is separate from aerial jumps. Exhausting
+      // the double jump must not leave a car permanently trapped on its roof.
+      const speed=c.vx*floorNormal.x+c.vy*floorNormal.y+c.vz*floorNormal.z;
+      const impulse=Math.max(0,4-speed);
+      c.vx+=floorNormal.x*impulse;c.vy+=floorNormal.y*impulse;c.vz+=floorNormal.z*impulse;
+      c.wallDetachTimer=.15;ct={...ct,jump:false};
+    }
+  }
   let contact=carSurfaceContact(c);
   if(contact && !c.ground && c.airQuat) {
     // Landing on the roof, flank or an inverted wheel pose should bounce.
@@ -3031,6 +3085,7 @@ function stepCar(c, ct, dt) {
   c.wallVerticalAxis=ground ? contact.axis : null;
   c.wallVerticalSign=ground ? contact.sign : 0;
   if(ground) {
+    c.recoveryTimer=0;c.recoveryTarget=null;c.bodyRestTime=0;c.bodyContact=false;
     if(!wasGrounded && c.airQuat) {
       // Preserve the nose direction that the player aimed during the
       // recovery instead of reverting to a stale pre-jump surface heading.
@@ -3163,6 +3218,11 @@ function stepCar(c, ct, dt) {
       }
     }
   }
+  if(!ground && c.recoveryTimer>0 && c.recoveryTarget){
+    c.airQuat=getCarOrientation(c).clone().slerp(c.recoveryTarget,1-Math.exp(-14*dt)).normalize();
+    c.airOmega={pitch:0,yaw:0,roll:0};c.recoveryTimer=Math.max(0,c.recoveryTimer-dt);
+    const e=new THREE.Euler().setFromQuaternion(c.airQuat,'YXZ');c.pitch=-e.x;c.yaw=e.y;c.roll=e.z;
+  }
   if (c.ai) c.boost = Math.min(100, c.boost + 8 * dt);
   // Boost momentum persists after boost is released. Only genuine physics
   // (coasting, braking, tyre friction) can slow the car from supersonic speed.
@@ -3182,17 +3242,26 @@ function stepCar(c, ct, dt) {
   const previousSideSpeed=previousRight ?
     c.vx*previousRight.x+c.vy*previousRight.y+c.vz*previousRight.z : 0;
   c.x+=c.vx*dt;c.y+=c.vy*dt;c.z+=c.vz*dt;
-  if(c.y<CAR_CLEARANCE){
-    c.y=CAR_CLEARANCE;
-    if(!ground && c.vy<0){
-      // Roof-first impact: preserve orientation and rebound instead of
-      // silently resetting the double jump as if the wheels had landed.
-      c.vy=-c.vy*PHYSICS_TUNING.CAR_ROOF_RESTITUTION;
-      c.vx*=0.94;c.vz*=0.94;
+  // Keep the roof/flanks above the surface using the rotated visible-body
+  // bounds; a fixed upright clearance embedded sideways cars in the pitch.
+  const bodyRamp=arenaRampAt(c.x,c.z);
+  const bodyNormal=new THREE.Vector3(-bodyRamp.dx,1,-bodyRamp.dz).normalize();
+  const minY=!ground&&bodyNormal.y>.7?bodyRamp.height+bodyClearance(bodyNormal)/bodyNormal.y:CAR_CLEARANCE;
+  const maxY=CEIL-(!ground?bodyClearance(new THREE.Vector3(0,-1,0)):CAR_CLEARANCE);
+  if(c.y<minY){
+    c.y=minY;
+    if(!ground){
+      const incoming=c.vx*bodyNormal.x+c.vy*bodyNormal.y+c.vz*bodyNormal.z;
+      if(incoming<0){
+        const restitution=incoming < -1?PHYSICS_TUNING.CAR_ROOF_RESTITUTION:0;
+        const impulse=-(1+restitution)*incoming;
+        c.vx+=bodyNormal.x*impulse;c.vy+=bodyNormal.y*impulse;c.vz+=bodyNormal.z*impulse;
+        const drag=Math.exp(-3*dt);c.vx*=drag;c.vz*=drag;
+      }
     }
-  }else if(c.y>CEIL-CAR_CLEARANCE){
-    c.y=CEIL-CAR_CLEARANCE;
-    if(!ground && c.vy>0)c.vy=-c.vy*PHYSICS_TUNING.CAR_ROOF_RESTITUTION;
+  }else if(c.y>maxY){
+    c.y=maxY;
+    if(!ground&&c.vy>0)c.vy=-c.vy*PHYSICS_TUNING.CAR_ROOF_RESTITUTION;
   }
   // Wheel suspension brings the car to its nearest curved surface without
   // deleting its speed along that surface. Contact normal is updated every
@@ -4048,7 +4117,8 @@ function render(dt) {
   if(flightHint){
     flightHint.hidden=!['play','kick'].includes(state);
     const manual=keyboardFlightMode==='manual';
-    const text=manual?'MANUAL AERIAL · Hold SPACE, raise nose with S, then SHIFT · W pitches down'
+    const tipped=!!cars[0]?.bodyContact && !cars[0].ground;
+    const text=tipped?'CAR TIPPED · Press SPACE to right the car · Q/E rolls manually':manual?'MANUAL AERIAL · Hold SPACE, raise nose with S, then SHIFT · W pitches down'
       :'ASSISTED AERIAL · Hold SPACE to jump, then hold SHIFT to climb · K/I aim · Q/E roll';
     if(flightHint.textContent!==text)flightHint.textContent=text;
   }

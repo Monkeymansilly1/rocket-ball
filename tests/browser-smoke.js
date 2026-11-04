@@ -220,6 +220,18 @@ async function main() {
       .catch(async err=>{throw new Error('Ground-to-air assisted takeoff failed: '+err.message+' '+await evalJS('JSON.stringify({y:window.rocketArena.cars[0].y,vy:window.rocketArena.cars[0].vy,pitch:window.rocketArena.cars[0].pitch})'));});
     await evalJS('window.dispatchEvent(new KeyboardEvent("keyup",{code:"ShiftLeft",bubbles:true}));document.getElementById("trainingResetCar").click()');
     console.log('PASS: real Space then Shift aerial takeoff from the ground');
+    await evalJS(`(()=>{const c=window.rocketArena.cars[0];Object.assign(c,{x:12,y:.55,z:88,vx:0,vy:0,vz:0,ground:false,jumps:2,jt:2,flip:0,roll:Math.PI/2,pitch:0,yaw:0,wallRide:false,wallDetachTimer:0,surfaceQuat:null,airQuat:new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1),Math.PI/2),airOmega:null,recoveryTimer:0,bodyRestTime:0});})()`);
+    await eventually(()=>evalJS('window.rocketArena.cars[0].ground && Math.abs(window.rocketArena.cars[0].roll)<.15'),15000)
+      .catch(async err=>{throw new Error('Sideways recovery: '+err.message+' '+await evalJS('JSON.stringify({y:window.rocketArena.cars[0].y,roll:window.rocketArena.cars[0].roll,timer:window.rocketArena.cars[0].recoveryTimer})'));});
+    await evalJS(`(()=>{const c=window.rocketArena.cars[0];Object.assign(c,{y:.55,vx:0,vy:0,vz:0,ground:false,jumps:2,jt:2,roll:Math.PI,wallDetachTimer:0,surfaceQuat:null,airQuat:new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1),Math.PI),airOmega:null,recoveryTimer:0,bodyRestTime:0});})()`);
+    await eventually(()=>evalJS('!!window.rocketArena.cars[0].bodyContact && !window.rocketArena.cars[0].ground'),10000);
+    await evalJS('window.dispatchEvent(new KeyboardEvent("keydown",{code:"Space",bubbles:true}))');
+    await eventually(()=>evalJS('window.rocketArena.cars[0].ground && Math.abs(window.rocketArena.cars[0].roll)<.15'),15000);
+    await evalJS('window.dispatchEvent(new KeyboardEvent("keyup",{code:"Space",bubbles:true}))');
+    const recoveredImage=await call('Page.captureScreenshot',{format:'png'});
+    fs.writeFileSync(path.join(os.tmpdir(),'rocket-car-recovered.png'),Buffer.from(recoveredImage.data,'base64'));
+    await evalJS('document.getElementById("trainingResetCar").click()');
+    console.log('PASS: actual model sideways settling and Space self-righting after both jumps are exhausted');
     await evalJS('document.getElementById("trainingTools").open=true;document.getElementById("trainingPreset").value="wall"; document.getElementById("trainingPreset").dispatchEvent(new Event("change",{bubbles:true}))');
     assert.equal(await evalJS('window.rocketArena.ball.x > 60'),true);
     assert.equal(await evalJS('document.getElementById("trainingShotCount").textContent.includes("2")'),true);
