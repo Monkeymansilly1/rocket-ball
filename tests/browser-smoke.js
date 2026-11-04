@@ -202,6 +202,15 @@ async function main() {
     await eventually(()=>evalJS('window.rocketArena.state==="play" && window.rocketArena.cars.length===1'));
     assert.equal(await evalJS('document.body.classList.contains("free-play")'),true);
     await eventually(()=>evalJS('window.rocketArena.audioStatus.state==="running"'),10000);
+    const cameraProjection=await evalJS('window.rocketArena.cameraView');
+    assert.equal(cameraProjection.ballCam,true);
+    assert.equal(await evalJS('document.getElementById("viewToggle").getAttribute("aria-pressed")'),'true');
+    await evalJS('window.dispatchEvent(new KeyboardEvent("keydown",{code:"KeyC",bubbles:true}));window.dispatchEvent(new KeyboardEvent("keyup",{code:"KeyC",bubbles:true}))');
+    assert.equal(await evalJS('window.rocketArena.cameraView.ballCam'),false);
+    assert.equal(await evalJS('document.getElementById("viewToggle").getAttribute("aria-pressed")'),'false');
+    await evalJS('document.getElementById("viewToggle").click();document.getElementById("cinematicToggle").click()');
+    assert.equal(await evalJS('window.rocketArena.cameraView.ballCam'),true);
+    assert(cameraProjection.verticalFov<cameraProjection.horizontalFov,'Ball cam must use horizontal FOV rather than a fisheye vertical angle');
     assert.equal(await evalJS('document.getElementById("speedValue")===null'),true);
     assert.equal(await evalJS('document.activeElement===document.getElementById("name")'),false,'Starting gameplay must release text-field focus');
     await evalJS('window.dispatchEvent(new KeyboardEvent("keydown",{code:"ShiftLeft",bubbles:true}));window.dispatchEvent(new KeyboardEvent("keydown",{code:"Space",bubbles:true}))');
@@ -211,7 +220,7 @@ async function main() {
       .catch(async err=>{throw new Error('Ground-to-air assisted takeoff failed: '+err.message+' '+await evalJS('JSON.stringify({y:window.rocketArena.cars[0].y,vy:window.rocketArena.cars[0].vy,pitch:window.rocketArena.cars[0].pitch})'));});
     await evalJS('window.dispatchEvent(new KeyboardEvent("keyup",{code:"ShiftLeft",bubbles:true}));document.getElementById("trainingResetCar").click()');
     console.log('PASS: real Space then Shift aerial takeoff from the ground');
-    await evalJS('document.getElementById("trainingPreset").value="wall"; document.getElementById("trainingPreset").dispatchEvent(new Event("change",{bubbles:true}))');
+    await evalJS('document.getElementById("trainingTools").open=true;document.getElementById("trainingPreset").value="wall"; document.getElementById("trainingPreset").dispatchEvent(new Event("change",{bubbles:true}))');
     assert.equal(await evalJS('window.rocketArena.ball.x > 60'),true);
     assert.equal(await evalJS('document.getElementById("trainingShotCount").textContent.includes("2")'),true);
     await evalJS('document.getElementById("trainingNextShot").click()');
@@ -276,8 +285,8 @@ async function main() {
     assert.equal(await evalJS('window.rocketArena.state'),'menu');
 
     await evalJS('document.getElementById("settingCameraCompetitive").click()');
-    assert.equal(await evalJS('Number(document.getElementById("settingCameraFov").value)'),105);
-    assert.equal(await evalJS('Number(document.getElementById("settingCameraDistance").value)'),8);
+    assert.equal(await evalJS('Number(document.getElementById("settingCameraFov").value)'),110);
+    assert.equal(await evalJS('Number(document.getElementById("settingCameraDistance").value)'),5.6);
     await evalJS('document.getElementById("settingCameraFov").value="87"; document.getElementById("settingCameraFov").dispatchEvent(new Event("input",{bubbles:true}))');
     assert.equal(await evalJS('JSON.parse(localStorage.getItem("rocketArenaSettingsV1")).camera.fov'),87);
     console.log('Free Play passed; testing normal match');

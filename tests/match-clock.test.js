@@ -9,7 +9,9 @@ const context = {
   state: 'kick', cd: 3, clock: 300, trainingMode: false, ot: false, replayElapsed: 0,
   pollControllers() {}, render() {}, showVictoryScreen() {}, score: [0, 0],
   requestAnimationFrame(callback) { context.frame = callback; },
+  simulated:0,
   update(dt) {
+    context.simulated+=dt;
     assert(dt <= 1 / 120, 'Physics must retain its bounded fixed step');
     if (context.state === 'kick') {
       context.cd -= dt;
@@ -33,3 +35,8 @@ assert(Math.abs(context.clock - 298) < 0.001, 'Pause must freeze match time');
 context.paused=false;context.state='replay';context.replayElapsed=0;context.frame(12010);
 assert(Math.abs(context.replayElapsed-2)<.0001,'Replay playback must track elapsed time under slow rendering');
 console.log('PASS: slow-frame countdown, fixed-step physics, match clock, replay playback and pause');
+
+context.state='play';context.simulated=0;
+for(let i=1;i<=5;i++)context.frame(12010+i*200);
+assert(context.simulated>.98&&context.simulated<1.01,'Five-FPS rendering must still simulate a full second of car movement');
+console.log('PASS: fixed-step movement catches up at five FPS without slow motion');

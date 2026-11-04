@@ -411,3 +411,15 @@ console.log('PASS: controller aerial pitch, independent throttle and analog dire
   assert(energy(ball)<=before+.0001,'Contact friction must not create kinetic energy');
   console.log('PASS: standard gravity, drag, restitution, reference shot curve, no artificial lift and dissipative rolling friction');
 }
+
+// Reverse, braking and coasting must obey the same scaled movement model.
+{
+  let reverse=0;for(let i=0;i<1200;i++)reverse=stepGroundForward(reverse,-1,false,1/120);
+  assert(Math.abs(reverse+24)<.0001,'Reverse must stop accelerating at 1200 UU/s');
+  assert.equal(stepGroundForward(.2,-1,false,1/120),0,'Braking must stop at zero instead of oscillating through reverse');
+  assert(stepGroundForward(0,-1,false,1/120)<0,'Reverse must engage after braking to rest');
+  const partial=stepGroundForward(10,-.2,false,1/120),full=stepGroundForward(10,-1,false,1/120);
+  assert(partial>full&&partial<10,'Analogue brake pressure must control deceleration');
+  assert.equal(stepGroundForward(42,1,false,1/120),42,'Throttle must not erase existing boost momentum');
+  console.log('PASS: reverse speed limit, brake-to-zero, proportional analogue braking and boost momentum');
+}

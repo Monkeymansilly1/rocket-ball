@@ -12,12 +12,13 @@
   <div id="referenceToolbar" aria-label="Game controls">
     <button id="garageToggle" type="button" title="Open garage">🚘 <span>GARAGE</span></button>
     <button id="viewToggle" type="button" title="Switch camera view">◉ <span>PLAYER VIEW</span></button>
-    <button id="cinematicToggle" type="button" title="Cinematic camera">▣ <span>CINEMATIC</span></button>
+    <button id="cinematicToggle" type="button" title="Recenter camera">▣ <span>RESET VIEW</span></button>
     <button id="fullscreenToggle" type="button" title="Toggle fullscreen">⛶</button>
   </div>
   <button id="skipReplayButton" type="button">SKIP REPLAY <kbd>SPACE</kbd></button>
   <button id="quickPlayButton" type="button">▶ PLAY <small>MATCHES &amp; MODES</small></button>
-  <div id="trainingTools" aria-label="Free Play tools" hidden>
+  <details id="trainingTools" aria-label="Free Play tools" hidden>
+    <summary>FREE PLAY · TRAINING TOOLS</summary>
     <strong>⚽ FREE PLAY</strong>
     <span id="trainingGoalCount">GOALS 0</span>
     <span id="trainingShotCount">ATTEMPT 1</span>
@@ -40,7 +41,7 @@
       <button id="trainingResetCar" type="button" title="Reset car (Backspace)">RESET CAR <kbd>⌫</kbd></button>
       <button id="trainingExit" type="button">GARAGE</button>
     </div>
-  </div>
+  </details>
 <div id="hud">
   <div id="score"><b id="s0">0</b><span id="clock">5:00</span><b id="s1">0</b></div>
   <div id="player">PLAYER</div>
@@ -190,19 +191,19 @@
           <p class="setting-help">Performance mode reduces rendering resolution and shadows for smoother matches on slower computers.</p>
           <h3>Camera</h3>
           <div class="setting-row">
-            <label for="settingCameraFov">Field of view</label>
-            <input id="settingCameraFov" type="range" min="60" max="110" step="1" value="105">
-            <output id="settingCameraFovValue" for="settingCameraFov">105°</output>
+            <label for="settingCameraFov">Horizontal field of view</label>
+            <input id="settingCameraFov" type="range" min="60" max="110" step="1" value="110">
+            <output id="settingCameraFovValue" for="settingCameraFov">110°</output>
           </div>
           <div class="setting-row">
             <label for="settingCameraDistance">Camera distance</label>
-            <input id="settingCameraDistance" type="range" min="5" max="20" step="0.5" value="8">
-            <output id="settingCameraDistanceValue" for="settingCameraDistance">8</output>
+            <input id="settingCameraDistance" type="range" min="5" max="20" step="0.1" value="5.6">
+            <output id="settingCameraDistanceValue" for="settingCameraDistance">5.6</output>
           </div>
           <div class="setting-row">
             <label for="settingCameraHeight">Camera height</label>
-            <input id="settingCameraHeight" type="range" min="2" max="9" step="0.5" value="3.5">
-            <output id="settingCameraHeightValue" for="settingCameraHeight">3.5</output>
+            <input id="settingCameraHeight" type="range" min="2" max="9" step="0.1" value="2.2">
+            <output id="settingCameraHeightValue" for="settingCameraHeight">2.2</output>
           </div>
           <div class="setting-row">
             <label for="settingCameraStiffness">Camera stiffness</label>
@@ -272,6 +273,7 @@
 <script src="lib/goal-effects.js"></script>
 <script src="lib/replay.js"></script>
 <script src="lib/car-audio.js"></script>
+<script src="lib/ball-camera.js"></script>
 <script src="game.js"></script>
 </body>
 </html>

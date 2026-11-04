@@ -41,7 +41,7 @@ const PHYSICS_TUNING = {
   TURN_RATE_SLOW: 3.4, TURN_RATE_FAST: 1.4, HANDBRAKE_TURN_MULTIPLIER: 1.6,
   // Lateral tyre velocity must decay through traction, not rotate instantly
   // when the steering wheel turns. Powerslide drops that tyre grip.
-  NORMAL_LATERAL_FRICTION: 14, POWERSLIDE_FRICTION_MULTIPLIER: 0.18,
+  NORMAL_LATERAL_FRICTION: 24, POWERSLIDE_FRICTION_MULTIPLIER: 0.105,
   JUMP_IMPULSE: 291.67 / 50, JUMP_HOLD_FORCE: 1458.33 / 50, JUMP_HOLD_DURATION: 0.2,
   DOUBLE_JUMP_IMPULSE: 291.67 / 50, DODGE_IMPULSE: 17,
   PITCH_TORQUE_SPEED: 3.4, YAW_TORQUE_SPEED: 2.85, ROLL_TORQUE_SPEED: 4.2,
@@ -75,7 +75,7 @@ let controllerSteeringSensitivity = 1.25, controllerAerialSensitivity = 1.35;
 let controllerVibrationEnabled = true;
 let keyboardFlightMode = 'assist'; // assist retains W+Shift climb; manual = RL-style W/S aerial pitch
 let graphicsQuality = 'balanced';
-const cameraSettings = { fov: 105, distance: 8, height: 3.5, stiffness: 10, shake: false };
+const cameraSettings = { fov: 110, distance: 5.6, height: 2.2, stiffness: 10, shake: false };
 try {
   const savedSettings = JSON.parse(localStorage.getItem('rocketArenaSettingsV1') || '{}');
   if (Number.isFinite(savedSettings.volume)) gameVolume = Math.max(0, Math.min(1, savedSettings.volume));
@@ -90,6 +90,7 @@ try {
       if (Number.isFinite(savedSettings.camera[key])) cameraSettings[key] = savedSettings.camera[key];
     }
     if (typeof savedSettings.camera.shake === 'boolean') cameraSettings.shake = savedSettings.camera.shake;
+    if(savedSettings.camera.fov===105 && savedSettings.camera.distance===8 && savedSettings.camera.height===3.5)Object.assign(cameraSettings,{fov:110,distance:5.6,height:2.2});
   }
   if (Object.prototype.hasOwnProperty.call(TEAM_COLOR_PRESETS, savedSettings.colourVisionMode)) colourVisionMode = savedSettings.colourVisionMode;
 } catch (_) {}
@@ -1765,6 +1766,7 @@ function kickoff() {
 function start(freePlay = false) {
   document.activeElement?.blur?.();
   clearHeldInput();
+  for(const rig of [cam,cam2]){delete rig.heading;delete rig.offset;delete rig.direction;}
   stopGoalPreview();lobbyArenaTour=false;camera.clearViewOffset();
   sfx.init(); // read UI choices
   trainingMode = !!freePlay;
@@ -1774,8 +1776,7 @@ function start(freePlay = false) {
   trainingWallArmed = false;
   paused = false;
   // Competitive car-soccer defaults to ball tracking, toggled at any time by C.
-  ballCam = true;
-  if ($('cam')) $('cam').textContent = 'Ball cam (C)';
+  setBallCamera(true);
   window.__rocketPhysicsAccumulator = 0;
   document.body.classList.toggle('free-play', trainingMode);
   resize();
@@ -2081,17 +2082,17 @@ if (quickPlayButton) quickPlayButton.addEventListener('click', () => {
   if (state === 'menu' || state === 'over') start();
   else { trainingMode = false; document.body.classList.remove('free-play'); if ($('trainingTools')) $('trainingTools').hidden = true; state = 'menu'; $('menu').style.display = 'grid'; $('mt').textContent = 'MATCH SETUP'; }
 });
-const viewToggle = $('viewToggle');
-if (viewToggle) viewToggle.addEventListener('click', () => {
-  ballCam = !ballCam;
-  $('cam').textContent = ballCam ? 'Ball cam (C)' : 'Chase cam (C)';
-  viewToggle.innerHTML = (ballCam ? '◉ <span>BALL CAM</span>' : '◉ <span>PLAYER VIEW</span>');
-});
-const cinematicToggle = $('cinematicToggle');
-if (cinematicToggle) cinematicToggle.addEventListener('click', () => {
-  ballCam = !ballCam;
-  $('cam').textContent = ballCam ? 'Cinematic / ball cam' : 'Chase cam';
-  cinematicToggle.classList.toggle('on', ballCam);
+function setBallCamera(enabled,controlHint='C') {
+  ballCam=!!enabled;
+  if($('cam'))$('cam').textContent=(ballCam?'BALL CAM':'CAR CAM')+' · '+controlHint;
+  const button=$('viewToggle');
+  if(button){button.innerHTML=ballCam?'◉ <span>BALL CAM</span>':'◉ <span>CAR CAM</span>';button.setAttribute('aria-pressed',String(ballCam));button.classList.toggle('on',ballCam);}
+}
+const viewToggle=$('viewToggle');
+if(viewToggle)viewToggle.addEventListener('click',()=>setBallCamera(!ballCam));
+const cinematicToggle=$('cinematicToggle');
+if(cinematicToggle)cinematicToggle.addEventListener('click',()=>{
+  for(const rig of [cam,cam2]){delete rig.heading;delete rig.offset;delete rig.direction;}
 });
 const fullscreenToggle = $('fullscreenToggle');
 if (fullscreenToggle) fullscreenToggle.addEventListener('click', async () => {
@@ -2184,10 +2185,7 @@ function pollControllers() {
       // Y/Triangle toggles ball cam once per press, not every physics frame.
       if (state === 'play' && !paused && !pendingKeyCapture &&
           Number.isInteger(cameraIndex) && current[cameraId] && !previousPadButtons[cameraId]) {
-        ballCam = !ballCam;
-        if ($('cam')) $('cam').textContent = ballCam ? 'BALL CAM · Y / △' : 'CAR CAM · Y / △';
-        if ($('viewToggle')) $('viewToggle').innerHTML = ballCam
-          ? '◉ <span>BALL CAM</span>' : '◉ <span>PLAYER VIEW</span>';
+        setBallCamera(!ballCam,'Y / △');
       }
       // Options/Start: start from garage or pause/resume a running match.
       const optionsId = first.index + ':9';
@@ -2276,10 +2274,7 @@ addEventListener('keydown', e => {
     if (!e.repeat && e.code === 'Backspace') { resetTrainingCar(); e.preventDefault(); }
   }
   if (!keys[e.code] && e.code === controlBindings.p1.keyboard.camera) {
-    ballCam = !ballCam;
-    if ($('cam')) $('cam').textContent = ballCam ? 'BALL CAM · C' : 'CAR CAM · C';
-    if ($('viewToggle')) $('viewToggle').innerHTML = ballCam
-      ? '◉ <span>BALL CAM</span>' : '◉ <span>PLAYER VIEW</span>';
+    setBallCamera(!ballCam);
   }
   if (e.code === 'Enter' && (state === 'menu' || state === 'over') && !isEditingTarget(document.activeElement)) start();
   if (state === 'menu' || state === 'over') {
@@ -2473,7 +2468,7 @@ if (vibrationSetting) {
 }
 for (const [key, id, out, min, max, suffix] of [
   ['fov', 'settingCameraFov', 'settingCameraFovValue', 60, 110, '°'],
-  ['distance', 'settingCameraDistance', 'settingCameraDistanceValue', 8, 20, ''],
+  ['distance', 'settingCameraDistance', 'settingCameraDistanceValue', 5, 20, ''],
   ['height', 'settingCameraHeight', 'settingCameraHeightValue', 2, 9, ''],
   ['stiffness', 'settingCameraStiffness', 'settingCameraStiffnessValue', 2, 15, '']
 ]) {
@@ -2492,7 +2487,7 @@ for (const [key, id, out, min, max, suffix] of [
 // camera settings, retained through refresh as normal user settings.
 const rlCameraPreset = $('settingCameraCompetitive');
 if (rlCameraPreset) rlCameraPreset.addEventListener('click', () => {
-  Object.assign(cameraSettings, { fov:105, distance:8, height:3.5, stiffness:10, shake:false });
+  Object.assign(cameraSettings, { fov:110, distance:5.6, height:2.2, stiffness:10, shake:false });
   for (const [key, id, out, suffix] of [
     ['fov','settingCameraFov','settingCameraFovValue','°'],
     ['distance','settingCameraDistance','settingCameraDistanceValue',''],
@@ -2836,14 +2831,19 @@ function groundThrottleAcceleration(v) {
   return (1600 - 1440 * (speed / 1400)) / PHYSICS_TUNING.REFERENCE_SCALE;
 }
 function stepGroundForward(v, throttle, boosting, dt) {
-  const demand = boosting ? 1 : clamp(throttle || 0, -1, 1);
-  if (Math.abs(demand) < 0.01) {
-    const amount = 525 / PHYSICS_TUNING.REFERENCE_SCALE * dt;
-    return Math.abs(v) <= amount ? 0 : v - Math.sign(v) * amount;
+  const demand=boosting?1:clamp(throttle||0,-1,1);
+  if(Math.abs(demand)<.01){
+    const amount=525/PHYSICS_TUNING.REFERENCE_SCALE*dt;
+    return Math.abs(v)<=amount?0:v-Math.sign(v)*amount;
   }
-  if (v * demand < -0.01) return v + Math.sign(demand) *
-    (3500 / PHYSICS_TUNING.REFERENCE_SCALE) * dt;
-  return v + demand * groundThrottleAcceleration(v) * dt;
+  if(v*demand<0){
+    const brake=3500/PHYSICS_TUNING.REFERENCE_SCALE*Math.abs(demand)*dt;
+    return Math.sign(v)*Math.max(0,Math.abs(v)-brake);
+  }
+  const limit=demand<0?PHYSICS_TUNING.REVERSE_MAX_SPEED:PHYSICS_TUNING.GROUND_MAX_SPEED;
+  if(Math.abs(v)>=limit)return v;
+  const next=v+demand*groundThrottleAcceleration(v)*dt;
+  return demand<0?Math.max(-limit,next):Math.min(limit,next);
 }
 function groundSteeringCurvature(speedUnits, powerslide) {
   // Rocket League community-measured, piecewise ground turning curvature.
@@ -3790,6 +3790,7 @@ function update(dt) {
         const scorer = cars[replayCameraCarIndex] || cars[0];
         const backX = -Math.sin(scorer.yaw), backZ = -Math.cos(scorer.yaw);
         for (const camState of [cam, ...(localTwoPlayer ? [cam2] : [])]) {
+          delete camState.heading;delete camState.offset;delete camState.direction;
           camState.x = scorer.x + backX * 11;
           camState.y = clamp(scorer.y + 4.6, 2, CEIL - 1);
           camState.z = scorer.z + backZ * 11;
@@ -3931,93 +3932,25 @@ $('victoryPlayAgain').addEventListener('click', () => { const p=$('victory'); p.
 const cam = { x: 0, y: 6, z: -60, lx: 0, ly: 2, lz: 0 };
 const cam2 = { x: 0, y: 6, z: 60, lx: 0, ly: 2, lz: 0 };
 const axis = new THREE.Vector3();
-function updateCam(dt, carIndex = 0, targetCamera = camera, camState = cam) {
-  const car = cars[carIndex] || cars[0]; if (!car) return;
-  // Camera heading follows the 3D car's nose except when it is almost
-  // vertical, where a projected heading has no reliable direction.
-  const front = getCarForward(car);
-  const forwardLength = Math.hypot(front.x, front.z);
-  let backX = forwardLength > 0.23 ? -front.x / forwardLength : -Math.sin(car.yaw);
-  let backZ = forwardLength > 0.23 ? -front.z / forwardLength : -Math.cos(car.yaw);
-  if (ballCam || (trainingMode && $('trainingPreset') && $('trainingPreset').value === 'wall')) {
-    // Camera tracks the ball but stays behind the player's car.
-    const awayX = car.x - ball.x, awayZ = car.z - ball.z;
-    const length = Math.hypot(awayX, awayZ);
-    if (length > 0.6) { backX = awayX / length; backZ = awayZ / length; }
+function updateCam(dt, carIndex=0, targetCamera=camera, camState=cam) {
+  const car=cars[carIndex]||cars[0];if(!car)return;
+  const pad=controllerForPlayer(localTwoPlayer&&carIndex===mode?'p2':'p1');
+  const stick=raw=>{if(!Number.isFinite(raw))return 0;const magnitude=Math.abs(clamp(raw,-1,1));return magnitude<=controllerDeadZone?0:Math.sign(raw)*(magnitude-controllerDeadZone)/(1-controllerDeadZone);};
+  const result=RocketBallCamera.update(camState,{car,ball,forward:getCarForward(car),settings:cameraSettings,
+    aspect:targetCamera.aspect,ballCam,lookX:stick(pad?.axes?.[2]),lookY:stick(pad?.axes?.[3]),dt,
+    heightAt:(x,z)=>arenaRampAt(x,z).height});
+  targetCamera.position.set(result.position.x,result.position.y,result.position.z);
+  if(cameraSettings.shake&&camShakeTime>0){
+    const shake=Math.min(.25,camShakeTime)*.4;targetCamera.position.x+=(Math.random()-.5)*shake;targetCamera.position.y+=(Math.random()-.5)*shake;
   }
-  // Standard controller right stick: look around without steering the car.
-  // Release the stick to smoothly return to ball cam or the chase camera.
-  const lookingPad = controllerForPlayer(localTwoPlayer && carIndex === mode ? 'p2' : 'p1');
-  const lookStick = raw => {
-    if (!Number.isFinite(raw)) return 0;
-    const magnitude = Math.abs(clamp(raw, -1, 1));
-    return magnitude <= controllerDeadZone ? 0 :
-      Math.sign(raw) * (magnitude - controllerDeadZone) / (1 - controllerDeadZone);
-  };
-  const swivelX = lookingPad && lookingPad.axes ? lookStick(lookingPad.axes[2]) : 0;
-  const swivelY = lookingPad && lookingPad.axes ? lookStick(lookingPad.axes[3]) : 0;
-  const lookingAround = Math.abs(swivelX) > 0.06 || Math.abs(swivelY) > 0.06;
-  if (lookingAround && Math.abs(swivelX) > 0.02) {
-    const turn = swivelX * 1.25, cos = Math.cos(turn), sin = Math.sin(turn);
-    const oldX = backX, oldZ = backZ;
-    backX = oldX * cos + oldZ * sin;
-    backZ = oldZ * cos - oldX * sin;
-  }
-  const k = 1 - Math.exp(-cameraSettings.stiffness * dt);
-  let tx = clamp(car.x + backX * cameraSettings.distance, -HW + 2, HW - 2);
-  let tz = clamp(car.z + backZ * cameraSettings.distance, -HL + 2, HL - 2);
-  let ty = clamp(car.y + cameraSettings.height, 2, CEIL - 1.5);
-  // When riding or jumping off a wall, the regular chase camera can be
-  // squeezed flat against the glass, hiding the ball and the car. Shift the
-  // view inside the arena and look slightly upward during wall-to-air plays.
-  const wallView = !!car.wallVerticalAxis || (car.wallDetachTimer || 0) > 0 ||
-    (car.wallRide && car.y > WALL_RAMP_HEIGHT * 0.72);
-  if (wallView) {
-    // Keep the camera behind the actual travel direction rather than
-    // always subtracting Z (which flipped the view on opposite walls).
-    const infieldOffset=Math.max(11,cameraSettings.distance*1.15);
-    const horizontalSpeed=Math.hypot(car.vx,car.vz);
-    const trailX=horizontalSpeed>3 ? -car.vx/horizontalSpeed : backX;
-    const trailZ=horizontalSpeed>3 ? -car.vz/horizontalSpeed : backZ;
-    if(car.wallVerticalAxis==='x' || Math.abs(car.x)>HW-10){
-      tx=Math.sign(car.x)*(HW-infieldOffset);
-      tz=clamp(car.z+trailZ*cameraSettings.distance*0.7,-HL+10,HL-10);
-    }else if(car.wallVerticalAxis==='z'||Math.abs(car.z)>HL-10){
-      tz=Math.sign(car.z)*(HL-infieldOffset);
-      tx=clamp(car.x+trailX*cameraSettings.distance*0.7,-HW+10,HW-10);
-    }
-    ty=clamp(car.y+cameraSettings.height+1.4,4,CEIL-1);
-  }
-  camState.x += (tx - camState.x) * k;
-  camState.y += (ty - camState.y) * k;
-  camState.z += (tz - camState.z) * k;
-  // Temporary right-stick look overrides the ball target; normal ball cam
-  // returns as soon as the right stick is released.
-  const trackBall = ballCam && !lookingAround;
-  const lookX = trackBall ? ball.x : car.x - backX * 9;
-  const lookY = trackBall ? ball.y : car.y + (wallView ? 4.0 : 1.0) - swivelY * 3.2;
-  const lookZ = trackBall ? ball.z : car.z - backZ * 9;
-  camState.lx += (lookX - camState.lx) * k;
-  camState.ly += (lookY - camState.ly) * k;
-  camState.lz += (lookZ - camState.lz) * k;
-
-  if (cameraSettings.shake && camShakeTime > 0) {
-    camShakeTime = Math.max(0, camShakeTime - dt);
-    const shake = Math.min(0.45, camShakeTime) * 0.7;
-    camState.x += (Math.random() - 0.5) * shake;
-    camState.y += (Math.random() - 0.5) * shake;
-  } else if (camShakeTime > 0) {
-    camShakeTime = Math.max(0, camShakeTime - dt);
-  }
-  targetCamera.position.set(camState.x, camState.y, camState.z);
-  targetCamera.lookAt(camState.lx, camState.ly, camState.lz);
-  sun.position.set(car.x + 30, 80, car.z + 25);
-  sun.target.position.set(car.x, 0, car.z); sun.target.updateMatrixWorld();
-  const speed = Math.hypot(car.vx, car.vy, car.vz);
-  const desiredFov = clamp(cameraSettings.fov + speed * 0.10 + (car.fl ? 3 : 0), 60, 118);
-  targetCamera.fov += (desiredFov - targetCamera.fov) * k;
-  targetCamera.updateProjectionMatrix();
+  camShakeTime=Math.max(0,camShakeTime-dt);
+  targetCamera.up.set(0,1,0);targetCamera.lookAt(result.target.x,result.target.y,result.target.z);
+  targetCamera.fov=result.fov;targetCamera.updateProjectionMatrix();
+  // Retain compatibility with the replay camera reset/debug state.
+  Object.assign(camState,{x:result.position.x,y:result.position.y,z:result.position.z,lx:result.target.x,ly:result.target.y,lz:result.target.z});
+  sun.position.set(car.x+30,80,car.z+25);sun.target.position.set(car.x,0,car.z);sun.target.updateMatrixWorld();
 }
+
 function render(dt) {
   document.body.classList.toggle('in-menu',state==='menu');
   document.body.classList.toggle('goal-celebration',state==='goal');
@@ -4158,6 +4091,7 @@ window.rocketArena = {
   get replayStatus(){const frames=state==='play'?replayHistory:replayFrames;return {elapsed:replayElapsed,duration:RocketReplay.duration(frames),frames:frames.length};},
   get audioStatus(){return {state:carAudio.ac?.state||'uninitialised',engineGain:carAudio.engineGain?.gain.value||0,boostGain:carAudio.boostGain?.gain.value||0};},
   get goalSpeedMph(){return goalSpeedMph;},
+  get cameraView(){return {position:camera.position.toArray(),target:[cam.lx,cam.ly,cam.lz],verticalFov:camera.fov,horizontalFov:cameraSettings.fov,ballCam};},
   get renderStats() { return {calls:renderer.info.render.calls,triangles:renderer.info.render.triangles,geometries:renderer.info.memory.geometries,textures:renderer.info.memory.textures}; },
   get ballShadow() { return ballGroundShadow; },
   get ballTrail() { return ballTrail; },
@@ -4176,16 +4110,16 @@ let last = performance.now();
   // Match clocks follow elapsed time even when software rendering is slow.
   // Keep the physics step bounded independently to avoid unstable collisions.
   const wallDt = Math.max(0, (now - last) / 1000); last = now;
-  const frameDt = Math.min(0.09, wallDt);
+  const frameDt = Math.min(0.25, wallDt);
   pollControllers();
   // Physics remains deterministic at 120Hz. The clock, countdown, goal intro,
   // and replay still track real elapsed time when the GPU is running slowly.
   if (typeof window.__rocketPhysicsAccumulator !== 'number') window.__rocketPhysicsAccumulator = 0;
   if (!paused) {
-    window.__rocketPhysicsAccumulator = Math.min(0.19, window.__rocketPhysicsAccumulator + frameDt);
+    window.__rocketPhysicsAccumulator = Math.min(0.25, window.__rocketPhysicsAccumulator + frameDt);
     const fixedDt = 1 / 120;
     let steps = 0;
-    while (window.__rocketPhysicsAccumulator >= fixedDt && steps < 12) {
+    while (window.__rocketPhysicsAccumulator >= fixedDt && steps < 30) {
       update(fixedDt);
       window.__rocketPhysicsAccumulator -= fixedDt;
       steps++;

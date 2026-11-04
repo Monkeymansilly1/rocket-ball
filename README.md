@@ -31,6 +31,12 @@ Select a celebration in **Goal FX** to watch it at the actual goal with a dedica
 
 Effects last roughly 3–5 seconds, remain distinct at every graphics quality, and dispose their geometries and materials after finishing. Rapid previews replace previous previews instead of accumulating GPU resources. Match goal celebrations finish before the replay begins.
 
+## Ball camera and movement
+
+Ball cam uses a horizontal FOV, with a 110° / 280 UU distance / 110 UU height competitive preset. The orbit turns smoothly, retains its heading when the ball passes over the roof or bumper, and frames both the car and high balls. The camera follows the car's translation without boost lag, keeps a level horizon, and supports right-stick look with a smooth return to ball tracking. Camera height follows ramps, and wall orbits stay clear of the stands. Free Play tools collapse to a compact panel and the centre name badge is hidden during play to keep the ball-camera sightline clear. The exact previous camera preset migrates to the new values; other customised settings are retained.
+
+Normal tyre grip is firmer while powerslide keeps its lower grip. Reverse acceleration stops at 1200 UU/s, braking stops at zero before reversing, analogue brake pressure changes deceleration, and existing boost momentum is preserved. Fixed-step physics can catch up through 250 ms render frames so movement no longer slows down at five FPS while the match clock keeps running.
+
 ## Audio, replays and goal speed
 
 The engine uses filtered combustion harmonics, a low engine layer, intake noise and a separate boost whoosh. Pitch, volume and boost changes fade smoothly; mute, volume and pause apply to all layers. Audio resumes from a user gesture when a browser suspends the audio context.
@@ -59,6 +65,7 @@ node tests/match-clock.test.js
 node tests/aerial-controls.test.js
 node tests/replay.test.js
 node tests/car-audio.test.js
+node tests/ball-camera.test.js
 node tests/goal-effects.test.js
 node tests/scene-utils.test.js
 node tests/browser-smoke.js
@@ -73,6 +80,7 @@ The browser suite requires system Chrome/Chromium and Node.js 22 or newer. `CHRO
 - `lib/goal-effects.js`: original procedural 3D celebrations.
 - `lib/scene-utils.js`: static stadium batching.
 - `lib/replay.js`, `lib/car-audio.js`: replay sampling, speed conversion and layered engine audio.
+- `lib/ball-camera.js`: stable ball/chase camera rig and horizontal FOV conversion.
 - `assets/octane/`: credited Octane model and textures; see [asset credits](assets/octane/CREDITS.txt).
 - Three.js is distributed under its included [MIT licence](lib/THREE-LICENSE.txt).
 
