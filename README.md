@@ -33,7 +33,7 @@ Effects last roughly 3–5 seconds, remain distinct at every graphics quality, a
 
 ## Ball camera and movement
 
-Ball cam uses a horizontal FOV, with a 110° / 280 UU distance / 110 UU height competitive preset. The orbit turns smoothly, retains its heading when the ball passes over the roof or bumper, and frames both the car and high balls. The camera follows the car's translation without boost lag, keeps a level horizon, and supports right-stick look with a smooth return to ball tracking. Camera height follows ramps, and wall orbits stay clear of the stands. Free Play tools collapse to a compact panel and the centre name badge is hidden during play to keep the ball-camera sightline clear. The exact previous camera preset migrates to the new values; other customised settings are retained.
+Ball cam preserves the original 105° FOV, existing speed/boost FOV response, and saved custom FOV values. There is no aspect-ratio FOV conversion. The competitive camera retains the updated 280 UU distance and 110 UU height. The orbit turns smoothly, retains its heading when the ball passes over the roof or bumper, and frames both the car and high balls. The camera follows the car's translation without boost lag, keeps a level horizon, and supports right-stick look with a smooth return to ball tracking. Camera height follows ramps, and wall orbits stay clear of the stands. Free Play tools collapse to a compact panel and the centre name badge is hidden during play to keep the ball-camera sightline clear. Saved camera settings are retained without automatic preset migration.
 
 Normal tyre grip is firmer while powerslide keeps its lower grip. Reverse acceleration stops at 1200 UU/s, braking stops at zero before reversing, analogue brake pressure changes deceleration, and existing boost momentum is preserved. Fixed-step physics can catch up through 250 ms render frames so movement no longer slows down at five FPS while the match clock keeps running.
 
@@ -80,7 +80,7 @@ The browser suite requires system Chrome/Chromium and Node.js 22 or newer. `CHRO
 - `lib/goal-effects.js`: original procedural 3D celebrations.
 - `lib/scene-utils.js`: static stadium batching.
 - `lib/replay.js`, `lib/car-audio.js`: replay sampling, speed conversion and layered engine audio.
-- `lib/ball-camera.js`: stable ball/chase camera rig and horizontal FOV conversion.
+- `lib/ball-camera.js`: stable ball/chase camera rig with the original FOV behaviour.
 - `assets/octane/`: credited Octane model and textures; see [asset credits](assets/octane/CREDITS.txt).
 - Three.js is distributed under its included [MIT licence](lib/THREE-LICENSE.txt).
 

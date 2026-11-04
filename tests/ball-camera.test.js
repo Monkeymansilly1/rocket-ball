@@ -1,13 +1,22 @@
 'use strict';
+const fs=require('node:fs');
 const assert=require('node:assert/strict'),THREE=require('../lib/three.min.js');
 const Rig=require('../lib/ball-camera.js');
-const settings={fov:110,distance:5.6,height:2.2,stiffness:10};
+const source=fs.readFileSync('game.js','utf8');
+const settingsCode=source.slice(source.indexOf('const cameraSettings ='),source.indexOf('BLUE = TEAM_COLOR_PRESETS[colourVisionMode]'));
+function loadCamera(camera){return new Function('localStorage','TEAM_COLOR_PRESETS',settingsCode+'return cameraSettings;')({getItem:()=>JSON.stringify({camera})},{});}
+assert.equal(loadCamera({fov:110,distance:5.6,height:2.2}).fov,105,'Undo the accidentally saved preset from the last update');
+assert.equal(loadCamera({fov:110,distance:5.6,height:2.2,fovRevision:1}).fov,110,'An explicit later FOV choice must remain available');
+assert.equal(loadCamera({fov:87,distance:8,height:3.5}).fov,87,'Preserve existing custom FOV settings');
+const settings={fov:105,distance:5.6,height:2.2,stiffness:10};
 const car={x:0,y:.55,z:0,yaw:0,vx:0,vy:0,vz:0};
 const ball={x:0,y:1.825,z:30,vx:0,vy:0,vz:0};
 const options={car,ball,forward:{x:0,y:0,z:1},settings,aspect:16/9,ballCam:true,dt:1/120};
-const fov=Rig.verticalFov(110,16/9);
-assert(fov>75&&fov<80,'110 horizontal degrees must not become 110 vertical degrees');
-assert(Math.abs(2*Math.atan(Math.tan(fov*Math.PI/360)*16/9)*180/Math.PI-110)<1e-9);
+for(const aspect of [4/3,16/9,32/9]){
+  assert.equal(Rig.update({}, {...options,aspect}).fov,105,'Configured FOV must be preserved without aspect conversion');
+  assert.equal(Rig.update({}, {...options,aspect,settings:{...settings,fov:87}}).fov,87,'Custom FOV must remain unchanged');
+}
+assert.equal(Rig.update({}, {...options,car:{...car,vz:30,fl:1}}).fov,111,'Existing speed/boost FOV response must be retained');
 const state={};let result;
 for(let i=0;i<120;i++)result=Rig.update(state,options);
 function visible(point,view=result){
@@ -39,4 +48,4 @@ for(const aspect of [4/3,16/9,32/9,.6]){
 }
 const chase=Rig.update({}, {...options,ballCam:false,forward:{x:0,y:1,z:0}});
 assert(Number.isFinite(chase.position.x),'Vertical car orientation must retain a stable chase heading');
-console.log('PASS: horizontal FOV, car/ball framing, boost following, bumper crossings, overhead balls, walls and controller look');
+console.log('PASS: preserved default/custom FOV, car/ball framing, boost following, bumper crossings, overhead balls, walls and controller look');

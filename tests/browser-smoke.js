@@ -210,7 +210,7 @@ async function main() {
     assert.equal(await evalJS('document.getElementById("viewToggle").getAttribute("aria-pressed")'),'false');
     await evalJS('document.getElementById("viewToggle").click();document.getElementById("cinematicToggle").click()');
     assert.equal(await evalJS('window.rocketArena.cameraView.ballCam'),true);
-    assert(cameraProjection.verticalFov<cameraProjection.horizontalFov,'Ball cam must use horizontal FOV rather than a fisheye vertical angle');
+    assert(cameraProjection.configuredFov===105,'Original configured FOV must be preserved');
     assert.equal(await evalJS('document.getElementById("speedValue")===null'),true);
     assert.equal(await evalJS('document.activeElement===document.getElementById("name")'),false,'Starting gameplay must release text-field focus');
     await evalJS('window.dispatchEvent(new KeyboardEvent("keydown",{code:"ShiftLeft",bubbles:true}));window.dispatchEvent(new KeyboardEvent("keydown",{code:"Space",bubbles:true}))');
@@ -285,7 +285,7 @@ async function main() {
     assert.equal(await evalJS('window.rocketArena.state'),'menu');
 
     await evalJS('document.getElementById("settingCameraCompetitive").click()');
-    assert.equal(await evalJS('Number(document.getElementById("settingCameraFov").value)'),110);
+    assert.equal(await evalJS('Number(document.getElementById("settingCameraFov").value)'),105);
     assert.equal(await evalJS('Number(document.getElementById("settingCameraDistance").value)'),5.6);
     await evalJS('document.getElementById("settingCameraFov").value="87"; document.getElementById("settingCameraFov").dispatchEvent(new Event("input",{bubbles:true}))');
     assert.equal(await evalJS('JSON.parse(localStorage.getItem("rocketArenaSettingsV1")).camera.fov'),87);

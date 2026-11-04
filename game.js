@@ -75,7 +75,7 @@ let controllerSteeringSensitivity = 1.25, controllerAerialSensitivity = 1.35;
 let controllerVibrationEnabled = true;
 let keyboardFlightMode = 'assist'; // assist retains W+Shift climb; manual = RL-style W/S aerial pitch
 let graphicsQuality = 'balanced';
-const cameraSettings = { fov: 110, distance: 5.6, height: 2.2, stiffness: 10, shake: false };
+const cameraSettings = { fov: 105, distance: 5.6, height: 2.2, stiffness: 10, shake: false, fovRevision: 1 };
 try {
   const savedSettings = JSON.parse(localStorage.getItem('rocketArenaSettingsV1') || '{}');
   if (Number.isFinite(savedSettings.volume)) gameVolume = Math.max(0, Math.min(1, savedSettings.volume));
@@ -90,7 +90,9 @@ try {
       if (Number.isFinite(savedSettings.camera[key])) cameraSettings[key] = savedSettings.camera[key];
     }
     if (typeof savedSettings.camera.shake === 'boolean') cameraSettings.shake = savedSettings.camera.shake;
-    if(savedSettings.camera.fov===105 && savedSettings.camera.distance===8 && savedSettings.camera.height===3.5)Object.assign(cameraSettings,{fov:110,distance:5.6,height:2.2});
+    // Undo only the exact FOV preset introduced by the previous update.
+    // Subsequent explicit user choices carry this revision and are preserved.
+    if(!savedSettings.camera.fovRevision && savedSettings.camera.fov===110 && savedSettings.camera.distance===5.6 && savedSettings.camera.height===2.2)cameraSettings.fov=105;
   }
   if (Object.prototype.hasOwnProperty.call(TEAM_COLOR_PRESETS, savedSettings.colourVisionMode)) colourVisionMode = savedSettings.colourVisionMode;
 } catch (_) {}
@@ -2487,7 +2489,7 @@ for (const [key, id, out, min, max, suffix] of [
 // camera settings, retained through refresh as normal user settings.
 const rlCameraPreset = $('settingCameraCompetitive');
 if (rlCameraPreset) rlCameraPreset.addEventListener('click', () => {
-  Object.assign(cameraSettings, { fov:110, distance:5.6, height:2.2, stiffness:10, shake:false });
+  Object.assign(cameraSettings, { fov:105, distance:5.6, height:2.2, stiffness:10, shake:false });
   for (const [key, id, out, suffix] of [
     ['fov','settingCameraFov','settingCameraFovValue','°'],
     ['distance','settingCameraDistance','settingCameraDistanceValue',''],
@@ -3945,7 +3947,7 @@ function updateCam(dt, carIndex=0, targetCamera=camera, camState=cam) {
   }
   camShakeTime=Math.max(0,camShakeTime-dt);
   targetCamera.up.set(0,1,0);targetCamera.lookAt(result.target.x,result.target.y,result.target.z);
-  targetCamera.fov=result.fov;targetCamera.updateProjectionMatrix();
+  targetCamera.fov+=(result.fov-targetCamera.fov)*(1-Math.exp(-cameraSettings.stiffness*dt));targetCamera.updateProjectionMatrix();
   // Retain compatibility with the replay camera reset/debug state.
   Object.assign(camState,{x:result.position.x,y:result.position.y,z:result.position.z,lx:result.target.x,ly:result.target.y,lz:result.target.z});
   sun.position.set(car.x+30,80,car.z+25);sun.target.position.set(car.x,0,car.z);sun.target.updateMatrixWorld();
@@ -4091,7 +4093,7 @@ window.rocketArena = {
   get replayStatus(){const frames=state==='play'?replayHistory:replayFrames;return {elapsed:replayElapsed,duration:RocketReplay.duration(frames),frames:frames.length};},
   get audioStatus(){return {state:carAudio.ac?.state||'uninitialised',engineGain:carAudio.engineGain?.gain.value||0,boostGain:carAudio.boostGain?.gain.value||0};},
   get goalSpeedMph(){return goalSpeedMph;},
-  get cameraView(){return {position:camera.position.toArray(),target:[cam.lx,cam.ly,cam.lz],verticalFov:camera.fov,horizontalFov:cameraSettings.fov,ballCam};},
+  get cameraView(){return {position:camera.position.toArray(),target:[cam.lx,cam.ly,cam.lz],verticalFov:camera.fov,configuredFov:cameraSettings.fov,ballCam};},
   get renderStats() { return {calls:renderer.info.render.calls,triangles:renderer.info.render.triangles,geometries:renderer.info.memory.geometries,textures:renderer.info.memory.textures}; },
   get ballShadow() { return ballGroundShadow; },
   get ballTrail() { return ballTrail; },
