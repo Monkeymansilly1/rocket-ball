@@ -37,6 +37,8 @@ Ball cam preserves the original 105° FOV, existing speed/boost FOV response, an
 
 Normal tyre grip is firmer while powerslide keeps its lower grip. Sideways body contacts settle back onto the tyres; press Space to self-right a car resting on its roof, even if its aerial jumps were already used. Recovery requires body contact and cannot grant a mid-air jump. Visible-body bounds keep a tilted roof or flank above the pitch. Reverse acceleration stops at 1200 UU/s, braking stops at zero before reversing, analogue brake pressure changes deceleration, and existing boost momentum is preserved. Fixed-step physics can catch up through 250 ms render frames so movement no longer slows down at five FPS while the match clock keeps running.
 
+Tilted aerial landings establish contact at the actual body clearance, then settle onto the tyres over a short suspension transition. This prevents nose-up or rolled cars from hovering above the upright contact height. Tyre-first impacts absorb downward speed without a roof bounce, preserve forward momentum, and allow another jump as soon as contact is established.
+
 ## Audio, replays and goal speed
 
 The engine uses filtered combustion harmonics, a low engine layer, intake noise and a separate boost whoosh. Pitch, volume and boost changes fade smoothly; mute, volume and pause apply to all layers. Audio resumes from a user gesture when a browser suspends the audio context.
@@ -86,6 +88,7 @@ node tests/car-audio.test.js
 node tests/goal-anthems.test.js
 node tests/ball-camera.test.js
 node tests/car-recovery.test.js
+node tests/landing.test.js
 node tests/mini-crowd.test.js
 node tests/scorpion-body.test.js
 node tests/goal-effects.test.js

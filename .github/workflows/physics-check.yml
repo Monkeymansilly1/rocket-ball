@@ -33,6 +33,7 @@ jobs:
           node tests/goal-anthems.test.js
           node tests/ball-camera.test.js
           node tests/car-recovery.test.js
+          node tests/landing.test.js
           node tests/mini-crowd.test.js
           node tests/scorpion-body.test.js
           node tests/nexto.test.js

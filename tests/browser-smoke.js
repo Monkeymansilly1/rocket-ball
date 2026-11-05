@@ -295,6 +295,20 @@ async function main() {
     fs.writeFileSync(path.join(os.tmpdir(),'rocket-car-recovered.png'),Buffer.from(recoveredImage.data,'base64'));
     await evalJS('document.getElementById("trainingResetCar").click()');
     console.log('PASS: actual model sideways settling and Space self-righting after both jumps are exhausted');
+    for(const pitch of [-Math.PI/3,Math.PI/3]){
+      await evalJS(`(()=>{const c=window.rocketArena.cars[0];Object.assign(c,{
+        x:30,y:5,z:0,vx:0,vy:-8,vz:0,ground:false,jumps:2,jt:2,flip:0,
+        pitch:${pitch},yaw:0,roll:.3,wallRide:false,wallDetachTimer:0,
+        surfaceQuat:null,landingQuat:null,airQuat:new THREE.Quaternion().setFromEuler(new THREE.Euler(${-pitch},0,.3,'YXZ')),
+        airOmega:null,recoveryTimer:0,bodyRestTime:0});})()`);
+      await eventually(()=>evalJS(`(()=>{const c=window.rocketArena.cars[0];return c.ground&&c.y<.8&&
+        c.mesh.root.quaternion.angleTo(new THREE.Quaternion())<.025;})()`),15000)
+        .catch(async err=>{throw new Error('Tilted aerial landing: '+err.message+' '+await evalJS('JSON.stringify((({y,ground,pitch,roll})=>({y,ground,pitch,roll}))(window.rocketArena.cars[0]))'));});
+    }
+    await evalJS('window.dispatchEvent(new KeyboardEvent("keydown",{code:"Space",bubbles:true}))');
+    await eventually(()=>evalJS('!window.rocketArena.cars[0].ground&&window.rocketArena.cars[0].jumps===1'),10000);
+    await evalJS('window.dispatchEvent(new KeyboardEvent("keyup",{code:"Space",bubbles:true}));document.getElementById("trainingResetCar").click()');
+    console.log('PASS: real model compound nose-up/nose-down landings settle onto tyres and allow the next jump');
     const previousFlightMode=await evalJS('document.getElementById("settingKeyboardFlight").value');
     await evalJS(`document.getElementById('settingKeyboardFlight').value='manual';
       document.getElementById('settingKeyboardFlight').dispatchEvent(new Event('change',{bubbles:true}));
