@@ -8,7 +8,7 @@ From the repository root, run `python3 -m http.server 8000`, then open the serve
 
 ## The rebuilt arena and lobby
 
-The live 3D stadium is the backdrop to four lobby sections: **Play**, **Garage**, **Goal FX** and **Arena**. Play a casual 1v1, competitive 2v2, custom 1v1/2v2/3v3, or Free Play. Custom match options expand when needed. Garage offers exactly **Octane, Fennec and Scorpion**, with paint and player identities; player-two customisation appears when local two-player is enabled.
+The live 3D stadium is the backdrop to four lobby sections: **Play**, **Garage**, **Goal FX** and **Arena**. Play a casual 1v1, competitive 2v2, custom 1v1/2v2/3v3, or Free Play. Custom match options expand when needed. Garage offers exactly **Octane, Fennec and Scorpion**, with paint and player identities; player-two customisation appears when local two-player is enabled. Scorpion is selected on first use, and both players’ body choices persist after refresh. Its original mesh is bundled as a native Three.js model, so it appears even if the separate model or texture downloads fail; texture detail upgrades when available.
 
 Championship Dusk is the default stadium theme, with Day, Night, Winter and Sunset alternatives. The Arena section includes an orbiting stadium tour. The continuous rounded pitch and collision solver use the same surface function. Texture UVs follow world coordinates, so blue/orange markings stay at the correct goal and do not stretch over the rounded corners. Renderer and generated-texture colour settings use the API supported by the bundled Three.js version. Static stadium geometry is batched to reduce draw calls while preserving named and animated objects. All 18 terrace rows contain 8,332 mini fans, spaced evenly along the stands. Performance mode keeps the full crowd with simpler bodies.
 
@@ -71,6 +71,7 @@ node tests/car-audio.test.js
 node tests/ball-camera.test.js
 node tests/car-recovery.test.js
 node tests/mini-crowd.test.js
+node tests/scorpion-body.test.js
 node tests/goal-effects.test.js
 node tests/scene-utils.test.js
 node tests/browser-smoke.js

@@ -103,6 +103,9 @@ async function main() {
     await call('Page.navigate',{url});
     await eventually(()=>evalJS('document.readyState==="complete" && !!window.rocketArena && !!window.THREE'),45000)
       .catch(err=>{throw new Error('Game startup: '+err.message+'; browser exceptions: '+JSON.stringify(errors));});
+    assert.equal(await evalJS('window.rocketArena.cars[0]?.model'),'scorpion','New garage must show Scorpion by default');
+    assert.equal(await evalJS('window.rocketArena.cars[0]?.mesh.detailedRoot?.userData.vehicleModel'),'scorpion',
+      'The uploaded Scorpion body must appear even when its model download is interrupted');
     // SwiftShader has no hardware GPU; use the real performance mode for functional checks.
     await evalJS('document.getElementById("settingGraphics").value="low";document.getElementById("settingGraphics").dispatchEvent(new Event("change",{bubbles:true}))');
     await evalJS('document.querySelector(".lobby-nav [data-panel=garage]").click();document.getElementById("name").value="";document.getElementById("name").focus()');
@@ -166,6 +169,7 @@ async function main() {
     console.log('Game loaded; testing Free Play');
     assert.equal(await evalJS('window.rocketArena.state'),'menu');
     // Verify the NEW arena exists as playable 3D geometry, not just an image.
+    await evalJS(`document.querySelector('[data-car=octane]').click()`);
     assert.equal(await evalJS('window.rocketArena.stadium.name'), 'Rocket Ball Championship Arena');
     assert.equal(await evalJS('window.rocketArena.miniCrowd.bodies.count'),8332,
       'Dense mini potato spectators were not created');
@@ -211,7 +215,7 @@ async function main() {
     }
     for (const name of ['fennec','scorpion']) {
       await evalJS(`document.querySelector('[data-car="${name}"]').click()`);
-      await eventually(()=>evalJS(`window.rocketArena.cars[0]?.model==='${name}' && window.rocketArena.cars[0]?.mesh.detailed`),25000);
+      await eventually(()=>evalJS(`window.rocketArena.cars[0]?.model==='${name}' && window.rocketArena.cars[0]?.mesh.detailed && window.rocketArena.cars[0]?.mesh.textured`),25000);
       const info = await evalJS(`(()=>{const m=window.rocketArena.cars[0].mesh,b=m.bodyBounds;
         const maps=[];m.detailedRoot.traverse(o=>{if(o.isMesh)for(const mat of [o.material].flat())for(const k of ['map','normalMap'])if(mat[k])maps.push(k);});
         return {wheels:m.detailedWheels.length,width:b.max[0]-b.min[0],height:b.max[1]-b.min[1],length:b.max[2]-b.min[2],maps:maps.length,

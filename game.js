@@ -1264,11 +1264,12 @@ RocketSceneUtils.batchStaticMeshes(scene);
 const carModelAssets = {
   octane: { url:'assets/octane/scene.gltf', rotation:-Math.PI/2, axle:new THREE.Vector3(0,1,0) },
   fennec: { url:'assets/fennec/scene.glb', rotation:0, axle:new THREE.Vector3(1,0,0) },
-  scorpion: { url:'assets/scorpion/scene.gltf?v=scorpion-2', rotation:0, axle:new THREE.Vector3(1,0,0) }
+  scorpion: { url:'assets/scorpion/scene.gltf?v=scorpion-2', rotation:0, axle:new THREE.Vector3(1,0,0),
+    template:window.RocketScorpionBody?.create(THREE), bundled:true }
 };
 function makeDetailedCar(car) {
   const asset = car && carModelAssets[car.model];
-  if (!asset?.template || car.mesh.detailed) return;
+  if (!asset?.template || car.mesh.assetTemplate===asset.template) return;
   const m = car.mesh, model = asset.template.clone(true);
   const col = car.ai ? (car.team ? hexCss(ORANGE) : hexCss(BLUE)) :
     car.team ? (localTwoPlayer && !car.ai ? player2Paint : hexCss(ORANGE)) : playerPaint;
@@ -1306,7 +1307,13 @@ function makeDetailedCar(car) {
   fitted.position.set(-center.x, -fit.min.y - 0.48, -center.z);
   // Keep the existing body rotation pivot and boost flame; hide placeholder geometry only.
   for (const child of m.body.children) if (child !== m.flame) child.visible = false;
+  if(m.detailedRoot){
+    m.body.remove(m.detailedRoot);
+    m.detailedRoot.traverse(object=>{if(object.isMesh)for(const material of [object.material].flat())material.dispose();});
+  }
   m.body.add(fitted);
+  m.assetTemplate=asset.template;
+  m.textured=!!asset.textured;
   cacheCarBodyBounds(m);
   m.detailed = true;
   fitted.name = car.model + ' Imported Vehicle';
@@ -1319,26 +1326,29 @@ function makeDetailedCar(car) {
 function updateCarModelStatus() {
   const status = $('modelLoadStatus');
   if (!status) return;
-  const loaded = Object.entries(carModelAssets).filter(([,asset]) => asset.template).map(([name]) => name[0].toUpperCase()+name.slice(1));
   const selected=carModelAssets[playerCarModel];
   const title=playerCarModel[0].toUpperCase()+playerCarModel.slice(1);
-  status.textContent = selected?.failed ? title+' model could not load · select it again to retry' :
-    selected?.loading ? 'Loading '+title+' 3D body…' :
-    '✓ '+loaded.join(', ')+' 3D bodies loaded';
+  status.textContent = selected?.template ? '✓ '+title+' ready' :
+    selected?.failed ? title+' model could not load · select it again to retry' :
+    'Loading '+title+' 3D body…';
 }
 function loadDetailedCars() {
   for (const [name, asset] of Object.entries(carModelAssets)) {
-    if (asset.loading || asset.template) continue;
+    if (asset.loading || asset.textured) continue;
     if (!THREE.GLTFLoader) { asset.failed = true; updateCarModelStatus(); continue; }
     asset.loading = true; asset.failed = false;
     updateCarModelStatus();
     new THREE.GLTFLoader().load(asset.url, gltf => {
-      asset.template = gltf.scene; asset.loading = false; asset.failed = false;
+      const previous=asset.template,previousTextured=asset.textured;
+      asset.template = gltf.scene; asset.loading = false; asset.failed = false; asset.textured = true;
       for (const car of cars) if (car.model === name) makeDetailedCar(car);
+      if(previous&&!previousTextured)previous.traverse(object=>{
+        if(object.isMesh){object.geometry.dispose();for(const material of [object.material].flat())material.dispose();}
+      });
       updateCarModelStatus();
     }, undefined, err => {
       asset.loading = false; asset.failed = true;
-      console.warn(name + ' model unavailable; retaining playable fallback:', err);
+      console.warn(name + (asset.bundled ? ' texture detail unavailable; supplied body remains active:' : ' model unavailable; retaining playable fallback:'), err);
       updateCarModelStatus();
     });
   }
@@ -1605,10 +1615,24 @@ function initProfilePictureControls() {
     });
   }
 }
-let playerCarModel = 'octane';
+let playerCarModel = 'scorpion';
 let playerPaint = '#2fb8ff', playerPaintCustom = false;
 let player2CarModel = 'fennec';
 let player2Paint = '#ff8a1f', player2PaintCustom = false;
+try {
+  const saved=JSON.parse(localStorage.getItem('rocketArenaGarageV1')||'{}');
+  if(CAR_MODELS.some(car=>car.name===saved.p1))playerCarModel=saved.p1;
+  if(CAR_MODELS.some(car=>car.name===saved.p2))player2CarModel=saved.p2;
+  const requested=new URLSearchParams(location.search).get('car');
+  if(CAR_MODELS.some(car=>car.name===requested))playerCarModel=requested;
+}catch(_){}
+function saveGarageSelection(){
+  try{localStorage.setItem('rocketArenaGarageV1',JSON.stringify({p1:playerCarModel,p2:player2CarModel}));}catch(_){}
+}
+for(const button of document.querySelectorAll('[data-car]'))button.classList.toggle('on',button.dataset.car===playerCarModel);
+for(const button of document.querySelectorAll('[data-car2]'))button.classList.toggle('on',button.dataset.car2===player2CarModel);
+saveGarageSelection();
+
 let physicsStyle = 'standard';
 let localTwoPlayer = false;
 let goalExplosionStyle = 'classic';
@@ -2557,6 +2581,7 @@ function handleMenuChoice(e) {
       if(carModelAssets[player2CarModel]?.failed)loadDetailedCars();
       document.querySelectorAll('.car-opts-p2 button').forEach(x => x.classList.toggle('on', x === b));
     }
+    saveGarageSelection();
     // Rebuild in the menu so each player's garage choice is immediately visible.
     if (state === 'menu' || state === 'over') {
       buildTeams();
@@ -4151,6 +4176,7 @@ function render(dt) {
 // ---------- loop ----------
 buildTeams(); kickoff(); pick('mode', 2); pick('diff', 1);
 loadDetailedCars();
+if(CAR_MODELS.some(car=>car.name===new URLSearchParams(location.search).get('car')))selectLobbyPanel('garage');
 window.rocketArena = {
   ball, physics: PHYSICS_TUNING,
   get cars() { return cars; },

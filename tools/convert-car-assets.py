@@ -58,3 +58,6 @@ for kind, source in zip(('fennec', 'scorpion'), sources):
     bpy.ops.export_scene.gltf(filepath=str(target), export_format='GLTF_SEPARATE' if kind == 'scorpion' else 'GLB', export_yup=True,
         export_animations=False, export_cameras=False, export_lights=False)
     print('EXPORTED', kind, target.stat().st_size)
+
+import runpy
+runpy.run_path(str(root / 'tools/bundle-scorpion-body.py'), run_name='__main__')

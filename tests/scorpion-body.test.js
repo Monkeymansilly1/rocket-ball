@@ -1,0 +1,22 @@
+'use strict';
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const path=require('node:path');
+const vm=require('node:vm');
+const THREE=require('../lib/three.min.js');
+const window={};
+// No loader, fetch or DOM: the supplied car body must build independently.
+vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../assets/scorpion/body.js'),'utf8'),{window,atob});
+const model=window.RocketScorpionBody.create(THREE);
+const wheels=[],meshes=[];
+model.traverse(o=>{if(/^Wheel_/.test(o.name))wheels.push(o);if(o.isMesh)meshes.push(o);});
+assert.equal(model.userData.source,'Scorpion[2].fbx');
+assert.equal(wheels.length,4,'Keep the original four wheel pivots');
+assert.equal(meshes.length,15,'Keep every material primitive from all ten supplied meshes');
+const triangles=meshes.reduce((total,o)=>total+o.geometry.index.count/3,0);
+assert(triangles>20000,'The actual detailed vehicle must be present, not a procedural placeholder');
+const bounds=new THREE.Box3().setFromObject(model),size=bounds.getSize(new THREE.Vector3());
+assert(size.z>50&&size.x>26&&size.y>17,'Original Scorpion proportions must be preserved');
+assert(meshes.some(o=>o.material.name==='BodyPaint'));
+assert(meshes.every(o=>o.geometry.attributes.normal&&o.geometry.attributes.uv));
+console.log('PASS: original Scorpion body, '+triangles+' triangles, 15 material primitives and four pivots without loader/network dependencies');
