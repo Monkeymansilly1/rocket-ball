@@ -43,6 +43,8 @@ The engine uses filtered combustion harmonics, a low engine layer, intake noise 
 
 Replays record distinct states on the physics clock at 30 samples per simulation second, retaining up to ten seconds. Timestamp-based playback interpolates positions and full car/ball orientations, including wall driving, ceiling driving and aerial flips. Press Space or click Skip Replay to return to kickoff. The match clock stays frozen during playback.
 
+Directional dodges use a 500 UU/s horizontal impulse and a smooth 0.65-second physical rotation. Holding the direction used to select the flip does not add another aerial rotation during it; opposite pitch cancels its pitch component. Landing ends the dodge immediately, and the visible car no longer runs a second cosmetic somersault. Assisted keyboard flight defers to manual rotation, body contact, recovery and inverted poses, stops pitching when boost is empty, and waits briefly after a dodge. Cars resting on their nose or tail can settle back onto their tyres while sliding. Camera and FOV behaviour are unchanged.
+
 The bottom-left car speedometer has been removed. Goal speed is the ball's three-dimensional speed at the scoring-line crossing, converted using 50 Unreal units = 0.5 metres and the exact metres-per-mile conversion. It displays one decimal place and remains fixed through the celebration and replay. Free Play goal callouts also show the captured goal speed.
 
 ## Controls and rules
@@ -63,6 +65,7 @@ node tests/wall-physics.test.js
 node tests/ai-regression.test.js
 node tests/match-clock.test.js
 node tests/aerial-controls.test.js
+node tests/flip-physics.test.js
 node tests/replay.test.js
 node tests/car-audio.test.js
 node tests/ball-camera.test.js

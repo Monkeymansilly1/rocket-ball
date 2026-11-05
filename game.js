@@ -43,7 +43,7 @@ const PHYSICS_TUNING = {
   // when the steering wheel turns. Powerslide drops that tyre grip.
   NORMAL_LATERAL_FRICTION: 24, POWERSLIDE_FRICTION_MULTIPLIER: 0.105,
   JUMP_IMPULSE: 291.67 / 50, JUMP_HOLD_FORCE: 1458.33 / 50, JUMP_HOLD_DURATION: 0.2,
-  DOUBLE_JUMP_IMPULSE: 291.67 / 50, DODGE_IMPULSE: 17,
+  DOUBLE_JUMP_IMPULSE: 291.67 / 50, DODGE_IMPULSE: 500 / 50,
   PITCH_TORQUE_SPEED: 3.4, YAW_TORQUE_SPEED: 2.85, ROLL_TORQUE_SPEED: 4.2,
   // Tuned to the existing arena's actual scale for predictable, playable ball movement.
   BALL_GRAVITY_FORCE: 650 / 50, MAX_BALL_SPEED: 6000 / 50, BALL_MAX_ANGULAR_SPEED: 6,
@@ -1667,7 +1667,7 @@ const SKILL = [
 function mkCar(team, k, ai, modelName) {
   const model = CAR_MODELS.some(m => m.name === modelName) ? modelName : CAR_MODELS[k % CAR_MODELS.length].name;
   const col = new THREE.Color(!ai && k === 0 ? (team ? player2Paint : playerPaint) : (team ? ORANGE : BLUE)).offsetHSL(0, 0, -0.09 * k);
-  const car = { team, k, x: 0, y: 0.55, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, pitch: 0, roll: 0, airQuat: null, airOmega: null, surfaceQuat: null, surfaceNormal: null, surfaceForward: null, ceilingRide:false, wallRide: false, wallVerticalAxis: null, wallVerticalSign: 0, ai, aiCd: 0, boost: 34, jumps: 0, jt: 0, flip: 0, fx: 0, fz: 0, fl: 0, ground: true, demoTimer: 0, demoCooldown: 0, boostImpactTimer: 0 };
+  const car = { team, k, x: 0, y: 0.55, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, pitch: 0, roll: 0, airQuat: null, airOmega: null, surfaceQuat: null, surfaceNormal: null, surfaceForward: null, ceilingRide:false, wallRide: false, wallVerticalAxis: null, wallVerticalSign: 0, ai, aiCd: 0, boost: 34, jumps: 0, jt: 0, flip: 0, flipPitchScale: 1, aerialAssistDelay: 0, fx: 0, fz: 0, fl: 0, ground: true, demoTimer: 0, demoCooldown: 0, boostImpactTimer: 0 };
   car.mesh = carMesh(col, model);
   car.model = model;
   car.displayName = ai ? (team ? 'ORANGE BOT ' : 'BLUE BOT ') + (k + 1) : playerName;
@@ -1756,7 +1756,7 @@ function kickoff() {
   lastTouch = null;
   for (const c of cars) {
     const f = FORM[c.k], s = c.team ? 1 : -1;
-    Object.assign(c, { x: f[0] * (c.team ? -1 : 1), y: 0.55, z: s * f[1] * HL, vx: 0, vy: 0, vz: 0, yaw: c.team ? Math.PI : 0, pitch: 0, roll: 0, airQuat: null, airOmega: null, surfaceQuat:null, surfaceNormal:null, surfaceForward:null, ceilingRide:false, flipAxis:null, wallDetachTimer: 0, wallRide: false, wallVerticalAxis: null, wallVerticalSign: 0, boost: 34, jumps: 0, jt: 0, flip: 0, fl: 0, ground: true, aiCd: 0, wait: SKILL[diff].wait });
+    Object.assign(c, { x: f[0] * (c.team ? -1 : 1), y: 0.55, z: s * f[1] * HL, vx: 0, vy: 0, vz: 0, yaw: c.team ? Math.PI : 0, pitch: 0, roll: 0, airQuat: null, airOmega: null, surfaceQuat:null, surfaceNormal:null, surfaceForward:null, ceilingRide:false, flipAxis:null, wallDetachTimer: 0, wallRide: false, wallVerticalAxis: null, wallVerticalSign: 0, boost: 34, jumps: 0, jt: 0, flip: 0, flipPitchScale: 1, aerialAssistDelay: 0, fl: 0, ground: true, aiCd: 0, wait: SKILL[diff].wait });
   }
   if(!trainingMode)saveReplayFrame();
 }
@@ -1822,7 +1822,7 @@ function resetTrainingCar() {
   Object.assign(car, {
     x: 0, y: 0.55, z: -34, vx: 0, vy: 0, vz: 0,
     yaw: 0, pitch: 0, roll: 0, jumps: 0, jt: 0,
-    flip: 0, fl: 0, hold: 0, jumpNormal: null, ground: true,
+    flip: 0, flipPitchScale: 1, aerialAssistDelay: 0, fl: 0, hold: 0, jumpNormal: null, ground: true,
     wallRide: false, wallVerticalAxis: null, wallVerticalSign: 0, wallDetachTimer: 0,
     airQuat: null, airOmega: null, surfaceQuat:null, surfaceNormal:null, surfaceForward:null, ceilingRide:false, flipAxis:null, demoTimer: 0, boost: 100, ballHitCooldown: 0, airTouchCooldown: 0
   });
@@ -2774,18 +2774,48 @@ function aerialControl(c, ct, dt) {
   if (!c.airQuat) c.airQuat = getCarOrientation(c).clone();
   if (!c.airOmega) c.airOmega = { pitch:0, yaw:0, roll:0 };
   const omega = c.airOmega;
-  // Rocket League's axis-specific angular torque/damping, measured by the
-  // RocketSim/RLGym community. These are acceleration equations, NOT an
-  // "rotate towards desired angle" animation. No input = momentum decays.
+  // A dodge owns its rotation until it finishes. The same stick that selected
+  // a flip must not also add a second pitch/yaw animation on top of it.
+  if(c.flip>0 && c.flipAxis && c.jumps===2){
+    const duration=PHYSICS_TUNING.FLIP_TORQUE_DURATION;
+    const elapsed=clamp(duration-c.flip,0,duration);
+    const end=Math.min(duration,elapsed+dt);
+    const rise=.06,fall=.16,flatEnd=duration-fall;
+    // Integral of a smooth launch, sustained spin and soft finish. Integrating
+    // across the final tick avoids losing rotation at 60/120/240 Hz.
+    const travel=t=>{
+      if(t<rise){const u=t/rise;return rise*(u*u*u-.5*u*u*u*u);}
+      if(t<flatEnd)return rise/2+t-rise;
+      const u=(t-flatEnd)/fall;
+      return rise/2+flatEnd-rise+fall*(u-u*u*u+.5*u*u*u*u);
+    };
+    const angle=(travel(end)-travel(elapsed))*2*Math.PI/(duration-(rise+fall)/2);
+    const pitch=clamp(Number.isFinite(ct.pitch)?ct.pitch:0,-1,1);
+    // Opposite pitch cancels the pitch part of a dodge; side roll remains.
+    c.flipPitchScale=c.flipPitchScale??1;
+    if(pitch*c.flipAxis.x<-.1)c.flipPitchScale=Math.max(0,c.flipPitchScale-Math.abs(pitch)*8*dt);
+    const axis=c.flipAxis.clone();axis.x*=c.flipPitchScale;
+    const magnitude=axis.length();
+    if(magnitude>1e-6)c.airQuat.multiply(new THREE.Quaternion().setFromAxisAngle(axis.multiplyScalar(1/magnitude),angle*magnitude));
+    omega.pitch*=Math.exp(-20*dt);omega.yaw*=Math.exp(-20*dt);omega.roll*=Math.exp(-20*dt);
+    c.flip=Math.max(0,c.flip-dt);
+    if(c.flip<1e-8){c.flip=0;c.flipAxis=null;}
+    c.airQuat.normalize();
+    const e=new THREE.Euler().setFromQuaternion(c.airQuat,'YXZ');
+    c.pitch=-e.x;c.yaw=e.y;c.roll=e.z;
+    return;
+  }
+  // Local-axis torque and drag govern ordinary aerials. No automatic pitch
+  // when the tank is empty, on body contact, inverted, during recovery, or
+  // immediately after a dodge. Dedicated pitch/roll/yaw always takes priority.
   let pitchIn = clamp(Number.isFinite(ct.pitch) ? ct.pitch : (ct.throttle || 0), -1, 1);
-  if (ct.keyboardFlightAssist && Math.abs(pitchIn) < 0.04 && !(c.flip > 0)) {
-    // Keyboard players often hold W (accelerate) and Shift (boost) together.
-    // Assisted mode also supports Space then Shift without holding throttle.
-    // Use a damped target instead: 55 degrees up, with no loop.
-    // The car keeps its physical gravity, boost direction and angular momentum.
+  const roof=AIR_Y.clone().applyQuaternion(c.airQuat);
+  if(ct.keyboardFlightAssist && Math.abs(pitchIn)<.04 && (c.boost??1)>0 &&
+      !c.bodyContact && !(c.recoveryTimer>0) && !(c.aerialAssistDelay>0) &&
+      roof.y>.25 && Math.abs(ct.roll||0)<.1 && Math.abs(ct.airYaw??ct.steer??0)<.1){
     const elevation=Math.asin(clamp(getCarForward(c).y,-1,1));
     const desiredElevation=55*Math.PI/180;
-    pitchIn=clamp((elevation-desiredElevation)*2.6-omega.pitch*0.85,-1,1);
+    pitchIn=clamp((elevation-desiredElevation)*2.6-omega.pitch*.85,-1,1);
   }
   const yawIn = clamp(Number.isFinite(ct.airYaw) ? ct.airYaw : (ct.steer || 0), -1, 1);
   const rollIn = -clamp(ct.roll || 0,-1,1);
@@ -2797,20 +2827,12 @@ function aerialControl(c, ct, dt) {
     const factor = 5.5/spin;
     omega.pitch *= factor; omega.yaw *= factor; omega.roll *= factor;
   }
-  // Apply torque on the car's local axes so air roll changes both the camera
-  // orientation and the direction of boost/hitbox contact, not only a mesh.
-  // A directional dodge rotates the actual collision body. The previous
-  // implementation only spun the decorative mesh inside a static hitbox.
-  if (c.flip > 0 && c.flipAxis && c.jumps === 2) {
-    c.airQuat.multiply(new THREE.Quaternion().setFromAxisAngle(
-      c.flipAxis, (2*Math.PI/0.55) * dt));
-    omega.pitch *= Math.max(0,1-5*dt);
-    omega.yaw *= Math.max(0,1-5*dt);
-    omega.roll *= Math.max(0,1-5*dt);
+  // Rotate the actual body and hitbox, using one angular-velocity vector.
+  if(spin>1e-8){
+    const angular=new THREE.Vector3(omega.pitch,omega.yaw,omega.roll);
+    const speed=angular.length();
+    c.airQuat.multiply(new THREE.Quaternion().setFromAxisAngle(angular.multiplyScalar(1/speed),speed*dt));
   }
-  c.airQuat.multiply(new THREE.Quaternion().setFromAxisAngle(AIR_X, omega.pitch * dt));
-  c.airQuat.multiply(new THREE.Quaternion().setFromAxisAngle(AIR_Y, omega.yaw * dt));
-  c.airQuat.multiply(new THREE.Quaternion().setFromAxisAngle(AIR_Z, omega.roll * dt));
   c.airQuat.normalize();
   const e = new THREE.Euler().setFromQuaternion(c.airQuat, 'YXZ');
   c.pitch = -e.x; c.yaw = e.y; c.roll = e.z;
@@ -2987,7 +3009,7 @@ function stepCar(c, ct, dt) {
       c.x = 0; c.z = c.team ? HL - 14 : -HL + 14; c.yaw = c.team ? Math.PI : 0;
       c.pitch = 0; c.roll = 0; c.wallRide = false; c.wallVerticalAxis = null; c.wallVerticalSign = 0;
       c.surfaceQuat=null;c.surfaceNormal=null;c.surfaceForward=null;c.ceilingRide=false;
-      c.airQuat=null;c.airOmega=null;c.jumpNormal=null;c.recoveryTimer=0;c.recoveryTarget=null;c.bodyRestTime=0;c.bodyContact=false;
+      c.airQuat=null;c.airOmega=null;c.jumpNormal=null;c.flip=0;c.flipAxis=null;c.flipPitchScale=1;c.aerialAssistDelay=0;c.recoveryTimer=0;c.recoveryTarget=null;c.bodyRestTime=0;c.bodyContact=false;
       c.boost = 34; c.jumps = 0; c.jt = 0; c.ground = true; c.boostImpactTimer = 0;
       c.mesh.root.visible = true;
     } else {
@@ -2996,7 +3018,7 @@ function stepCar(c, ct, dt) {
     return;
   }
   c.jt += dt;
-  if (c.flip > 0) { c.flip=Math.max(0,c.flip-dt); if(c.flip===0)c.flipAxis=null; }
+  c.aerialAssistDelay=Math.max(0,(c.aerialAssistDelay||0)-dt);
   // Brief separation grace after a wall/ramp jump. Otherwise the same ramp
   // snaps the car back onto its surface in the next physics step.
   c.wallDetachTimer = Math.max(0, (c.wallDetachTimer || 0) - dt);
@@ -3017,7 +3039,7 @@ function stepCar(c, ct, dt) {
   c.bodyRestTime=bodyTouch?(c.bodyRestTime||0)+dt:0;
   const manualRotation=Math.abs(ct.roll||0)>.1 || Math.abs(ct.pitch||0)>.1;
   const settling=bodyTouch && wheelAlignment>-.75 && c.bodyRestTime>.18 &&
-    Math.hypot(c.vx,c.vz)<5 && !manualRotation && !(c.flip>0);
+    !(ct.boost && c.boost>0) && !manualRotation && !(c.flip>0);
   if((bodyTouch&&ct.jump)||settling){
     const forward=getCarForward(c);forward.addScaledVector(floorNormal,-forward.dot(floorNormal));
     if(forward.lengthSq()<.001)forward.set(Math.sin(c.yaw||0),0,Math.cos(c.yaw||0)).addScaledVector(floorNormal,-Math.cos(c.yaw||0)*floorNormal.z-Math.sin(c.yaw||0)*floorNormal.x);
@@ -3081,6 +3103,7 @@ function stepCar(c, ct, dt) {
       }
     }
     c.airQuat=null;c.airOmega=null;c.flipAxis=null;c.jumpNormal=null;
+    c.flip=0;c.flipPitchScale=1;c.aerialAssistDelay=0;
     snapCarToContact(c,contact);
     updateCarSurfaceFrame(c,contact.normal);
   }
@@ -3179,18 +3202,20 @@ function stepCar(c, ct, dt) {
       // Avoid accidental dodges from tiny analog stick movement.
       if (Math.hypot(f,s) >= PHYSICS_TUNING.DODGE_STICK_DEADZONE) {
         const dir=Math.hypot(f,s);
-        const nose=getCarForward(c);
-        const right=AIR_X.clone().applyQuaternion(getCarOrientation(c));
-        const force=PHYSICS_TUNING.DODGE_IMPULSE/Math.max(1,dir);
-        // Positive steering must dodge to the car's RIGHT, not left.
-        c.vx += (nose.x*f+right.x*s)*force;
-        c.vy += (nose.y*f+right.y*s)*force;
-        c.vz += (nose.z*f+right.z*s)*force;
-        c.vy = Math.max(c.vy, 2.2);
-        c.flip=0.55;c.fx=f;c.fz=s;
-        // The right wheels tip downward for a rightward dodge.
+        // Dodge momentum stays parallel to the field. Pitching the nose up
+        // must not convert a front flip into an extra vertical rocket impulse.
+        const forward=getCarForward(c);forward.y=0;
+        if(forward.lengthSq()<.01)forward.set(Math.sin(c.yaw),0,Math.cos(c.yaw));
+        forward.normalize();
+        const right=new THREE.Vector3(forward.z,0,-forward.x);
+        const force=PHYSICS_TUNING.DODGE_IMPULSE/dir;
+        c.vx+=(forward.x*f+right.x*s)*force;
+        c.vz+=(forward.z*f+right.z*s)*force;
+        c.flip=PHYSICS_TUNING.FLIP_TORQUE_DURATION;c.fx=f;c.fz=s;
+        c.flipPitchScale=1;c.aerialAssistDelay=c.flip+.2;
         c.flipAxis=new THREE.Vector3(f,0,-s).normalize();
-        if (!c.airQuat) c.airQuat=getCarOrientation(c).clone();
+        if(!c.airQuat)c.airQuat=getCarOrientation(c).clone();
+        c.airOmega={pitch:0,yaw:0,roll:0};
       } else {
         // A neutral second jump adds velocity along the roof, not global up.
         const roof=AIR_Y.clone().applyQuaternion(getCarOrientation(c));
@@ -4019,10 +4044,6 @@ function render(dt) {
     }
     m.flame.visible = !!c.fl; m.flame.scale.set(1, 0.7 + Math.random() * 0.6, 1);
     m.body.rotation.set(0, 0, 0);
-    if (c.flip > 0 && !c.airQuat) {
-      const a = (1 - c.flip / 0.55) * Math.PI * 2;
-      if (Math.abs(c.fx) >= Math.abs(c.fz)) m.body.rotation.x = a * Math.sign(c.fx); else m.body.rotation.z = a * Math.sign(c.fz);
-    }
     // Detailed wheels use their real axle pivots.
     const wheelSpeed = Math.hypot(c.vx, c.vz) * 0.6;
     if (m.detailedWheels && m.detailedWheels.length) {

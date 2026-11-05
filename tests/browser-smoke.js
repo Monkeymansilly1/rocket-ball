@@ -259,7 +259,7 @@ async function main() {
     await eventually(()=>evalJS('window.rocketArena.cars[0].ground && Math.abs(window.rocketArena.cars[0].roll)<.15'),15000)
       .catch(async err=>{throw new Error('Sideways recovery: '+err.message+' '+await evalJS('JSON.stringify({y:window.rocketArena.cars[0].y,roll:window.rocketArena.cars[0].roll,timer:window.rocketArena.cars[0].recoveryTimer})'));});
     await evalJS(`(()=>{const c=window.rocketArena.cars[0];Object.assign(c,{y:.55,vx:0,vy:0,vz:0,ground:false,jumps:2,jt:2,roll:Math.PI,wallDetachTimer:0,surfaceQuat:null,airQuat:new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1),Math.PI),airOmega:null,recoveryTimer:0,bodyRestTime:0});})()`);
-    await eventually(()=>evalJS('!!window.rocketArena.cars[0].bodyContact && !window.rocketArena.cars[0].ground'),10000);
+    await eventually(()=>evalJS('!!window.rocketArena.cars[0].bodyContact && !window.rocketArena.cars[0].ground'),20000).catch(async err=>{throw new Error('Roof setup: '+err.message+' '+await evalJS('JSON.stringify((({y,vy,ground,roll,pitch,airOmega,bodyContact,recoveryTimer,bodyRestTime})=>({y,vy,ground,roll,pitch,airOmega,bodyContact,recoveryTimer,bodyRestTime}))(window.rocketArena.cars[0]))'));});
     await evalJS('window.dispatchEvent(new KeyboardEvent("keydown",{code:"Space",bubbles:true}))');
     await eventually(()=>evalJS('window.rocketArena.cars[0].ground && Math.abs(window.rocketArena.cars[0].roll)<.15'),15000);
     await evalJS('window.dispatchEvent(new KeyboardEvent("keyup",{code:"Space",bubbles:true}))');
@@ -267,6 +267,31 @@ async function main() {
     fs.writeFileSync(path.join(os.tmpdir(),'rocket-car-recovered.png'),Buffer.from(recoveredImage.data,'base64'));
     await evalJS('document.getElementById("trainingResetCar").click()');
     console.log('PASS: actual model sideways settling and Space self-righting after both jumps are exhausted');
+    const previousFlightMode=await evalJS('document.getElementById("settingKeyboardFlight").value');
+    await evalJS(`document.getElementById('settingKeyboardFlight').value='manual';
+      document.getElementById('settingKeyboardFlight').dispatchEvent(new Event('change',{bubbles:true}));
+      Object.assign(window.rocketArena.cars[0],{x:0,y:18,z:0,vx:0,vy:0,vz:0,yaw:0,pitch:0,roll:0,
+        ground:false,jumps:1,jt:.1,flip:0,airQuat:new THREE.Quaternion(),airOmega:null,
+        recoveryTimer:0,bodyContact:false,bodyRestTime:0,wallDetachTimer:0});
+      window.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyW',bubbles:true}));
+      window.dispatchEvent(new KeyboardEvent('keydown',{code:'Space',bubbles:true}));`);
+    try {
+      await eventually(()=>evalJS('window.rocketArena.cars[0].flip>.1 && window.rocketArena.cars[0].jumps===2'),10000);
+      await evalJS(`window.dispatchEvent(new KeyboardEvent('keyup',{code:'Space',bubbles:true}))`);
+      await eventually(()=>evalJS('window.rocketArena.cars[0].flip===0'),10000);
+      const flipPose=await evalJS(`(()=>{window.dispatchEvent(new KeyboardEvent('keyup',{code:'KeyW',bubbles:true}));
+        const c=window.rocketArena.cars[0];return {angle:c.airQuat.angleTo(new THREE.Quaternion()),
+          bodyAngle:c.mesh.body.quaternion.angleTo(new THREE.Quaternion()),axis:c.flipAxis};})()`);
+      assert(flipPose.angle<.45,'Holding W through a front flip must not leave the car vertical: '+JSON.stringify(flipPose));
+      assert(flipPose.bodyAngle<1e-7 && flipPose.axis===null,'Finished flip must not keep spinning the visible body');
+      console.log('PASS: real keyboard front flip with W held, clean physical/body finish and no residual somersault');
+    } finally {
+      await evalJS(`for(const code of ['Space','KeyW'])window.dispatchEvent(new KeyboardEvent('keyup',{code,bubbles:true}));
+        document.getElementById('settingKeyboardFlight').value=${JSON.stringify(previousFlightMode)};
+        document.getElementById('settingKeyboardFlight').dispatchEvent(new Event('change',{bubbles:true}));
+        document.getElementById('trainingResetCar').click();`);
+    }
+
     await evalJS('document.getElementById("trainingTools").open=true;document.getElementById("trainingPreset").value="wall"; document.getElementById("trainingPreset").dispatchEvent(new Event("change",{bubbles:true}))');
     assert.equal(await evalJS('window.rocketArena.ball.x > 60'),true);
     assert.equal(await evalJS('document.getElementById("trainingShotCount").textContent.includes("2")'),true);
@@ -295,7 +320,11 @@ async function main() {
     await delay(250);
     assert.equal(await evalJS('Number.isFinite(window.rocketArena.ball.y)'),true);
     // Full 3D flight must overcome gravity with upward-oriented boost.
-    await evalJS('(function(){const c=window.rocketArena.cars[0]; Object.assign(c,{x:0,y:16,z:0,vx:0,vy:0,vz:0,pitch:1.15,yaw:0,roll:0,airQuat:null,airOmega:null,wallRide:false,wallVerticalAxis:null,wallDetachTimer:1,jumps:1,hold:0,flip:0,ballHitCooldown:0});window.rocketArena.ball.x=40;window.rocketArena.ball.z=40;})()');
+    // Leave the wall drill: a goal in that drill deliberately freezes the next
+    // attempt until Space. An unrelated aerial check must not inherit that gate.
+    await evalJS(`document.getElementById('trainingPreset').value='aerial';
+      document.getElementById('trainingPreset').dispatchEvent(new Event('change',{bubbles:true}));`);
+    await evalJS('(function(){const c=window.rocketArena.cars[0]; Object.assign(c,{x:0,y:16,z:0,vx:0,vy:0,vz:0,pitch:1.15,yaw:0,roll:0,ground:false,airQuat:new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0),-1.15),surfaceQuat:null,airOmega:null,recoveryTimer:0,bodyContact:false,wallRide:false,wallVerticalAxis:null,wallDetachTimer:1,jumps:1,hold:0,flip:0,ballHitCooldown:0});window.rocketArena.ball.x=40;window.rocketArena.ball.z=40;})()');
     await evalJS('window.dispatchEvent(new KeyboardEvent("keydown",{code:"ShiftLeft",bubbles:true}))');
     await eventually(()=>evalJS('window.rocketArena.cars[0].vy > 1.4 && !!window.rocketArena.cars[0].airQuat'),15000)
       .catch(async err=>{throw new Error('Aerial boost failed after physics progress: '+err.message+

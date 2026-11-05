@@ -27,6 +27,7 @@ jobs:
           node tests/goal-effects.test.js
           node tests/match-clock.test.js
           node tests/aerial-controls.test.js
+          node tests/flip-physics.test.js
           node tests/replay.test.js
           node tests/car-audio.test.js
           node tests/ball-camera.test.js
