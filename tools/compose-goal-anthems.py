@@ -2,7 +2,7 @@
 Requires numpy, scipy and ffmpeg. No sampled songs or external audio are used.
 """
 from pathlib import Path
-import math, subprocess, tempfile, wave
+import argparse, math, subprocess, tempfile, wave
 import numpy as np
 from scipy.signal import butter, sosfilt, fftconvolve
 
@@ -44,7 +44,25 @@ def clap():
   out[start:]+=filt(RNG.normal(size=length),1400,'highpass')*env(length,.0005,.035)*.16
  return out
 def midi(note):return 440*2**((note-69)/12)
+def jumpup_bass(freq,length,answer=False,beat=60/174):
+ # A dry, resonant FM mid-bass answers a deeper, distorted "frog" stab.
+ # Keep the sub centred and clean so the riff still hits below the growl.
+ t=np.arange(int(length*SR))/SR
+ bend=.08 if answer else .16
+ phase=2*np.pi*freq*(t+bend*.025*(1-np.exp(-t/.025)))
+ wobble=.52+.48*np.sin(2*np.pi*t/(beat*(.5 if answer else 1))+np.pi/2)
+ index=(2.1 if answer else 3.8)*np.exp(-t/(.11 if answer else .19))+.8*wobble
+ carrier=np.sin(phase*(4 if answer else 2)+index*np.sin(phase*(2 if answer else 3)))
+ carrier+=.28*np.sin(phase*6+.7*np.sin(phase*2))
+ mid=filt(filt(np.tanh(carrier*2.6),240,'highpass'),2600 if answer else 1700)
+ sub=np.sin(phase)+.12*np.sin(phase*2)
+ gate=np.minimum(1,t/.004)*np.minimum(1,(length-t)/.018)*np.exp(-t/(length*1.7))
+ return (.68*mid*(.55+.45*wobble)+.65*sub)*gate
 def compose(name,bpm,bars):
+ global RNG
+ # Each track can be rebuilt independently without depending on which other
+ # clips were rendered first.
+ RNG=np.random.default_rng({'dnb':417,'grime':418,'rap':419}[name])
  beat=60/bpm;length=bars*4*beat+.55
  mix=np.zeros((int(length*SR),2));wet=np.zeros_like(mix);music=np.zeros_like(mix);duck=np.ones(len(mix))
  def add(signal,at,gain=1,pan=0,reverb=0,percussion=False):
@@ -63,19 +81,25 @@ def compose(name,bpm,bars):
  for bar in range(bars):
   at=bar*4*beat
   if name=='dnb':
+   # Immediate jump-up drop: hard two/four backbeat and syncopated kicks,
+   # with space between the bass stabs instead of the old liquid-style pad.
    kicks=[0,1.75,2.5] if bar%2==0 else [0,.75,2.5,3.5]
-   for pos in kicks:drum(k,at+pos*beat,.85,is_kick=True)
-   for pos in [1,3]:drum(s,at+pos*beat,.88);drum(c,at+pos*beat,.48,.12)
+   for pos in kicks:drum(k,at+pos*beat,1.04,is_kick=True)
+   for pos in [1,3]:drum(s,at+pos*beat,1.18);drum(c,at+pos*beat,.52,.10)
    for step in range(16):
-    if step%4!=0 or bar%2:drum(hat(step==14),at+step*.25*beat,(.7 if step%2 else 1),(-.24 if step%2 else .24))
-   if bar%2:drum(s,at+2.75*beat,.18,-.2)
-   root=[26,26,22,24][bar%4]
-   for pos,duration,pitch in [(0,.62,0),(.75,.45,12),(1.5,.42,0),(2.25,.64,0),(3,.5,7)]:
-    add(tone(midi(root+pitch),duration*beat,'reese'),at+pos*beat,.47,(-.05 if bar%2 else .05))
-   chord=[root+24,root+27,root+31,root+38]
-   for p in chord:add(tone(midi(p),1.6*beat,'rhodes'),at+.5*beat,.065,(-.55 if p%2 else .55),.32)
-   for pos,pitch in zip([.5,1.25,2.75,3.5],[62,69,65,67] if bar%2==0 else [74,72,69,65]):
-    add(tone(midi(pitch),.38,'pluck'),at+pos*beat,.065,.28,.25)
+    if step%2==0 or (bar%2 and step in [7,15]):
+     drum(hat(step==14),at+step*.25*beat,.92 if step%2==0 else .48,(-.25 if step%4 else .25))
+   if bar%2:drum(s,at+2.75*beat,.19,-.2)
+   if bar%4==3:
+    for pos in [3.5,3.75]:drum(s,at+pos*beat,.35,.15)
+   root=[29,29,29,29,25,25,28,29][bar%8]
+   riff=([(0,.62,0,False),(.75,.45,0,False),(1.5,.35,12,True),(2,.60,0,False),(2.75,.35,7,True),(3.5,.35,0,False)]
+         if bar%2==0 else [(0,.65,0,False),(.875,.32,12,True),(1.5,.36,7,True),(2.25,.45,0,False),(3.25,.25,12,True),(3.625,.27,7,True)])
+   for pos,duration,pitch,answer in riff:
+    add(jumpup_bass(midi(root+pitch),duration*beat,answer,beat),at+pos*beat,.85)
+   # Short, wide metallic answers; no sustained chords obscure the bass.
+   for pos in [1.75,3.75]:
+    add(tone(midi(root+36),.11,'pluck',.025),at+pos*beat,.10,(-.6 if bar%2 else .6),.12)
   elif name=='grime':
    for pos in ([0,1.5,2.75] if bar%2==0 else [0,.75,2.5,3.75]):drum(k,at+pos*beat,.95,is_kick=True)
    for pos in [1,3]:drum(s,at+pos*beat,.85);drum(c,at+pos*beat,.7,-.1)
@@ -114,6 +138,12 @@ def compose(name,bpm,bars):
   with wave.open(temp.name,'wb') as w:
    w.setnchannels(2);w.setsampwidth(2);w.setframerate(SR);w.writeframes((np.clip(mix,-1,1)*32767).astype('<i2').tobytes())
   target=ROOT/'assets/anthems'/f'{name}.mp3'
-  subprocess.run(['ffmpeg','-hide_banner','-loglevel','error','-y','-i',temp.name,'-af','loudnorm=I=-16:TP=-1.5:LRA=8','-ar',str(SR),'-codec:a','libmp3lame','-q:a','3','-metadata',f'title={name.upper()} Goal Anthem','-metadata','artist=Rocket Ball Originals',str(target)],check=True)
+  title='Afterburn (Jump Up)' if name=='dnb' else f'{name.upper()} Goal Anthem'
+  subprocess.run(['ffmpeg','-hide_banner','-loglevel','error','-y','-i',temp.name,'-af','loudnorm=I=-16:TP=-1.5:LRA=8','-ar',str(SR),'-codec:a','libmp3lame','-q:a','3','-metadata',f'title={title}','-metadata','artist=Rocket Ball Originals',str(target)],check=True)
  print(name,bpm,'BPM',round(length,2),'seconds',target.stat().st_size,'bytes')
-for args in [('dnb',172,8),('grime',140,6),('rap',92,4)]:compose(*args)
+if __name__=='__main__':
+ parser=argparse.ArgumentParser(description=__doc__)
+ parser.add_argument('--track',choices=['dnb','grime','rap'],action='append',help='Rebuild only this track; repeat to choose more than one.')
+ selected=parser.parse_args().track
+ for args in [('dnb',174,8),('grime',140,6),('rap',92,4)]:
+  if not selected or args[0] in selected:compose(*args)

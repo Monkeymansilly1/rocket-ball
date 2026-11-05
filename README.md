@@ -51,7 +51,7 @@ The bottom-left car speedometer has been removed. Goal speed is the ball's three
 
 ## Goal anthems
 
-Goal FX includes three original instrumental clips: **Afterburn** (DNB, 172 BPM), **East Stand** (grime, 140 BPM), and **Touchline** (rap/hip-hop, 92 BPM). Select a clip, preview it, or choose Off. Settings has a separate goal-anthem volume slider; selection and volume survive refreshes. Game volume and M mute also apply to music.
+Goal FX includes three original instrumental clips: **Afterburn** (jump-up DNB, 174 BPM, with distorted bass stabs, a call-and-response riff and punchy drums), **East Stand** (grime, 140 BPM), and **Touchline** (rap/hip-hop, 92 BPM). Select a clip, preview it, or choose Off. Settings has a separate goal-anthem volume slider; selection and volume survive refreshes. Game volume and M mute also apply to music.
 
 The selected clip starts once when a match replay begins or a Free Play goal is scored, ducks engine/effect volume, resumes from its position after a pause, and fades out when the replay ends, is skipped, or the player returns to the garage. A skipped replay cancels pending downloads too. **Enable Sound**, available in Settings, the anthem panel, and the match toolbar when sound is blocked or muted, resumes browser audio and restores zeroed game/song volumes. Status text explains mute, volume, and browser audio blocks. Interrupted audio resumes on the next click or key press. These are original instrumentals, with no commercial recordings or Spotify integration. See [audio credits](assets/anthems/CREDITS.md). Recreate the MP3 files with `tools/compose-goal-anthems.py` (numpy, scipy and ffmpeg).
 
