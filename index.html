@@ -80,9 +80,11 @@
           <button id="quickCasual" type="button" data-quick="casual"><b>CASUAL</b><small>1v1 · EASY BOTS</small><span aria-hidden="true">&gt;</span></button>
           <button id="quickCompetitive" type="button" data-quick="competitive"><b>COMPETITIVE</b><small>2v2 · HARD BOTS</small><span aria-hidden="true">&gt;</span></button>
           <button id="quickFreestyle" type="button" data-quick="freestyle"><b>FREE PLAY</b><small>WALL AIR DRIBBLES</small><span aria-hidden="true">&gt;</span></button>
+          <button id="quickNexto" type="button" data-quick="nexto"><b>NEXTO</b><small>1v1 · TRAINED AI · EXPERIMENTAL</small><span aria-hidden="true">&gt;</span></button>
         </div>
-        <details class="custom-match"><summary>CUSTOM MATCH OPTIONS</summary><div class="opts"><span>Players</span><label class="toggle-label"><input id="localTwo" type="checkbox"> Local 2-player</label></div><div class="opts"><span>Match</span><button data-mode="1">1v1</button><button data-mode="2">2v2</button><button data-mode="3">3v3</button></div><div class="opts"><span>Bots</span><button data-diff="0">Easy</button><button data-diff="1">Medium</button><button data-diff="2">Hard</button></div>
+        <details class="custom-match"><summary>CUSTOM MATCH OPTIONS</summary><div class="opts"><span>Players</span><label class="toggle-label"><input id="localTwo" type="checkbox"> Local 2-player</label></div><div class="opts"><span>Match</span><button data-mode="1">1v1</button><button data-mode="2">2v2</button><button data-mode="3">3v3</button></div><div class="opts"><span>Bots</span><button data-diff="0">Easy</button><button data-diff="1">Medium</button><button data-diff="2">Hard</button><button data-diff="3">Nexto</button></div>
 </details>
+        <p id="nextoStatus" class="setting-help" role="status" aria-live="polite" hidden>Nexto · Experimental</p>
         <div class="start-actions"><button id="playBtn" class="play-btn" type="button">PLAY MATCH <span>→</span></button><button id="freePlayBtn" class="free-play-btn" type="button">TRAINING</button></div>
         <p class="go" id="go">Choose your setup, then press PLAY</p>
       </section>
@@ -266,7 +268,9 @@
 <script src="lib/replay.js"></script>
 <script src="lib/car-audio.js"></script>
 <script src="lib/ball-camera.js"></script>
+<script src="lib/nexto/adapter.js?v=1"></script>
+<script src="lib/nexto/client.js?v=1"></script>
 <script src="assets/scorpion/body.js?v=4"></script>
-<script src="game.js?v=scorpion-body-4"></script>
+<script src="game.js?v=nexto-5"></script>
 </body>
 </html>

@@ -1635,6 +1635,8 @@ saveGarageSelection();
 
 let physicsStyle = 'standard';
 let localTwoPlayer = false;
+const nextoAI=new RocketNexto.Controller(updateNextoStatus);
+let nextoObservationTime=0,nextoLastObservation=0;
 let goalExplosionStyle = 'classic';
 try {
   const previous=localStorage.getItem('rocketArenaExplosionV1');
@@ -1687,13 +1689,15 @@ function applyReplayFrame(frame) {
 const SKILL = [
   { thr: 0.65, boost: false, steer: 2.2, cap: 0.6, wait: 1.5, sloppy: 10, flip: 0, aerial: false, drift: false },
   { thr: 0.85, boost: true, steer: 3, cap: 0.82, wait: 0.8, sloppy: 4, flip: 0.4, aerial: false, drift: false },
-  { thr: 1, boost: true, steer: 4, cap: 1, wait: 0.25, sloppy: 1.2, flip: 0.9, aerial: true, drift: true }];
+  { thr: 1, boost: true, steer: 4, cap: 1, wait: 0.25, sloppy: 1.2, flip: 0.9, aerial: true, drift: true },
+  { thr: 1, boost: true, steer: 4, cap: 1, wait: 0, sloppy: 0, flip: 1, aerial: true, drift: true }];
 function mkCar(team, k, ai, modelName) {
   const model = CAR_MODELS.some(m => m.name === modelName) ? modelName : CAR_MODELS[k % CAR_MODELS.length].name;
   const col = new THREE.Color(!ai && k === 0 ? (team ? player2Paint : playerPaint) : (team ? ORANGE : BLUE)).offsetHSL(0, 0, -0.09 * k);
   const car = { team, k, x: 0, y: 0.55, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, pitch: 0, roll: 0, airQuat: null, airOmega: null, surfaceQuat: null, surfaceNormal: null, surfaceForward: null, ceilingRide:false, wallRide: false, wallVerticalAxis: null, wallVerticalSign: 0, ai, aiCd: 0, boost: 34, jumps: 0, jt: 0, flip: 0, flipPitchScale: 1, aerialAssistDelay: 0, fx: 0, fz: 0, fl: 0, ground: true, demoTimer: 0, demoCooldown: 0, boostImpactTimer: 0 };
   car.mesh = carMesh(col, model);
   car.model = model;
+  car.nexto=ai&&diff===3;
   car.displayName = ai ? (team ? 'ORANGE BOT ' : 'BLUE BOT ') + (k + 1) : playerName;
   // model-based properties
   const mdef = CAR_MODELS.find(m => m.name === model);
@@ -1706,13 +1710,13 @@ function buildTeams() {
   cars = [];
   for (let k = 0; k < mode; k++) {
     const c = mkCar(0, k, k > 0, k === 0 ? playerCarModel : undefined);
-    c.displayName = k === 0 ? playerName : 'BLUE BOT ' + (k + 1);
+    c.displayName = k === 0 ? playerName : (diff===3?'BLUE NEXTO ':'BLUE BOT ') + (k + 1);
     cars.push(c);
   }
   for (let k = 0; k < mode; k++) {
     const human = localTwoPlayer && k === 0;
     const c = mkCar(1, k, !human, human ? player2CarModel : undefined);
-    c.displayName = human ? player2Name : 'ORANGE BOT ' + (k + 1);
+    c.displayName = human ? player2Name : (diff===3?'ORANGE NEXTO ':'ORANGE BOT ') + (k + 1);
     cars.push(c);
   }
 }
@@ -1762,6 +1766,8 @@ for (const [x,z,big] of [...bigPads,...smallPads]) {
 }
 const FORM = [[0, 4608 / 50 / HL], [-40.96, 2560 / 50 / HL], [40.96, 2560 / 50 / HL]];
 function kickoff() {
+  nextoAI.reset();nextoObservationTime=0;nextoLastObservation=0;
+  for(const car of cars)car.nextoPreviousQuat=null;
   for(const c of cars){c.recoveryTimer=0;c.recoveryTarget=null;c.bodyRestTime=0;c.bodyContact=false;}
   previousTouch = null;
   eventCooldown = {};
@@ -1785,6 +1791,12 @@ function kickoff() {
   if(!trainingMode)saveReplayFrame();
 }
 function start(freePlay = false) {
+  if(!freePlay&&diff===3&&!nextoAI.ready){
+    sfx.init(); // Unlock audio during the user's click, before asynchronous loading.
+    $('go').textContent='Loading Nexto before the match…';
+    nextoAI.load().then(()=>{if(diff===3&&(state==='menu'||state==='over'))start(false);}).catch(()=>{});
+    return;
+  }
   document.activeElement?.blur?.();
   clearHeldInput();
   for(const rig of [cam,cam2]){delete rig.heading;delete rig.offset;delete rig.direction;}
@@ -1970,8 +1982,20 @@ if ($('trainingPreset')) $('trainingPreset').addEventListener('change', () => lo
 if ($('freePlayBtn')) $('freePlayBtn').addEventListener('click', e => {
   e.preventDefault(); e.stopPropagation(); start(true);
 });
+function updateNextoStatus(message){
+  const status=$('nextoStatus');if(status){status.textContent=message;status.hidden=diff!==3;}
+  if(nextoAI?.status==='failed'&&diff===3&&state==='menu')$('go').textContent=message;
+  if(nextoAI?.status==='failed'&&diff===3&&state==='play'&&!trainingMode){
+    paused=true;$('msg').textContent='NEXTO UNAVAILABLE · OPEN GARAGE TO RETRY';
+  }
+}
 function pick(k, v) {
   if (k === 'mode') mode = v; else diff = v;
+  if(k==='diff'){
+    if($('nextoStatus'))$('nextoStatus').hidden=diff!==3;
+    if(diff===3)nextoAI.load().catch(()=>{});
+    else if(state==='menu'||state==='over')$('go').textContent='Choose your setup, then press PLAY';
+  }
   for (const b of document.querySelectorAll('[data-' + k + ']')) b.classList.toggle('on', +b.dataset[k] === v);
 }
 
@@ -2597,6 +2621,10 @@ for(const button of document.querySelectorAll('[data-quick]')){
   button.addEventListener('click',event=>{
     event.stopPropagation();
     const choice=button.dataset.quick;
+    if(choice==='nexto'){
+      localTwoPlayer=false;if($('localTwo'))$('localTwo').checked=false;resize();
+      pick('mode',1);pick('diff',3);start();return;
+    }
     if(choice==='freestyle'){
       start(true);
       const preset=$('trainingPreset');
@@ -2683,6 +2711,27 @@ function player2Ctl() {
   const actions = playerActions('p2'); actions.jump = j;
   return actions;
 }
+// Convert the actual state, not mesh positions (the garage moves preview meshes).
+function nextoSnapshot(){
+  const dt=Math.max(.001,nextoObservationTime-nextoLastObservation);nextoLastObservation=nextoObservationTime;
+  return {
+    cars:cars.map(c=>{
+      const q=getCarOrientation(c).clone();let angular=[0,0,0];
+      if(c.nextoPreviousQuat){
+        const delta=q.clone().multiply(c.nextoPreviousQuat.clone().invert()).normalize();
+        if(delta.w<0)delta.set(-delta.x,-delta.y,-delta.z,-delta.w);
+        const magnitude=Math.hypot(delta.x,delta.y,delta.z);
+        if(magnitude>1e-7){const scale=2*Math.atan2(magnitude,delta.w)/magnitude/dt;angular=[delta.x*scale,delta.y*scale,delta.z*scale];}
+      }
+      c.nextoPreviousQuat=q.clone();
+      return {ai:c.ai,team:c.team,position:[c.x,c.y,c.z],velocity:[c.vx,c.vy,c.vz],
+        quaternion:q.toArray(),angularVelocity:angular,boost:c.boost,demo:c.demoTimer>0,
+        ground:c.ground,hasFlip:!(c.demoTimer>0)&&(c.ground||(c.jumps===1&&c.jt<PHYSICS_TUNING.DOUBLE_JUMP_WINDOW))};
+    }),
+    ball:{position:[ball.x,ball.y,ball.z],velocity:[ball.vx,ball.vy,ball.vz],angularVelocity:[ball.wx||0,ball.wy||0,ball.wz||0]},
+    pads:pads.map(p=>({x:p.x,z:p.z,big:p.big,available:p.t<=0}))
+  };
+}
 const pred = []; // where the ball will be every 0.1s for the next 4 seconds
 let predictionTimer = 0;
 function predict() {
@@ -2696,6 +2745,7 @@ function predict() {
   }
 }
 function aiCtl(c, dt) {
+  if(diff===3)return nextoAI.controls(c,cars.indexOf(c),{cars,ball});
   c.aiCd -= dt; c.errT = (c.errT || 0) - dt;
   const sk = SKILL[diff], ct = { throttle: sk.thr, steer: 0, jump: false, jumpHeld: false, boost: false, hand: false };
   if(c.bodyContact&&!c.ground&&c.aiCd<=0){ct.jump=true;ct.throttle=0;c.aiCd=.8;return ct;}
@@ -3255,7 +3305,7 @@ function stepCar(c, ct, dt) {
     c.airOmega={pitch:0,yaw:0,roll:0};c.recoveryTimer=Math.max(0,c.recoveryTimer-dt);
     const e=new THREE.Euler().setFromQuaternion(c.airQuat,'YXZ');c.pitch=-e.x;c.yaw=e.y;c.roll=e.z;
   }
-  if (c.ai) c.boost = Math.min(100, c.boost + 8 * dt);
+  if (c.ai&&!c.nexto) c.boost = Math.min(100, c.boost + 8 * dt);
   // Boost momentum persists after boost is released. Only genuine physics
   // (coasting, braking, tyre friction) can slow the car from supersonic speed.
   const absoluteLimit = PHYSICS_TUNING.MAX_SPEED;
@@ -3927,6 +3977,7 @@ function update(dt) {
     predict();
     predictionTimer = 0.08;
   }
+  if(diff===3&&!trainingMode){nextoObservationTime+=dt;nextoAI.update(dt,nextoSnapshot);}
   const cts = cars.map((c, i) => {
     if (i === 0) return playerCtl();
     if (localTwoPlayer && i === mode) return player2Ctl();
@@ -4180,6 +4231,7 @@ if(CAR_MODELS.some(car=>car.name===new URLSearchParams(location.search).get('car
 window.rocketArena = {
   ball, physics: PHYSICS_TUNING,
   get cars() { return cars; },
+  get nextoStatus(){return {state:nextoAI.status,ready:nextoAI.ready,inferences:nextoAI.inferenceCount,lastInferenceMs:nextoAI.lastInferenceMs};},
   get score() { return score; },
   get state() { return state; },
   // Read-only references for browser-level stadium regression checks.

@@ -47,6 +47,14 @@ Directional dodges use a 500 UU/s horizontal impulse and a smooth 0.65-second ph
 
 The bottom-left car speedometer has been removed. Goal speed is the ball's three-dimensional speed at the scoring-line crossing, converted using 50 Unreal units = 0.5 metres and the exact metres-per-mile conversion. It displays one decimal place and remains fixed through the celebration and replay. Free Play goal callouts also show the captured goal speed.
 
+## Nexto opponents
+
+Choose **NEXTO** on the Play menu for a 1v1, or select **Nexto** under Custom Match Options → Bots for 1v1, 2v2 or 3v3. The official trained Nexto policy runs locally in a Web Worker through a bundled WebAssembly runtime. The first match waits for the AI to load. Easy, Medium and Hard remain available. No server or external runtime download is required. `.nojekyll` keeps GitHub Pages in static-file mode so the bundled model and WebAssembly binaries are published directly.
+
+This is an experimental adaptation to the game's custom physics, so it does not promise Nexto's Rocket League rank or playing strength. State coordinates, relative observations, the 90-action table, jump edges and 15 Hz decision rate match the upstream policy interface; car boost is consumed normally. A kickoff approach routine supports the learned policy, as upstream Nexto also uses a kickoff routine. Worker requests are bounded to one at a time, and stale predictions are discarded at kickoffs.
+
+The Nexto model and adapted observation/action component are **CC BY-NC-SA 4.0**, separate from the project's MIT code. See [Nexto attribution and terms](assets/nexto/CREDITS.md). ONNX Runtime Web is MIT licensed with its notices in `lib/nexto/vendor/`. `tools/export-nexto.py` reproduces the conversion and verifies logits against the official TorchScript model. `tools/nexto-observation-fixture.py` checks the adapter against the official observation builder.
+
 ## Controls and rules
 
 - **Drive:** W/S or arrows; **steer:** A/D; **jump/dodge:** Space; **boost:** Left Shift; **drift:** E; **air roll:** Q/E; **ball camera:** C; **pause:** P; **mute:** M.
@@ -63,6 +71,7 @@ node --check game.js
 node tests/physics-smoke.js
 node tests/wall-physics.test.js
 node tests/ai-regression.test.js
+node tests/nexto.test.js
 node tests/match-clock.test.js
 node tests/aerial-controls.test.js
 node tests/flip-physics.test.js

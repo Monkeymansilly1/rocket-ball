@@ -19,10 +19,12 @@ async function eventually(fn, timeout=20000) {
   throw new Error('Timed out waiting for browser: '+(lastError?.message||'condition false'));
 }
 const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.png':'image/png','.ico':'image/x-icon'};
-let scorpionRequests=0;
+let scorpionRequests=0,nextoRequests=0;
 const server=http.createServer((req,res)=>{
   let name=decodeURIComponent(new URL(req.url,'http://127.0.0.1').pathname);
   if(name==='/')name='/index.html';
+  if(name==='/assets/nexto/nexto.onnx'&&++nextoRequests===1){res.writeHead(503);return res.end('Simulated Nexto load failure');}
+  if(name==='/lib/nexto/policy-check-worker.js'){res.writeHead(200,{'Content-Type':'text/javascript'});return res.end("self.importScripts('vendor/ort.wasm.min.js');ort.env.wasm.numThreads=1;ort.env.wasm.wasmPaths=new URL('vendor/',self.location.href).href;self.onmessage=async({data})=>{try{const s=await ort.InferenceSession.create(new URL('../../assets/nexto/nexto.onnx',self.location.href).href,{executionProviders:['wasm']});const r=await s.run({query:new ort.Tensor('float32',Float32Array.from(data.query),[1,1,32]),entities:new ort.Tensor('float32',Float32Array.from(data.entities),[1,data.entityCount,24]),mask:new ort.Tensor('float32',Float32Array.from(data.mask),[1,data.entityCount])});let maxError=0;for(let i=0;i<90;i++)maxError=Math.max(maxError,Math.abs(r.logits.data[i]-data.logits[i]));self.postMessage({maxError});}catch(error){self.postMessage({error:String(error)})}};");}
   // Exercise recovery from an interrupted model download, as on a live host.
   if(name==='/assets/scorpion/scene.gltf'&&++scorpionRequests===1){
     res.writeHead(503);return res.end('Simulated interrupted model download');
@@ -151,7 +153,7 @@ async function main() {
     assert.equal(await evalJS('window.rocketArena.ballShadow.isMesh'),true);
     assert.equal(await evalJS('window.rocketArena.ballTrail.isLine'),true);
     assert.equal(await evalJS('document.querySelectorAll("#explosion option").length'),8);
-    assert.equal(await evalJS('document.querySelectorAll("[data-quick]").length'),3);
+    assert.equal(await evalJS('document.querySelectorAll("[data-quick]").length'),4);
     // Preview every selectable goal style without scoring a real match.
     await evalJS(`for(const style of ["classic","fire","galaxy","lightning","blackhole","supernova","pixel","aurora"])window.rocketArena.previewGoalExplosion(style)`);
     assert((await evalJS('window.rocketArena.goalEffectCount'))>0,
@@ -417,6 +419,32 @@ async function main() {
     assert.equal(await evalJS('document.getElementById("trainingPreset").value'),'wall');
     assert.equal(await evalJS('window.rocketArena.cars.length'),1);
     assert.equal(await evalJS('document.getElementById("ballFeel")===null'),true);
+    await evalJS(`document.getElementById('quickPlayButton').click();document.getElementById('quickNexto').click()`);
+    await eventually(()=>evalJS('window.rocketArena.nextoStatus.state==="failed"'),60000);
+    assert.equal(await evalJS('window.rocketArena.state'),'menu','A failed AI load must not start a match with fake Nexto bots');
+    assert.equal(await evalJS('document.getElementById("nextoStatus").textContent.includes("retry")'),true);
+    await evalJS('document.getElementById("quickNexto").click()');
+    await eventually(()=>evalJS('window.rocketArena.nextoStatus.ready && window.rocketArena.state==="play" && window.rocketArena.cars.length===2'),60000);
+    assert.equal(await evalJS('window.rocketArena.cars[1].displayName'),'ORANGE NEXTO 1');
+    const policyFixture=JSON.parse(fs.readFileSync('tests/nexto-policy-fixture.json','utf8'));
+    const parity=await evalJS(`(async()=>{
+      const worker=new Worker('lib/nexto/policy-check-worker.js');
+      return await new Promise((resolve,reject)=>{worker.onmessage=({data})=>{worker.terminate();data.error?reject(Error(data.error)):resolve(data)};worker.postMessage(${JSON.stringify(policyFixture)});});
+    })()`);
+    assert(parity.maxError<.0002,'Browser inference must match the official trained policy: '+JSON.stringify(parity));
+    await evalJS(`(()=>{const c=window.rocketArena.cars[1];Object.assign(c,{x:0,y:.55,z:30,yaw:Math.PI,pitch:0,roll:0,vx:0,vy:0,vz:0,ground:true,airQuat:null,surfaceQuat:null,surfaceForward:null,surfaceNormal:null,nextoPreviousQuat:null,flip:0,recoveryTimer:0,wallRide:false});Object.assign(window.rocketArena.ball,{x:15,y:2,z:0,vx:0,vy:0,vz:0});})()`);
+    const initialPredictions=await evalJS('window.rocketArena.nextoStatus.inferences');
+    await eventually(()=>evalJS(`window.rocketArena.nextoStatus.inferences>${initialPredictions+3} && window.rocketArena.cars[1].x>.2 && window.rocketArena.cars[1].z<29`),20000);
+    for(const teamSize of [2,3]){
+      await evalJS(`document.getElementById('quickPlayButton').click();document.querySelector('[data-mode="${teamSize}"]').click();document.querySelector('[data-diff="3"]').click();document.getElementById('playBtn').click();`);
+      await eventually(()=>evalJS('window.rocketArena.state==="play"'),20000);
+      assert.equal(await evalJS('window.rocketArena.cars.length'),teamSize*2);
+      assert.equal(await evalJS('window.rocketArena.cars.filter(c=>c.ai&&c.nexto).length'),teamSize*2-1);
+      const count=await evalJS('window.rocketArena.nextoStatus.inferences');
+      await eventually(()=>evalJS(`window.rocketArena.nextoStatus.inferences>${count+1}`),20000);
+      assert.equal(await evalJS('window.rocketArena.nextoStatus.ready'),true);
+    }
+    console.log('PASS: Nexto download failure/retry, real PyTorch/WASM policy parity, learned steering and batched 1v1/2v2/3v3 opponents.');
     assert.deepEqual(errors,[],'Unexpected browser JS errors');
     console.log('PASS: WebGL startup, engine audio, menu, Free Play, match driving, accurate goal speed, interpolated replay and Space skip.');
   } finally {

@@ -145,3 +145,5 @@ body.goal-celebration #goalBy {font-size:clamp(22px,3vw,34px);bottom:8%;}
 @media(max-width:700px){#trainingTools{top:82px;left:10px;width:210px;}#flightHint{bottom:72px;}}
 #trainingTools {transform:none;margin:0;}
 body:not(.in-menu) #player {display:none;}
+
+#menu .quickmodes button[data-quick=nexto] {border-left-color:#db9dff;background:linear-gradient(110deg,#633b8577,#232c4244);}

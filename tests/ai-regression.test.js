@@ -102,6 +102,10 @@ assert(aerial.pitch<0,
  'Airborne bot must command nose-up pitch for higher ball');
 assert.equal(aerial.throttle,0,
  'Bot must not use backwards throttle as the pitch control');
+// Learned-policy opponents must use the same finite boost resource as players.
+const learned=bot(0,0,0);learned.nexto=true;learned.boost=0;
+for(let i=0;i<120;i++)stepCar(learned,{throttle:0,steer:0,jump:false,jumpHeld:false,boost:false},dt);
+assert.equal(learned.boost,0,'Nexto must not receive the scripted bots boost regeneration');
 console.log('PASS: AI navigation, steering directions, speed control, reverse recovery and aerial targeting');
 `
 ].join('\n');

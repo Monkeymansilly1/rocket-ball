@@ -46,7 +46,7 @@ const updateHarness=new Function('THREE','RocketReplay',`
 const cars=[{x:0,y:.55,z:0,boost:34}],ball={x:0,y:2,z:0,vx:0,vy:0,vz:0},pads=[];
 const getCarOrientation=()=>new THREE.Quaternion();
 let state='play',t=0,clock=300,ot=false,trainingMode=false,trainingWallArmed=false,predictionTimer=1;
-const localTwoPlayer=false,pred=[{}],eventCooldown={},playerStats=[],lastTouch=null;
+const diff=1,localTwoPlayer=false,pred=[{}],eventCooldown={},playerStats=[],lastTouch=null;
 const predict=()=>{},playerCtl=()=>({}),bump=()=>{},hitBall=()=>{},stepBall=()=>{},showVictoryScreen=()=>{};
 const stepCar=(c,ct,dt)=>{c.x+=dt;};
 ${source.slice(a,b)}
