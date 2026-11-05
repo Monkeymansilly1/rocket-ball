@@ -1278,7 +1278,7 @@ function makeDetailedCar(car) {
   const asset = car && carModelAssets[car.model];
   if (!asset?.template || car.mesh.assetTemplate===asset.template) return;
   const m = car.mesh, model = asset.template.clone(true);
-  const col = car.ai ? (car.team ? hexCss(ORANGE) : hexCss(BLUE)) :
+  const col = onlineMode || car.ai ? (car.team ? hexCss(ORANGE) : hexCss(BLUE)) :
     car.team ? (localTwoPlayer && !car.ai ? player2Paint : hexCss(ORANGE)) : playerPaint;
   const paint = new THREE.Color(col);
   const wheelNodes = [];
@@ -1560,7 +1560,7 @@ let playerName = 'PLAYER';
 let player2Name = 'PLAYER 2';
 const profilePictures = { p1: '', p2: '' };
 function profileAvatarHTML(car, idx) {
-  const key = idx === 0 ? 'p1' : (localTwoPlayer && idx === mode ? 'p2' : '');
+  const key = onlineMode ? '' : idx === 0 ? 'p1' : (localTwoPlayer && idx === mode ? 'p2' : '');
   const src = key ? profilePictures[key] : '';
   const name = car.displayName || ('PLAYER ' + (idx + 1));
   const color = car.team ? '#ff8a1f' : '#2fb8ff';
@@ -1642,6 +1642,7 @@ saveGarageSelection();
 
 let physicsStyle = 'standard';
 let localTwoPlayer = false;
+let onlineMode=null,onlineStarting=false,onlineBackgroundFrame=null;
 const nextoAI=new RocketNexto.Controller(updateNextoStatus);
 let nextoObservationTime=0,nextoLastObservation=0;
 let goalExplosionStyle = 'classic';
@@ -1701,7 +1702,7 @@ const SKILL = [
   { thr: 1, boost: true, steer: 4, cap: 1, wait: 0, sloppy: 0, flip: 1, aerial: true, drift: true }];
 function mkCar(team, k, ai, modelName) {
   const model = CAR_MODELS.some(m => m.name === modelName) ? modelName : CAR_MODELS[k % CAR_MODELS.length].name;
-  const col = new THREE.Color(!ai && k === 0 ? (team ? player2Paint : playerPaint) : (team ? ORANGE : BLUE)).offsetHSL(0, 0, -0.09 * k);
+  const col = new THREE.Color(onlineMode ? (team ? ORANGE : BLUE) : !ai && k === 0 ? (team ? player2Paint : playerPaint) : (team ? ORANGE : BLUE)).offsetHSL(0, 0, -0.09 * k);
   const car = { team, k, x: 0, y: 0.55, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, pitch: 0, roll: 0, airQuat: null, airOmega: null, surfaceQuat: null, surfaceNormal: null, surfaceForward: null, landingQuat:null, ceilingRide:false, wallRide: false, wallVerticalAxis: null, wallVerticalSign: 0, ai, aiCd: 0, boost: 34, jumps: 0, jt: 0, flip: 0, flipPitchScale: 1, aerialAssistDelay: 0, fx: 0, fz: 0, fl: 0, ground: true, demoTimer: 0, demoCooldown: 0, boostImpactTimer: 0 };
   car.mesh = carMesh(col, model);
   car.model = model;
@@ -1799,6 +1800,7 @@ function kickoff() {
   if(!trainingMode)saveReplayFrame();
 }
 function start(freePlay = false) {
+  if(!onlineStarting)leaveOnline();
   if(!freePlay&&diff===3&&!nextoAI.ready){
     sfx.init(); // Unlock audio during the user's click, before asynchronous loading.
     $('go').textContent='Loading Nexto before the match…';
@@ -2198,7 +2200,8 @@ if (fullscreenToggle) fullscreenToggle.addEventListener('click', async () => {
 });
 const skipReplayButton = $('skipReplayButton');
 if (skipReplayButton) skipReplayButton.addEventListener('click', () => {
-  if (state === 'replay') replayElapsed = RocketReplay.duration(replayFrames);
+  if(state==='replay'&&onlineMode?.role==='guest')onlineRoom.send({type:'skip'});
+  else if (state === 'replay') replayElapsed = RocketReplay.duration(replayFrames);
 });
 
 
@@ -2288,7 +2291,7 @@ function pollControllers() {
           !Object.values(controlBindings.p1.pad).includes(9) &&
           !($('controlsSettings') && $('controlsSettings').open)) {
         if (state === 'menu' || state === 'over') start();
-        else if (state === 'play') {
+        else if (state === 'play' && !onlineMode) {
           paused = !paused;
           if ($('msg')) {
             $('msg').textContent = paused ? 'PAUSED · PRESS OPTIONS TO RESUME' : '';
@@ -2339,7 +2342,7 @@ document.addEventListener('focusin',event=>{if(isEditingTarget(event.target))cle
 addEventListener('keydown', e => {
   // Text editing and IME composition belong to the browser, including A,
   // Space, arrows and menu shortcuts. Do not queue driving input from them.
-  if(e.isComposing || isEditingTarget(e.target))return;
+  if(e.isComposing || isEditingTarget(e.target)||e.target?.closest?.('.online-lobby, #onlineMatchBar'))return;
   if (pendingKeyCapture) {
     const action = pendingKeyCapture;
     if (e.code === 'Escape') {
@@ -2354,6 +2357,7 @@ addEventListener('keydown', e => {
   }
   if(e.ctrlKey || e.metaKey || e.altKey)return;
   if(state==='replay' && e.code==='Space'){
+    if(onlineMode?.role==='guest'){onlineRoom.send({type:'skip'});clearHeldInput();e.preventDefault();return;}
     replayElapsed=RocketReplay.duration(replayFrames);clearHeldInput();e.preventDefault();return;
   }
   const remappedKey = ['p1','p2'].some(who => Object.values(controlBindings[who].keyboard).includes(e.code));
@@ -2377,7 +2381,7 @@ addEventListener('keydown', e => {
     if (n) pick('mode', n); if (d !== undefined) pick('diff', d);
   }
   if (e.code === 'KeyM') muted = !muted;
-  if (e.code === 'KeyP') {
+  if (e.code === 'KeyP' && !onlineMode) {
     paused = !paused;
     if (paused) { $('msg').textContent = 'PAUSED'; $('msg').style.color = '#fff'; }
     else { $('msg').textContent = ''; }
@@ -3985,6 +3989,7 @@ function goal(team, scoringVelocity=ball) {
   [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => sfx.tone(f, 0.35, 'triangle', 0.2), i * 120));
 }
 function update(dt) {
+  if(typeof onlineMode!=='undefined'&&onlineMode?.role==='guest')return;
   t += dt;
   if(state==='play' && !trainingMode)replaySimulationTime+=dt;
   if (state === 'kick') { cd -= dt; jumpQ = false; $('msg').style.color = '#fff'; $('msg').textContent = cd > 0 ? Math.ceil(cd) : 'GO!'; if (cd <= 0) { state = 'play'; $('msg').textContent = ''; } return; }
@@ -4072,6 +4077,7 @@ function update(dt) {
   if(diff===3&&!trainingMode){nextoObservationTime+=dt;nextoAI.update(dt,nextoSnapshot);}
   const cts = cars.map((c, i) => {
     if (i === 0) return playerCtl();
+    if(typeof onlineMode!=='undefined'&&onlineMode&&i===1)return remoteOnlineControls();
     if (localTwoPlayer && i === mode) return player2Ctl();
     return aiCtl(c, dt);
   });
@@ -4201,7 +4207,7 @@ function render(dt) {
   document.body.classList.toggle('in-menu',state==='menu');
   document.body.classList.toggle('goal-celebration',state==='goal');
   document.body.classList.toggle('local-two-enabled',localTwoPlayer);
-  if(state==='replay')applyReplayFrame(RocketReplay.sample(replayFrames,replayElapsed));
+  if(state==='replay'&&onlineMode?.role!=='guest')applyReplayFrame(RocketReplay.sample(replayFrames,replayElapsed));
   for (const c of cars) {
     const m = c.mesh;
     m.root.position.set(c.x, c.y, c.z);
@@ -4236,7 +4242,8 @@ function render(dt) {
   goalAnthems.sync({state,paused,muted,master:gameVolume,volume:anthemVolume,replayId:replayAnthemToken,replayTrack:replayAnthemTrack,
     allowPreview:state==='menu'&&$('menu').dataset.panel==='effects',celebrating:trainingMode&&trainingGoals>0});
   syncAudioControls();
-  sfx.update(cars[0], state === 'play' || state === 'replay');
+  const localCarIndex=onlineMode?.role==='guest'?1:0;
+  sfx.update(cars[localCarIndex], state === 'play' || state === 'replay');
   const splitActive = !trainingMode && localTwoPlayer && state !== 'menu' && state !== 'over';
   document.body.classList.toggle('split-screen', splitActive);
   // During a replay, follow the player who scored instead of always following P1.
@@ -4283,7 +4290,7 @@ function render(dt) {
   } else {
     camera.clearViewOffset();
     cars.forEach(c => { c.mesh.root.visible = c.demoTimer <= 0; }); ballMesh.visible = true;
-    updateCam(dt, state === 'replay' ? replayCameraCarIndex : 0);
+    updateCam(dt, state === 'replay' ? replayCameraCarIndex : localCarIndex);
     if (splitActive) updateCam(dt, state === 'replay' ? replayCameraCarIndex : mode, camera2, cam2);
   }
   $('s0').textContent = score[0]; $('s1').textContent = score[1];
@@ -4292,12 +4299,12 @@ function render(dt) {
   if(flightHint){
     flightHint.hidden=!['play','kick'].includes(state);
     const manual=keyboardFlightMode==='manual';
-    const tipped=!!cars[0]?.bodyContact && !cars[0].ground;
+    const own=cars[localCarIndex];const tipped=!!own?.bodyContact && !own.ground;
     const text=tipped?'CAR TIPPED · Press SPACE to right the car · Q/E rolls manually':manual?'MANUAL AERIAL · Hold SPACE, raise nose with S, then SHIFT · W pitches down'
       :'ASSISTED AERIAL · Hold SPACE to jump, then hold SHIFT to climb · K/I aim · Q/E roll';
     if(flightHint.textContent!==text)flightHint.textContent=text;
   }
-  const b = trainingMode ? 100 : cars[0].boost;
+  const b = trainingMode ? 100 : cars[localCarIndex].boost;
   $('bt').textContent = trainingMode ? '∞' : Math.round(b);
   $('bf').style.width = '84%';
   $('bf').style.background = 'conic-gradient(' + (b <= 20 ? '#ff7547' : '#ffba52') +
@@ -4305,7 +4312,7 @@ function render(dt) {
   const p2 = cars[mode];
   const bf2 = $('bf2'), bt2 = $('bt2');
   if (bf2 && bt2) { const b2 = p2 ? p2.boost : 0; bf2.style.width = Math.round(clamp(b2, 0, 100)) + '%'; bt2.textContent = Math.round(b2); bf2.style.background = b2 > 66 ? '#ffd35a' : '#ff8a1f'; }
-  const pHUD = $('player'); if (pHUD) pHUD.textContent = playerName;
+  const pHUD = $('player'); if (pHUD) pHUD.textContent = onlineMode?cars[localCarIndex].displayName:playerName;
   const p2Tag = $('p2Tag'); if (p2Tag) p2Tag.textContent = player2Name.toUpperCase();
   if (splitActive) {
     const half = Math.floor(innerWidth / 2);
@@ -4320,6 +4327,124 @@ function render(dt) {
   }
 }
 
+// ---------- private online 1v1 ----------
+let onlineRemoteInput={},onlineInputAt=0,onlineInputSeq=-1,onlineSendTime=0,onlineSnapshot=null,onlineSaved=null;
+const onlineRoom=new RocketRooms.Room({
+ onStatus(info){
+  $('onlineStatus').textContent=info.message;
+  $('onlineRoomCode').textContent=info.code||'';
+  $('onlineInvite').hidden=!info.code||!['waiting','connecting','connected'].includes(info.state);
+  $('onlineCreate').disabled=$('onlineJoin').disabled=['waiting','connecting','connected'].includes(info.state);
+ },
+ onStart:beginOnlineMatch,
+ onData(packet){
+  if(!onlineMode)return;
+  if(onlineMode.role==='host'){
+   if(packet.type==='input'&&Number.isSafeInteger(packet.seq)&&packet.seq>onlineInputSeq){
+    const next=RocketRooms.controls(packet.controls);next.jump=state==='play'&&(next.jump||onlineRemoteInput.jump);
+    onlineRemoteInput=next;onlineInputSeq=packet.seq;onlineInputAt=performance.now();
+   }else if(packet.type==='skip'&&state==='replay')replayElapsed=RocketReplay.duration(replayFrames);
+  }else if(packet.type==='snapshot'&&validOnlineSnapshot(packet))onlineSnapshot=packet;
+ },
+ onClose(message){leaveOnline(message);}
+});
+function localOnlineProfile(){return {name:$('name').value,car:playerCarModel};}
+$('onlineCreate').addEventListener('click',()=>{sfx.init();onlineRoom.create(localOnlineProfile());});
+$('onlineJoin').addEventListener('click',()=>{sfx.init();onlineRoom.join($('onlineCode').value,localOnlineProfile());});
+$('onlineCode').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();$('onlineJoin').click();}});
+for(const id of ['onlineLeave','onlineMatchLeave'])$(id).addEventListener('click',()=>leaveOnline('Room closed. Create or join another room.'));
+$('onlineCopy').addEventListener('click',async()=>{
+ const invite=new URL(location.href);invite.searchParams.set('room',onlineRoom.code);invite.searchParams.delete('car');
+ try{await navigator.clipboard.writeText(invite.href);$('onlineStatus').textContent='Invite copied. Send it to your friend.';}
+ catch(_){$('onlineStatus').textContent='Copy this code and send it to your friend: '+onlineRoom.code;}
+});
+const invitedCode=RocketRooms.normalize(new URLSearchParams(location.search).get('room'));
+if(RocketRooms.validCode(invitedCode)){$('onlineCode').value=invitedCode;$('onlineStatus').textContent='Your friend invited you. Press JOIN ROOM to connect.';selectLobbyPanel('play');}
+function beginOnlineMatch(session){
+ onlineSaved={mode,diff,playerName,player2Name,localTwoPlayer,goalExplosionStyle};
+ onlineMode=session;onlineStarting=true;mode=1;diff=0;localTwoPlayer=false;
+ try{start(false);}finally{onlineStarting=false;}
+ const profiles=session.role==='host'?[session.local,session.remote]:[session.remote,session.local];
+ for(const c of cars)scene.remove(c.mesh.root);
+ cars=profiles.map((p,i)=>{const c=mkCar(i,0,false,p.car);c.displayName=p.name;c.nexto=false;return c;});
+ playerName=profiles[0].name;player2Name=profiles[1].name;
+ kickoff();state='kick';cd=3;replayCameraCarIndex=0;onlineSnapshot=null;onlineInputSeq=-1;onlineRemoteInput={};onlineSendTime=0;
+ $('onlineMatchBar').hidden=false;$('onlineMatchLabel').textContent='ROOM '+onlineRoom.code+' · '+(session.role==='host'?'BLUE':'ORANGE');
+ $('quickPlayButton').hidden=true;
+ if(session.role==='host')onlineMode.backgroundTimer=setInterval(()=>{
+  if(document.hidden&&onlineBackgroundFrame)onlineBackgroundFrame(performance.now(),true);
+ },50);
+ clearHeldInput();
+}
+function leaveOnline(message){
+ const wasOnline=!!onlineMode,hadRoom=onlineRoom.state!=='idle';
+ if(onlineMode)clearInterval(onlineMode.backgroundTimer);
+ onlineMode=null;onlineSnapshot=null;onlineRemoteInput={};onlineRoom.close();
+ $('onlineMatchBar').hidden=true;$('onlineInvite').hidden=true;$('onlineCreate').disabled=$('onlineJoin').disabled=false;$('quickPlayButton').hidden=false;
+ if(onlineSaved){({mode,diff,playerName,player2Name,localTwoPlayer,goalExplosionStyle}=onlineSaved);onlineSaved=null;}
+ if(wasOnline){
+  paused=false;state='menu';trainingMode=false;clearHeldInput();goalEffects.clear();goalAnthems.stop();
+  $('victory').style.display='none';$('victory').dataset.shown='';document.body.classList.remove('victory-screen');
+  $('menu').style.display='grid';$('msg').textContent='';$('goalBy').textContent='';$('goalSpeed').textContent='';
+  buildTeams();kickoff();resize();
+ }
+ if(message||hadRoom)$('onlineStatus').textContent=message||'Room closed.';
+}
+function remoteOnlineControls(){
+ if(performance.now()-onlineInputAt>300){onlineRemoteInput={};return RocketRooms.controls();}
+ const input={...onlineRemoteInput};onlineRemoteInput.jump=false;return input;
+}
+const NETWORK_MOTION=['x','y','z','vx','vy','vz','yaw','pitch','roll','boost','demoTimer','fl','engineLoad'];
+const NETWORK_STATS=['goals','assists','shots','saves','clears','shotsOnGoal','demos'];
+function onlineMotion(c){const p={};for(const key of NETWORK_MOTION)p[key]=Number.isFinite(c[key])?c[key]:0;p.q=getCarOrientation(c).toArray();p.ground=!!c.ground;return p;}
+function validOnlineSnapshot(p){
+ const numbers=o=>o&&['x','y','z','vx','vy','vz'].every(k=>Number.isFinite(o[k])&&Math.abs(o[k])<1e6);
+ const quaternion=q=>Array.isArray(q)&&q.length===4&&q.every(v=>Number.isFinite(v)&&Math.abs(v)<=1.001)&&Math.hypot(...q)>.99;
+ return ['kick','play','goal','replay','over'].includes(p.state)&&Number.isFinite(p.clock)&&p.clock>=0&&p.clock<=MATCH&&
+  Number.isFinite(p.cd)&&Array.isArray(p.score)&&p.score.length===2&&p.score.every(v=>Number.isSafeInteger(v)&&v>=0)&&
+  Array.isArray(p.cars)&&p.cars.length===2&&p.cars.every(c=>numbers(c)&&quaternion(c.q)&&NETWORK_MOTION.every(k=>Number.isFinite(c[k])))&&
+  numbers(p.ball)&&quaternion(p.ball.q)&&Array.isArray(p.pads)&&p.pads.length===pads.length&&p.pads.every(v=>Number.isFinite(v)&&v>=0&&v<30)&&
+  Number.isSafeInteger(p.anthem)&&p.anthem>=0&&Number.isFinite(p.speed)&&Number.isFinite(p.elapsed)&&
+  Number.isInteger(p.scorer)&&p.scorer>=0&&p.scorer<2;
+}
+function sendOnlineSnapshot(dt){
+ onlineSendTime+=dt;if(onlineSendTime<1/30)return;onlineSendTime=0;
+ if(state==='menu'){leaveOnline('You left the match.');return;}
+ onlineRoom.send({type:'snapshot',state,score:[...score],clock,cd,ot,ball:{...ball,q:ball.q||[0,0,0,1]},cars:cars.map(onlineMotion),pads:pads.map(p=>p.t),
+  anthem:replayAnthemToken,track:replayAnthemTrack,style:goalExplosionStyle,speed:goalSpeedMph,scorer:replayCameraCarIndex,scorerName:goalScorerText,elapsed:replayElapsed,stats:playerStats,
+  message:$('msg').textContent});
+}
+function onlineFrame(dt){
+ if(!onlineMode)return;
+ if(state==='menu'){leaveOnline('You left the match.');return;}
+ if(onlineMode.role!=='guest')return;
+ onlineRoom.send({type:'input',seq:onlineMode.seq=(onlineMode.seq||0)+1,controls:playerCtl()});
+ const p=onlineSnapshot;if(!p)return;
+ const snap=state!==p.state;
+ state=p.state;score=[...p.score];clock=p.clock;cd=p.cd;ot=!!p.ot;replayElapsed=p.elapsed;
+ if(Array.isArray(p.stats)&&p.stats.length===2&&p.stats.every(s=>s&&NETWORK_STATS.every(k=>Number.isFinite(s[k])&&s[k]>=0)))
+  playerStats=p.stats.map(s=>Object.fromEntries(NETWORK_STATS.map(k=>[k,s[k]])));
+ cars.forEach((c,i)=>{
+  const target=p.cars[i],blend=snap||Math.hypot(c.x-target.x,c.y-target.y,c.z-target.z)>12?1:1-Math.exp(-24*dt);
+  for(const k of ['x','y','z'])c[k]+=(target[k]-c[k])*blend;
+  for(const k of NETWORK_MOTION)if(!['x','y','z'].includes(k))c[k]=target[k];
+  const q=new THREE.Quaternion().fromArray(target.q);c.airQuat=getCarOrientation(c).clone().slerp(q,blend);c.ground=!!target.ground;
+ });
+ const blend=snap||Math.hypot(ball.x-p.ball.x,ball.y-p.ball.y,ball.z-p.ball.z)>12?1:1-Math.exp(-24*dt);
+ for(const k of ['x','y','z'])ball[k]+=(p.ball[k]-ball[k])*blend;
+ for(const k of ['vx','vy','vz','wx','wy','wz'])ball[k]=Number.isFinite(p.ball[k])?p.ball[k]:0;
+ ball.q=[...p.ball.q];pads.forEach((pad,i)=>pad.t=p.pads[i]);
+ goalSpeedMph=p.speed;goalScorerText=String(p.scorerName||'PLAYER').slice(0,12);replayCameraCarIndex=p.scorer;
+ replayAnthemToken=p.anthem;replayAnthemTrack=RocketGoalAnthems.TRACKS[p.track]?p.track:'off';
+ if(Object.hasOwn(GOAL_EFFECT_DATA,p.style))goalExplosionStyle=p.style;
+ $('msg').textContent=String(p.message||'').slice(0,100);$('msg').classList.toggle('replay-title',state==='replay');
+ $('goalBy').textContent=['goal','replay'].includes(state)?'Goal by '+goalScorerText+'!!!':'';
+ $('goalSpeed').textContent=['goal','replay'].includes(state)?'GOAL SPEED · '+goalSpeedMph.toFixed(1)+' MPH':'';
+ if(snap&&state==='goal'){goalExplosion(score[0]>onlineMode.lastBlue?0:1);cheerMiniCrowd(score[0]>onlineMode.lastBlue?0:1);}
+ onlineMode.lastBlue=score[0];
+ if(state==='over')showVictoryScreen();
+}
+
 // ---------- loop ----------
 buildTeams(); kickoff(); pick('mode', 2); pick('diff', 1);
 loadDetailedCars();
@@ -4330,6 +4455,7 @@ window.rocketArena = {
   get nextoStatus(){return {state:nextoAI.status,ready:nextoAI.ready,inferences:nextoAI.inferenceCount,lastInferenceMs:nextoAI.lastInferenceMs};},
   get score() { return score; },
   get state() { return state; },
+  get onlineStatus(){return {state:onlineRoom.state,role:onlineMode?.role||onlineRoom.role,code:onlineRoom.code};},
   // Read-only references for browser-level stadium regression checks.
   get stadium() { return scene.getObjectByName('Rocket Ball Championship Arena'); },
   get lakesideScenery() { return lakesideScenery; },
@@ -4356,7 +4482,8 @@ window.rocketArena = {
   }
 };
 let last = performance.now();
-(function loop(now) {
+(function loop(now,background=false) {
+  onlineBackgroundFrame=loop;
   // Match clocks follow elapsed time even when software rendering is slow.
   // Keep the physics step bounded independently to avoid unstable collisions.
   const wallDt = Math.max(0, (now - last) / 1000); last = now;
@@ -4365,7 +4492,7 @@ let last = performance.now();
   // Physics remains deterministic at 120Hz. The clock, countdown, goal intro,
   // and replay still track real elapsed time when the GPU is running slowly.
   if (typeof window.__rocketPhysicsAccumulator !== 'number') window.__rocketPhysicsAccumulator = 0;
-  if (!paused) {
+  if (!paused && onlineMode?.role!=='guest') {
     window.__rocketPhysicsAccumulator = Math.min(0.25, window.__rocketPhysicsAccumulator + frameDt);
     const fixedDt = 1 / 120;
     let steps = 0;
@@ -4387,7 +4514,9 @@ let last = performance.now();
       }
     }
   } else window.__rocketPhysicsAccumulator = 0;
+  onlineFrame(frameDt);
   render(frameDt);
-  requestAnimationFrame(loop);
+  if(onlineMode?.role==='host')sendOnlineSnapshot(frameDt);
+  if(!background)requestAnimationFrame(loop);
 })(last);
 })();

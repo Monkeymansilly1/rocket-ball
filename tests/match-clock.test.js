@@ -8,7 +8,9 @@ const context = {
   performance: {now: () => 0}, window: {}, paused: false,
   state: 'kick', cd: 3, clock: 300, trainingMode: false, ot: false, replayElapsed: 0,
   pollControllers() {}, render() {}, showVictoryScreen() {}, score: [0, 0],
-  requestAnimationFrame(callback) { context.frame = callback; },
+  onlineMode:null,onlineBackgroundFrame:null,onlineFrame(){},sendOnlineSnapshot(){},
+  rafRequests:0,
+  requestAnimationFrame(callback) { context.frame = callback;context.rafRequests++; },
   simulated:0,
   update(dt) {
     context.simulated+=dt;
@@ -40,3 +42,10 @@ context.state='play';context.simulated=0;
 for(let i=1;i<=5;i++)context.frame(12010+i*200);
 assert(context.simulated>.98&&context.simulated<1.01,'Five-FPS rendering must still simulate a full second of car movement');
 console.log('PASS: fixed-step movement catches up at five FPS without slow motion');
+context.onlineMode={role:'guest'};const before=context.simulated,clockBefore=context.clock;context.frame(20000);
+assert.equal(context.simulated,before,'Online guest must not run a second match simulation');
+assert.equal(context.clock,clockBefore,'Online guest must use the host clock');
+context.onlineMode={role:'host'};const requests=context.rafRequests,simulatedBefore=context.simulated;
+context.onlineBackgroundFrame(21000,true);
+assert(context.simulated>simulatedBefore,'A background host must continue the shared simulation');
+assert.equal(context.rafRequests,requests,'Background ticks must not create extra animation loops');

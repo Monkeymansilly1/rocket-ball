@@ -55,6 +55,16 @@ Goal FX includes **Custom Jump-up**, the user's uploaded DNB instrumental (about
 
 The selected clip starts once when a match replay begins or a Free Play goal is scored, ducks engine/effect volume, resumes from its position after a pause, and fades out when the replay ends, is skipped, or the player returns to the garage. A skipped replay cancels pending downloads too. **Enable Sound**, available in Settings, the anthem panel, and the match toolbar when sound is blocked or muted, resumes browser audio and restores zeroed game/song volumes. Status text explains mute, volume, and browser audio blocks. Interrupted audio resumes on the next click or key press. There is no Spotify integration. See [audio credits](assets/anthems/CREDITS.md). Recreate the synthesized grime/rap files with `tools/compose-goal-anthems.py` (numpy, scipy and ffmpeg); this script preserves the uploaded DNB file.
 
+## Private online 1v1
+
+On **Play**, choose **Create Room**, then send the six-character code or **Copy Invite** link to a friend. Your friend opens the game and enters the code under **Join Room** (invite links fill it in). The match starts when both players connect: creator is Blue, friend is Orange, each uses their own keyboard/controller and selected car, with no bots or split screen. Either player can skip a goal replay. **Leave Match** closes the connection; create a new room to play again.
+
+The creator's browser runs the shared physics, five-minute clock, score, boost pads, and replays. The friend's controls travel over a WebRTC data connection; host snapshots update the friend's view with smoothing. Input is cleared when stale and a lost connection returns players to the menu. Room codes expire when the creator leaves. Keep both game tabs open, particularly the host's. These are casual private matches; latency depends on both connections and the host's performance.
+
+GitHub Pages serves the game unchanged. PeerJS 1.5.5 (bundled under MIT in `vendor/`, with its license) uses the public PeerJS signaling service and its default STUN/TURN servers, including TCP TURN fallbacks. No account or dedicated game server is required. Those public services must be reachable; restrictive networks or service outages can prevent joining, which the room status reports. Local/offline modes do not contact these services.
+
+Room protocol checks: `node tests/online-rooms.test.js`. For a real two-browser WebRTC match test, run `npm ci --prefix tests/online` then `node tests/online-browser-smoke.js`. It runs a local signaling server. Environments that restrict direct UDP can supply a **local** TCP relay using `ROCKET_TEST_TURN_URL`, `ROCKET_TEST_TURN_USER`, and `ROCKET_TEST_TURN_PASSWORD`; browser network policies remain in force.
+
 ## Nexto opponents
 
 Choose **NEXTO** on the Play menu for a 1v1, or select **Nexto** under Custom Match Options → Bots for 1v1, 2v2 or 3v3. The official trained Nexto policy runs locally in a Web Worker through a bundled WebAssembly runtime. The first match waits for the AI to load. Easy, Medium and Hard remain available. No server or external runtime download is required. `.nojekyll` keeps GitHub Pages in static-file mode so the bundled model and WebAssembly binaries are published directly.

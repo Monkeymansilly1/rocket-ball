@@ -80,7 +80,7 @@ async function main() {
     const pending=new Map(),errors=[];
     socket.addEventListener('message',event=>{
       const msg=JSON.parse(event.data);
-      if(msg.method==='Runtime.exceptionThrown')errors.push(msg.params.exceptionDetails?.text||'Script exception');
+      if(msg.method==='Runtime.exceptionThrown')errors.push(msg.params.exceptionDetails?.exception?.description||msg.params.exceptionDetails?.text||'Script exception');
       if(msg.id&&pending.has(msg.id)){
         const p=pending.get(msg.id); pending.delete(msg.id);
         if(msg.error)p.reject(new Error(JSON.stringify(msg.error)));
@@ -127,7 +127,7 @@ async function main() {
     console.log('Navigating headless Chrome to local Rocket Ball server');
     await call('Page.navigate',{url});
     await eventually(()=>evalJS('document.readyState==="complete" && !!window.rocketArena && !!window.THREE'),45000)
-      .catch(err=>{throw new Error('Game startup: '+err.message+'; browser exceptions: '+JSON.stringify(errors));});
+      .catch(async err=>{throw new Error('Game startup: '+err.message+'; state='+await evalJS('JSON.stringify({ready:document.readyState,game:!!window.rocketArena,three:!!window.THREE,rooms:!!window.RocketRooms})')+'; browser exceptions: '+JSON.stringify(errors));});
     assert.equal(await evalJS('window.rocketArena.cars[0]?.model'),'scorpion','New garage must show Scorpion by default');
     assert.equal(await evalJS('window.rocketArena.cars[0]?.mesh.detailedRoot?.userData.vehicleModel'),'scorpion',
       'The uploaded Scorpion body must appear even when its model download is interrupted');
