@@ -136,6 +136,17 @@
       <button id="explosionPreview" class="preview-explosion" type="button" aria-label="Preview selected goal explosion">✦ PREVIEW</button>
       <small id="explosionPreviewStatus" role="status" aria-live="polite">Eight animated explosions</small>
     </div>
+        <section class="anthem-garage" aria-label="Goal anthems">
+          <h3>GOAL ANTHEMS</h3><p>Original instrumentals · play during match replays</p>
+          <div class="anthem-options" role="group" aria-label="Choose a goal anthem">
+            <button type="button" data-anthem="dnb" aria-pressed="true" class="on"><strong>DNB</strong><small>Afterburn · 172 BPM</small></button>
+            <button type="button" data-anthem="grime" aria-pressed="false"><strong>GRIME</strong><small>East Stand · 140 BPM</small></button>
+            <button type="button" data-anthem="rap" aria-pressed="false"><strong>RAP</strong><small>Touchline · 92 BPM</small></button>
+            <button type="button" data-anthem="off" aria-pressed="false"><strong>OFF</strong><small>No goal music</small></button>
+          </div>
+          <div class="anthem-actions"><button id="anthemPreview" type="button">▶ PREVIEW</button><button id="anthemStop" type="button">■ STOP</button></div>
+          <p id="anthemPreviewStatus" class="anthem-status" role="status" aria-live="polite">Selected: Afterburn</p>
+        </section>
         <div id="effectCards" class="effect-cards" aria-label="Goal explosion collection"></div>
         <p id="effectDescription" class="effect-description">An expanding energy dome and a crown of flying shards.</p>
         <button id="fullGoalPreview" type="button" class="secondary-action">FULL VIEW</button>
@@ -162,6 +173,11 @@
             <label for="settingVolume">Game volume</label>
             <input id="settingVolume" type="range" min="0" max="100" step="1" value="75">
             <output id="settingVolumeValue" for="settingVolume">75%</output>
+          </div>
+          <div class="setting-row">
+            <label for="settingAnthemVolume">Goal anthem volume</label>
+            <input id="settingAnthemVolume" type="range" min="0" max="100" step="1" value="55">
+            <output id="settingAnthemVolumeValue" for="settingAnthemVolume">55%</output>
           </div>
           <h3>Accessibility</h3>
           <div class="setting-row">
@@ -267,10 +283,11 @@
 <script src="lib/goal-effects.js"></script>
 <script src="lib/replay.js"></script>
 <script src="lib/car-audio.js"></script>
+<script src="lib/goal-anthems.js?v=1"></script>
 <script src="lib/ball-camera.js"></script>
 <script src="lib/nexto/adapter.js?v=1"></script>
 <script src="lib/nexto/client.js?v=1"></script>
 <script src="assets/scorpion/body.js?v=4"></script>
-<script src="game.js?v=nexto-5"></script>
+<script src="game.js?v=goal-anthems-6"></script>
 </body>
 </html>

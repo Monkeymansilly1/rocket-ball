@@ -71,6 +71,13 @@ const TEAM_COLOR_PRESETS = {
 };
 let BLUE = 0x2fb8ff, ORANGE = 0xff8a1f;
 let gameVolume = 0.75, colourVisionMode = 'normal', controllerDeadZone = 0.12;
+let anthemSelection='dnb',anthemVolume=.55;
+try{
+  const saved=JSON.parse(localStorage.getItem('rocketArenaAnthemV1')||'{}');
+  if(saved.track==='off'||RocketGoalAnthems.TRACKS[saved.track])anthemSelection=saved.track;
+  if(Number.isFinite(saved.volume))anthemVolume=Math.max(0,Math.min(1,saved.volume));
+}catch(_){}
+
 let controllerSteeringSensitivity = 1.25, controllerAerialSensitivity = 1.35;
 let controllerVibrationEnabled = true;
 let keyboardFlightMode = 'assist'; // assist retains W+Shift climb; manual = RL-style W/S aerial pitch
@@ -1653,6 +1660,7 @@ let replayHistory = [];
 let replayCaptureTimer = 0;
 let replayFrames = [];
 let replayElapsed = 0;
+let replayAnthemToken=0,replayAnthemTrack='dnb';
 let replaySimulationTime = 0;
 let goalScorerText = 'PLAYER';
 let goalSpeedMph = 0;
@@ -2029,12 +2037,22 @@ function sparks(vn) {
 
 // Filtered combustion harmonics, a low engine body and a soft boost whoosh.
 const carAudio=new RocketCarAudio.CarAudio();
+const goalAnthems=new RocketGoalAnthems.Player({onStatus:message=>{if($('anthemPreviewStatus'))$('anthemPreviewStatus').textContent=message;}});
 const sfx={
   get ac(){return carAudio.ac;},
-  init(){carAudio.volume=gameVolume;carAudio.init(window.AudioContext||window.webkitAudioContext);},
+  init(){
+    carAudio.volume=gameVolume;carAudio.init(window.AudioContext||window.webkitAudioContext);
+    goalAnthems.setMix({volume:anthemVolume,master:gameVolume,muted});goalAnthems.init(carAudio.ac);
+    void goalAnthems.prepare(anthemSelection).catch(()=>{});
+  },
   setVolume(value){gameVolume=clamp(Number(value)||0,0,1);carAudio.setVolume(gameVolume);},
   tone(f,d,type,v){carAudio.muted=muted;carAudio.tone(f,d,type,v);},
-  update(c,on){carAudio.muted=muted;carAudio.update(c,on&&!paused);}
+  update(c,on){
+    carAudio.muted=muted;
+    const volume=gameVolume*(goalAnthems.audible ? .4 : 1);
+    if(carAudio.volume!==volume)carAudio.setVolume(volume);
+    carAudio.update(c,on&&!paused);
+  }
 };
 
 // minimap: your goal at the bottom, attack goal at the top
@@ -2415,6 +2433,34 @@ if (paintInput) paintInput.addEventListener('input', () => { playerPaint = paint
 const paint2Input = $('paint2');
 if (paint2Input) paint2Input.addEventListener('input', () => { player2Paint = paint2Input.value || '#ff8a1f'; player2PaintCustom = true; if (state === 'menu' || state === 'over') { buildTeams(); kickoff(); } });
 updateGaragePreview();
+
+function saveAnthemSettings(){
+  try{localStorage.setItem('rocketArenaAnthemV1',JSON.stringify({track:anthemSelection,volume:anthemVolume}));}catch(_){}
+}
+function syncAnthemSelection(){
+  for(const button of document.querySelectorAll('[data-anthem]')){
+    const selected=button.dataset.anthem===anthemSelection;
+    button.classList.toggle('on',selected);button.setAttribute('aria-pressed',String(selected));
+  }
+  if($('anthemPreview'))$('anthemPreview').disabled=anthemSelection==='off';
+  if($('anthemPreviewStatus'))$('anthemPreviewStatus').textContent=anthemSelection==='off'?'Goal anthems off':'Selected: '+RocketGoalAnthems.TRACKS[anthemSelection].title;
+}
+for(const button of document.querySelectorAll('[data-anthem]'))button.addEventListener('click',()=>{
+  anthemSelection=button.dataset.anthem;goalAnthems.stop(.08);saveAnthemSettings();syncAnthemSelection();
+  if(anthemSelection!=='off')sfx.init();
+});
+$('anthemPreview')?.addEventListener('click',()=>{sfx.init();void goalAnthems.play(anthemSelection);});
+$('anthemStop')?.addEventListener('click',()=>{goalAnthems.stop();if($('anthemPreviewStatus'))$('anthemPreviewStatus').textContent='Preview stopped';});
+const anthemVolumeInput=$('settingAnthemVolume');
+if(anthemVolumeInput){
+  anthemVolumeInput.value=String(Math.round(anthemVolume*100));$('settingAnthemVolumeValue').value=anthemVolumeInput.value+'%';
+  anthemVolumeInput.addEventListener('input',()=>{
+    anthemVolume=Math.max(0,Math.min(1,Number(anthemVolumeInput.value)/100));
+    $('settingAnthemVolumeValue').value=anthemVolumeInput.value+'%';
+    goalAnthems.setMix({volume:anthemVolume});saveAnthemSettings();
+  });
+}
+syncAnthemSelection();
 
 function hexCss(hex) { return '#' + Number(hex).toString(16).padStart(6, '0'); }
 function saveGeneralSettings() {
@@ -3854,6 +3900,7 @@ function goal(team, scoringVelocity=ball) {
     resetTrainingBall();
     return;
   }
+  replayAnthemToken++;replayAnthemTrack=anthemSelection;
   score[team]++;
   const scorerIndex = lastTouch ? cars.indexOf(lastTouch) : -1;
   if (scorerIndex >= 0 && playerStats[scorerIndex]) playerStats[scorerIndex].goals++;
@@ -4140,7 +4187,10 @@ function render(dt) {
     p.core.material.opacity = active ? 0.5 : 0.05;
     p.group.visible = active || p.t > 0;
   }
-  stepParts(dt); tickGoalEffects(dt); updateMiniCrowd(dt); drawMini(); sfx.update(cars[0], state === 'play' || state === 'replay');
+  stepParts(dt); tickGoalEffects(dt); updateMiniCrowd(dt); drawMini();
+  goalAnthems.sync({state,paused,muted,master:gameVolume,volume:anthemVolume,replayId:replayAnthemToken,replayTrack:replayAnthemTrack,
+    allowPreview:state==='menu'&&$('menu').dataset.panel==='effects'});
+  sfx.update(cars[0], state === 'play' || state === 'replay');
   const splitActive = !trainingMode && localTwoPlayer && state !== 'menu' && state !== 'over';
   document.body.classList.toggle('split-screen', splitActive);
   // During a replay, follow the player who scored instead of always following P1.
@@ -4242,6 +4292,7 @@ window.rocketArena = {
   get goalEffectCount() { return activeGoalEffects.length; },
   get goalEffects() { return activeGoalEffects.map(f=>({style:f.style,age:f.age,duration:f.duration,signature:[...f.signature],group:f.group})); },
   get replayStatus(){const frames=state==='play'?replayHistory:replayFrames;return {elapsed:replayElapsed,duration:RocketReplay.duration(frames),frames:frames.length};},
+  get anthemStatus(){return goalAnthems.status;},
   get audioStatus(){return {state:carAudio.ac?.state||'uninitialised',engineGain:carAudio.engineGain?.gain.value||0,boostGain:carAudio.boostGain?.gain.value||0};},
   get goalSpeedMph(){return goalSpeedMph;},
   get cameraView(){return {position:camera.position.toArray(),target:[cam.lx,cam.ly,cam.lz],verticalFov:camera.fov,configuredFov:cameraSettings.fov,ballCam};},

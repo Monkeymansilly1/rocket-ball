@@ -47,6 +47,12 @@ Directional dodges use a 500 UU/s horizontal impulse and a smooth 0.65-second ph
 
 The bottom-left car speedometer has been removed. Goal speed is the ball's three-dimensional speed at the scoring-line crossing, converted using 50 Unreal units = 0.5 metres and the exact metres-per-mile conversion. It displays one decimal place and remains fixed through the celebration and replay. Free Play goal callouts also show the captured goal speed.
 
+## Goal anthems
+
+Goal FX includes three original instrumental clips: **Afterburn** (DNB, 172 BPM), **East Stand** (grime, 140 BPM), and **Touchline** (rap/hip-hop, 92 BPM). Select a clip, preview it, or choose Off. Settings has a separate goal-anthem volume slider; selection and volume survive refreshes. Game volume and M mute also apply to music.
+
+The selected clip starts once when a match replay begins, ducks engine/effect volume, resumes from its position after a pause, and fades out when the replay ends, is skipped, or the player returns to the garage. A skipped replay cancels pending downloads too. Free Play has no replays; clips can be heard there through the Goal FX preview before starting training. These are original instrumentals, with no commercial recordings or Spotify integration. See [audio credits](assets/anthems/CREDITS.md). Recreate the MP3 files with `tools/compose-goal-anthems.py` (numpy, scipy and ffmpeg).
+
 ## Nexto opponents
 
 Choose **NEXTO** on the Play menu for a 1v1, or select **Nexto** under Custom Match Options → Bots for 1v1, 2v2 or 3v3. The official trained Nexto policy runs locally in a Web Worker through a bundled WebAssembly runtime. The first match waits for the AI to load. Easy, Medium and Hard remain available. No server or external runtime download is required. `.nojekyll` keeps GitHub Pages in static-file mode so the bundled model and WebAssembly binaries are published directly.
@@ -77,6 +83,7 @@ node tests/aerial-controls.test.js
 node tests/flip-physics.test.js
 node tests/replay.test.js
 node tests/car-audio.test.js
+node tests/goal-anthems.test.js
 node tests/ball-camera.test.js
 node tests/car-recovery.test.js
 node tests/mini-crowd.test.js

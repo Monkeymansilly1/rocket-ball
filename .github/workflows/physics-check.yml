@@ -30,6 +30,7 @@ jobs:
           node tests/flip-physics.test.js
           node tests/replay.test.js
           node tests/car-audio.test.js
+          node tests/goal-anthems.test.js
           node tests/ball-camera.test.js
           node tests/car-recovery.test.js
           node tests/mini-crowd.test.js

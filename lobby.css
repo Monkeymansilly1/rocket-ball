@@ -147,3 +147,14 @@ body.goal-celebration #goalBy {font-size:clamp(22px,3vw,34px);bottom:8%;}
 body:not(.in-menu) #player {display:none;}
 
 #menu .quickmodes button[data-quick=nexto] {border-left-color:#db9dff;background:linear-gradient(110deg,#633b8577,#232c4244);}
+
+.anthem-garage {padding:17px 0;margin:10px 0 16px;border-top:1px solid #86bbdf25;border-bottom:1px solid #86bbdf25;}
+.anthem-garage h3 {margin:0 0 6px;color:#f5f9ff;font-size:12px;letter-spacing:.14em;}
+.anthem-garage>p {margin:5px 0 12px;color:#a4c0d6;font-size:11px;line-height:1.5;}
+.anthem-options {display:grid;grid-template-columns:1fr 1fr;gap:7px;}
+#menu .anthem-options button {display:flex;flex-direction:column;align-items:flex-start;gap:5px;padding:12px 10px;min-height:63px;text-align:left;background:#102b42;border:1px solid #638eaf55;}
+#menu .anthem-options button.on {border-color:#ffb54f;background:#76521b55;color:#fff;}
+.anthem-options strong {font-size:12px;letter-spacing:.1em;}.anthem-options small {font-size:9px;color:#bad0e2;}
+.anthem-actions {display:flex;gap:7px;margin-top:11px;}#menu .anthem-actions button {padding:8px 11px;font-size:10px;}
+#menu .anthem-actions button:disabled {opacity:.45;cursor:default;}
+.anthem-garage .anthem-status {min-height:16px;margin-bottom:0;color:#ffc16a;}

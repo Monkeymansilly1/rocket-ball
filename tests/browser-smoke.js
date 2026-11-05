@@ -141,6 +141,28 @@ async function main() {
     assert.equal(await evalJS('document.body.classList.contains("preview-fullscreen")'),true);
     await evalJS('document.getElementById("returnGoalPreview").click()');
     assert.equal(await evalJS('document.body.classList.contains("preview-fullscreen")'),false);
+    assert.deepEqual(await evalJS('Array.from(document.querySelectorAll("[data-anthem]")).map(b=>b.dataset.anthem)'),['dnb','grime','rap','off']);
+    const anthemAudio=await evalJS(`(async()=>{
+      const context=new OfflineAudioContext(2,44100,44100),result={};
+      for(const [name,track] of Object.entries(RocketGoalAnthems.TRACKS)){
+        const buffer=await context.decodeAudioData(await (await fetch(track.url)).arrayBuffer());
+        const samples=buffer.getChannelData(0);let peak=0,sum=0;
+        for(const sample of samples){peak=Math.max(peak,Math.abs(sample));sum+=sample*sample;}
+        result[name]={duration:buffer.duration,peak,rms:Math.sqrt(sum/samples.length),channels:buffer.numberOfChannels};
+      }
+      return result;
+    })()`);
+    for(const [name,track] of Object.entries(anthemAudio))assert(track.duration>10&&track.duration<13&&track.channels===2&&track.peak<.96&&track.rms>.03,'Invalid/inaudible anthem: '+name+' '+JSON.stringify(track));
+    for(const name of ['dnb','grime','rap']){
+      await evalJS(`document.querySelector('[data-anthem="${name}"]').click();document.getElementById('anthemPreview').click()`,true);
+      await eventually(()=>evalJS(`window.rocketArena.anthemStatus.playing&&window.rocketArena.anthemStatus.track==='${name}'`),15000);
+    }
+    await evalJS(`document.getElementById('anthemStop').click();document.querySelector('[data-anthem="off"]').click()`);
+    assert.equal(await evalJS('window.rocketArena.anthemStatus.playing'),false);
+    assert.equal(await evalJS('document.getElementById("anthemPreview").disabled'),true);
+    await evalJS(`document.querySelector('[data-anthem="rap"]').click();document.getElementById('settingAnthemVolume').value='35';document.getElementById('settingAnthemVolume').dispatchEvent(new Event('input',{bubbles:true}));`);
+    assert.equal(await evalJS('window.rocketArena.anthemStatus.volume'),.35);
+    console.log('PASS: original DNB/grime/rap stereo clips decode audibly, previews select correctly, Off and separate volume work.');
     const signatures=await evalJS(`Object.keys(RocketGoalEffects.STYLES).map(style=>{
       document.querySelector('[data-effect="'+style+'"]').click();
       const effect=window.rocketArena.goalEffects[0];
@@ -392,6 +414,7 @@ async function main() {
     assert.equal(await evalJS('Number.isFinite(window.rocketArena.ball.x) && Number.isFinite(window.rocketArena.ball.y) && Number.isFinite(window.rocketArena.ball.z)'),true);
     assert.equal(await evalJS('document.getElementById("speedHud")===null'),true,'Bottom-left speedometer must be removed');
     await eventually(()=>evalJS('window.rocketArena.replayStatus.duration>2'),60000).catch(async err=>{throw new Error('Replay capture: '+err.message+' '+await evalJS('JSON.stringify({state:window.rocketArena.state,replay:window.rocketArena.replayStatus})'));});
+    const anthemStartsBeforeGoal=await evalJS('window.rocketArena.anthemStatus.starts');
     await evalJS('Object.assign(window.rocketArena.ball,{x:0,y:2,z:105,vx:0,vy:0,vz:32})');
     const matchGoal=await eventually(()=>evalJS(`(()=>{const a=window.rocketArena,e=a.goalEffects[0];return a.state==='goal'&&e?{style:e.style,selected:document.getElementById('explosion').value,z:e.group.position.z,direction:e.group.rotation.y}:null;})()`),10000);
     assert.equal(matchGoal.style,matchGoal.selected,'Actual match must play the selected 3D model');
@@ -403,12 +426,18 @@ async function main() {
     const goalClock=await evalJS('document.getElementById("clock").textContent');
     await eventually(()=>evalJS('window.rocketArena.state==="replay" && window.rocketArena.replayStatus.elapsed>0'),15000);
     assert.equal(await evalJS('document.getElementById("clock").textContent'),goalClock,'Match clock must stay frozen through the replay');
+    await eventually(()=>evalJS('window.rocketArena.anthemStatus.playing&&window.rocketArena.anthemStatus.mode==="replay"'),10000);
+    assert.equal(await evalJS('window.rocketArena.anthemStatus.track'),'rap');
+    assert.equal(await evalJS('window.rocketArena.anthemStatus.starts'),anthemStartsBeforeGoal+1,'Replay must start the selected anthem exactly once');
+
     assert.equal(await evalJS('window.rocketArena.goalSpeedMph'),goalSpeed,'Goal speed must remain captured during replay');
     const replayStatus=await evalJS('window.rocketArena.replayStatus');
     assert(replayStatus.duration>2 && replayStatus.frames>50,'Replay must contain distinct physics-clock samples');
     await evalJS('window.dispatchEvent(new KeyboardEvent("keydown",{code:"Space",bubbles:true,cancelable:true}))');
     await eventually(()=>evalJS('window.rocketArena.state==="kick" || window.rocketArena.state==="play"'),10000);
     assert.equal(await evalJS('Math.abs(window.rocketArena.ball.z)<1'),true,'Skipping replay must restore kickoff instead of leaving the scored ball in the goal');
+    await eventually(()=>evalJS('!window.rocketArena.anthemStatus.playing'));
+    assert.equal(await evalJS('window.rocketArena.anthemStatus.starts'),anthemStartsBeforeGoal+1,'Skipping must stop the anthem without restarting it');
     await evalJS('document.getElementById("quickPlayButton").click()');
     assert.equal(await evalJS('window.rocketArena.state'),'menu');
     await evalJS('document.getElementById("quickCasual").click()');
@@ -445,6 +474,11 @@ async function main() {
       assert.equal(await evalJS('window.rocketArena.nextoStatus.ready'),true);
     }
     console.log('PASS: Nexto download failure/retry, real PyTorch/WASM policy parity, learned steering and batched 1v1/2v2/3v3 opponents.');
+    await call('Page.reload',{ignoreCache:true});
+    await eventually(()=>evalJS('!!window.rocketArena&&document.readyState==="complete"'),45000);
+    assert.equal(await evalJS('document.querySelector("[data-anthem=rap]").getAttribute("aria-pressed")'),'true','Anthem selection must persist after refresh');
+    assert.equal(await evalJS('document.getElementById("settingAnthemVolume").value'),'35','Anthem volume must persist after refresh');
+    assert.equal(await evalJS('window.rocketArena.anthemStatus.playing'),false,'Reloading the garage must not autoplay music');
     assert.deepEqual(errors,[],'Unexpected browser JS errors');
     console.log('PASS: WebGL startup, engine audio, menu, Free Play, match driving, accurate goal speed, interpolated replay and Space skip.');
   } finally {
