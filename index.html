@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Rocket Arena Reloaded | Rocket Ball</title>
 <link rel="stylesheet" href="style.css">
-<link rel="stylesheet" href="lobby.css?v=goal-anthems-1">
+<link rel="stylesheet" href="lobby.css?v=sound-recovery-2">
 </head>
 <body class="in-menu">
 <canvas id="c"></canvas>
@@ -14,6 +14,7 @@
     <button id="viewToggle" type="button" title="Switch camera view">◉ <span>PLAYER VIEW</span></button>
     <button id="cinematicToggle" type="button" title="Recenter camera">▣ <span>RESET VIEW</span></button>
     <button id="fullscreenToggle" type="button" title="Toggle fullscreen">⛶</button>
+    <button id="enableSoundButton" type="button" title="Enable sound" aria-label="Enable sound" hidden>🔊 <span>ENABLE SOUND</span></button>
   </div>
   <button id="skipReplayButton" type="button">SKIP REPLAY <kbd>SPACE</kbd></button>
   <button id="quickPlayButton" type="button">▶ PLAY <small>MATCHES &amp; MODES</small></button>
@@ -137,14 +138,14 @@
       <small id="explosionPreviewStatus" role="status" aria-live="polite">Eight animated explosions</small>
     </div>
         <section class="anthem-garage" aria-label="Goal anthems">
-          <h3>GOAL ANTHEMS</h3><p>Original instrumentals · play during match replays</p>
+          <h3>GOAL ANTHEMS</h3><p>Original instrumentals · match replays and Free Play goals</p>
           <div class="anthem-options" role="group" aria-label="Choose a goal anthem">
             <button type="button" data-anthem="dnb" aria-pressed="true" class="on"><strong>DNB</strong><small>Afterburn · 172 BPM</small></button>
             <button type="button" data-anthem="grime" aria-pressed="false"><strong>GRIME</strong><small>East Stand · 140 BPM</small></button>
             <button type="button" data-anthem="rap" aria-pressed="false"><strong>RAP</strong><small>Touchline · 92 BPM</small></button>
             <button type="button" data-anthem="off" aria-pressed="false"><strong>OFF</strong><small>No goal music</small></button>
           </div>
-          <div class="anthem-actions"><button id="anthemPreview" type="button">▶ PREVIEW</button><button id="anthemStop" type="button">■ STOP</button></div>
+          <div class="anthem-actions"><button id="anthemPreview" type="button">▶ PREVIEW</button><button id="anthemStop" type="button">■ STOP</button><button id="anthemEnableAudio" type="button" hidden>ENABLE SOUND</button></div>
           <p id="anthemPreviewStatus" class="anthem-status" role="status" aria-live="polite">Selected: Afterburn</p>
         </section>
         <div id="effectCards" class="effect-cards" aria-label="Goal explosion collection"></div>
@@ -169,6 +170,7 @@
       <div class="controls-inner">
         <section class="general-settings" aria-label="General settings">
           <h3>Audio</h3>
+          <p class="setting-help"><span id="settingAudioStatus" role="status">Click Enable Sound to start browser audio</span> <button id="settingEnableSound" type="button">ENABLE SOUND</button></p>
           <div class="setting-row">
             <label for="settingVolume">Game volume</label>
             <input id="settingVolume" type="range" min="0" max="100" step="1" value="75">
@@ -282,12 +284,12 @@
 <script src="lib/scene-utils.js"></script>
 <script src="lib/goal-effects.js"></script>
 <script src="lib/replay.js"></script>
-<script src="lib/car-audio.js"></script>
-<script src="lib/goal-anthems.js?v=1"></script>
+<script src="lib/car-audio.js?v=3"></script>
+<script src="lib/goal-anthems.js?v=2"></script>
 <script src="lib/ball-camera.js"></script>
 <script src="lib/nexto/adapter.js?v=1"></script>
 <script src="lib/nexto/client.js?v=1"></script>
 <script src="assets/scorpion/body.js?v=4"></script>
-<script src="game.js?v=goal-anthems-landing-6"></script>
+<script src="game.js?v=sound-recovery-7"></script>
 </body>
 </html>

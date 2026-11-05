@@ -29,6 +29,32 @@ function make(fetcher=async()=>response()){
 }
 (async()=>{
  assert.deepEqual(Object.keys(TRACKS),['dnb','grime','rap']);assert.equal(TRACKS.rap.bpm,92);
+ const interrupted=make();interrupted.context.state='interrupted';
+ assert(await interrupted.player.play('dnb'));
+ assert.equal(interrupted.context.state,'running','An interrupted browser audio context must be resumed before song playback');
+ assert(interrupted.player.audible);
+ interrupted.context.state='suspended';assert.equal(interrupted.player.status.playing,false);assert.equal(interrupted.player.audible,false,'A suspended context must never claim to be audible');
+ assert(await interrupted.player.unlock());assert(interrupted.player.audible);
+ let activated=true;const gesture=make(async()=>{activated=false;return response();});gesture.context.state='suspended';
+ gesture.context.resume=()=>{assert(activated,'Audio must unlock during the click, before fetching loses user activation');gesture.context.state='running';return Promise.resolve();};
+ assert(await gesture.player.play('rap'));
+ const messages=[];const warnings=new Player({onStatus:message=>messages.push(message),fetcher:async()=>response()});warnings.init(new Context());
+ warnings.setMix({master:0});assert(await warnings.play('grime'));assert(messages.at(-1).includes('Game volume is 0%'));
+ warnings.setMix({master:.75,muted:true});assert(messages.at(-1).includes('Sound muted'));
+ const blocked=make();blocked.context.state='interrupted';blocked.context.resume=()=>Promise.resolve();
+ assert.equal(await blocked.player.play('dnb',{mode:'replay',token:5}),false);
+ assert.equal(blocked.player.status.blocked,true);assert.equal(blocked.player.starts,0);
+ blocked.context.resume=()=>{blocked.context.state='running';return Promise.resolve();};
+ assert(await blocked.player.recover());assert.equal(blocked.player.status.mode,'replay');assert.equal(blocked.player.starts,1,'Enable Sound must retry a blocked song in the same replay');
+ const replacement=new Context();blocked.context.currentTime+=2;blocked.context.state='closed';blocked.player.init(replacement);
+ assert(await blocked.player.recover());assert.equal(blocked.player.status.track,'dnb');assert.equal(blocked.player.starts,1,'Replacing a closed context must resume the same goal song');
+ assert(replacement.sources[0].offset>1.9);
+ const freePlay=make();const celebration={state:'play',celebrating:true,replayId:1,replayTrack:'grime'};
+ freePlay.player.sync(celebration);await flush();assert.equal(freePlay.player.starts,1,'Free Play goals must also play the selected song');
+ freePlay.player.sync(celebration);await flush();assert.equal(freePlay.player.starts,1,'A Free Play goal must not restart its song each frame');
+ freePlay.player.sync({...celebration,paused:true});assert(freePlay.player.status.paused);
+ freePlay.player.sync(celebration);await flush();assert.equal(freePlay.player.starts,1);
+ freePlay.player.sync({...celebration,state:'menu'});assert.equal(freePlay.player.status.playing,false);
  const {player:p,context:a}=make();
  assert(await p.play('dnb'));const old=a.sources[0];assert.equal(p.status.track,'dnb');
  assert(await p.play('grime'));assert(old.stopAt<a.currentTime+.2,'Switching genre must fade the old clip');
@@ -61,5 +87,5 @@ function make(fetcher=async()=>response()){
  let attempts=0;const retry=make(async()=>{if(!attempts++)throw Error('network');return response();});
  assert.equal(await retry.player.play('grime'),false);assert.equal(retry.player.status.playing,false);
  assert.equal(await retry.player.play('grime'),true,'Failed clip downloads must be retryable');
- console.log('PASS: three genres, previews, one play per replay, pause/resume offsets, volume/mute, skip fades, async cancellation and retry');
+ console.log('PASS: audible context state, gesture/interruption recovery, silent-volume feedback, Free Play goals, three genres, replay lifecycle and cancellation');
 })().catch(error=>{console.error(error);process.exitCode=1;});

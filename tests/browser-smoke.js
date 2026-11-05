@@ -101,6 +101,29 @@ async function main() {
     }
     await call('Page.enable');
     await call('Runtime.enable');
+    // Meter the music's real output connection, rather than trusting a
+    // "playing" flag on a source connected to a silent/suspended context.
+    await call('Page.addScriptToEvaluateOnNewDocument',{source:`
+      window.__testAnthemMeters=[];
+      const originalConnect=AudioNode.prototype.connect;
+      AudioNode.prototype.connect=function(destination,...args){
+        const result=originalConnect.call(this,destination,...args);
+        if(this instanceof GainNode&&destination===this.context.destination){
+          const meter=this.context.createAnalyser();meter.fftSize=2048;
+          originalConnect.call(this,meter);window.__testAnthemMeters.push(meter);
+        }
+        return result;
+      };
+      window.__testAnthemRms=()=>Math.max(0,...window.__testAnthemMeters.map(m=>{
+        const data=new Float32Array(m.fftSize);m.getFloatTimeDomainData(data);
+        return Math.sqrt(data.reduce((sum,v)=>sum+v*v,0)/data.length);
+      }));
+    `});
+    async function clickSelector(selector){
+      const point=await evalJS(`(()=>{const el=document.querySelector(${JSON.stringify(selector)});el.scrollIntoView({block:'center'});const r=el.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`);
+      await call('Input.dispatchMouseEvent',{type:'mousePressed',...point,button:'left',clickCount:1});
+      await call('Input.dispatchMouseEvent',{type:'mouseReleased',...point,button:'left',clickCount:1});
+    }
     console.log('Navigating headless Chrome to local Rocket Ball server');
     await call('Page.navigate',{url});
     await eventually(()=>evalJS('document.readyState==="complete" && !!window.rocketArena && !!window.THREE'),45000)
@@ -156,7 +179,19 @@ async function main() {
     for(const name of ['dnb','grime','rap']){
       await evalJS(`document.querySelector('[data-anthem="${name}"]').click();document.getElementById('anthemPreview').click()`,true);
       await eventually(()=>evalJS(`window.rocketArena.anthemStatus.playing&&window.rocketArena.anthemStatus.track==='${name}'`),15000);
+      await eventually(()=>evalJS('window.__testAnthemRms()>.003'),10000);
     }
+    await evalJS(`for(const id of ['settingVolume','settingAnthemVolume']){const input=document.getElementById(id);input.value='0';input.dispatchEvent(new Event('input',{bubbles:true}));}`);
+    await eventually(()=>evalJS('document.getElementById("anthemPreviewStatus").textContent.includes("Game volume is 0%")&&window.__testAnthemRms()<.0001'));
+    await clickSelector('#anthemEnableAudio');
+    await eventually(()=>evalJS('window.rocketArena.audioStatus.state==="running"&&window.__testAnthemRms()>.003'));
+    assert.equal(await evalJS('document.getElementById("settingVolume").value'),'75');
+    assert.equal(await evalJS('document.getElementById("settingAnthemVolume").value'),'55');
+    await evalJS('window.__testAnthemMeters[0].context.suspend()');
+    await eventually(()=>evalJS('!window.rocketArena.anthemStatus.audible&&!window.rocketArena.anthemStatus.playing&&!document.getElementById("anthemEnableAudio").hidden'));
+    await clickSelector('#anthemEnableAudio');
+    await eventually(()=>evalJS('window.rocketArena.audioStatus.state==="running"&&window.__testAnthemRms()>.003'));
+    console.log('PASS: real song output, visible silent-volume status, zero-volume recovery and suspended browser audio recovery through a real mouse click');
     await evalJS(`document.getElementById('anthemStop').click();document.querySelector('[data-anthem="off"]').click()`);
     assert.equal(await evalJS('window.rocketArena.anthemStatus.playing'),false);
     assert.equal(await evalJS('document.getElementById("anthemPreview").disabled'),true);
@@ -388,6 +423,7 @@ async function main() {
     assert(Math.abs(resetY-(91.25/50+0.038))<.3,'Training ball did not reset');
     // Actually score in Free Play and verify the chosen 3D explosion plays.
     const goalsBefore=await evalJS('Number(document.getElementById("trainingGoalCount").textContent.match(/\\d+/)[0])');
+    const trainingAnthemStarts=await evalJS('window.rocketArena.anthemStatus.starts');
     await evalJS('(function(){const b=window.rocketArena.ball;Object.assign(b,{x:0,y:2,z:105,vx:0,vy:0,vz:32});})()');
     const celebration=await eventually(()=>evalJS(`(()=>{
       const a=window.rocketArena,c=a.miniCrowd;
@@ -396,11 +432,14 @@ async function main() {
     })()`),10000).catch(async err=>{throw new Error('Free Play scoring explosion: '+err.message+' '+await evalJS('JSON.stringify({state:window.rocketArena.state,goals:document.getElementById("trainingGoalCount").textContent,ball:window.rocketArena.ball,effects:window.rocketArena.goalEffectCount,cheer:window.rocketArena.miniCrowd.cheerTime})'));});
     assert.equal(celebration.team,0,'Scoring blue side did not trigger crowd celebration');
     assert.equal(celebration.cheering,true,'Mini spectators did not switch to cheering faces');
+    await eventually(()=>evalJS('window.rocketArena.anthemStatus.playing&&window.rocketArena.anthemStatus.mode==="goal"&&window.__testAnthemRms()>.003'));
+    assert.equal(await evalJS('window.rocketArena.anthemStatus.starts'),trainingAnthemStarts+1,'A Free Play goal must start its selected song once');
     await eventually(()=>evalJS('window.rocketArena.miniCrowd.cheerTime===0'),6000);
     assert.equal(await evalJS('window.rocketArena.miniCrowd.faces.material.map===window.rocketArena.miniCrowd.calmFace'),true,
       'Mini spectators did not return to their normal happy faces');
     await evalJS('document.getElementById("trainingExit").click()');
     assert.equal(await evalJS('window.rocketArena.state'),'menu');
+    await eventually(()=>evalJS('!window.rocketArena.anthemStatus.playing'));
 
     await evalJS('document.getElementById("settingCameraCompetitive").click()');
     assert.equal(await evalJS('Number(document.getElementById("settingCameraFov").value)'),105);
@@ -441,6 +480,7 @@ async function main() {
     await eventually(()=>evalJS('window.rocketArena.state==="replay" && window.rocketArena.replayStatus.elapsed>0'),15000);
     assert.equal(await evalJS('document.getElementById("clock").textContent'),goalClock,'Match clock must stay frozen through the replay');
     await eventually(()=>evalJS('window.rocketArena.anthemStatus.playing&&window.rocketArena.anthemStatus.mode==="replay"'),10000);
+    await eventually(()=>evalJS('window.__testAnthemRms()>.003'),5000);
     assert.equal(await evalJS('window.rocketArena.anthemStatus.track'),'rap');
     assert.equal(await evalJS('window.rocketArena.anthemStatus.starts'),anthemStartsBeforeGoal+1,'Replay must start the selected anthem exactly once');
 

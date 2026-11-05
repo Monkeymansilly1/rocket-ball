@@ -158,3 +158,5 @@ body:not(.in-menu) #player {display:none;}
 .anthem-actions {display:flex;gap:7px;margin-top:11px;}#menu .anthem-actions button {padding:8px 11px;font-size:10px;}
 #menu .anthem-actions button:disabled {opacity:.45;cursor:default;}
 .anthem-garage .anthem-status {min-height:16px;margin-bottom:0;color:#ffc16a;}
+#enableSoundButton[hidden],#anthemEnableAudio[hidden] {display:none!important;}
+.anthem-actions {flex-wrap:wrap;}

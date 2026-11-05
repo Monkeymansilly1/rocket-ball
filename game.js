@@ -2042,7 +2042,7 @@ const sfx={
   get ac(){return carAudio.ac;},
   init(){
     carAudio.volume=gameVolume;carAudio.init(window.AudioContext||window.webkitAudioContext);
-    goalAnthems.setMix({volume:anthemVolume,master:gameVolume,muted});goalAnthems.init(carAudio.ac);
+    goalAnthems.init(carAudio.ac);goalAnthems.setMix({volume:anthemVolume,master:gameVolume,muted});
     void goalAnthems.prepare(anthemSelection).catch(()=>{});
   },
   setVolume(value){gameVolume=clamp(Number(value)||0,0,1);carAudio.setVolume(gameVolume);},
@@ -2054,6 +2054,37 @@ const sfx={
     carAudio.update(c,on&&!paused);
   }
 };
+
+function syncAudioControls(){
+  const blocked=carAudio.ac?.state!=='running';
+  const silent=muted||gameVolume===0||blocked;
+  const status=muted?'Sound muted · Enable Sound to unmute':gameVolume===0?'Game volume is 0%':
+    blocked?'Click Enable Sound to start browser audio':'Sound on';
+  const label=$('settingAudioStatus');if(label&&label.textContent!==status)label.textContent=status;
+  if($('enableSoundButton'))$('enableSoundButton').hidden=!silent;
+  if($('anthemEnableAudio'))$('anthemEnableAudio').hidden=!(silent||anthemVolume===0);
+}
+function enableSound(){
+  muted=false;
+  if(gameVolume===0){
+    sfx.setVolume(.75);
+    $('settingVolume').value='75';$('settingVolumeValue').value='75%';saveGeneralSettings();
+  }
+  if(anthemVolume===0){
+    anthemVolume=.55;$('settingAnthemVolume').value='55';$('settingAnthemVolumeValue').value='55%';saveAnthemSettings();
+  }
+  sfx.init();void goalAnthems.recover();syncAudioControls();
+}
+for(const id of ['enableSoundButton','settingEnableSound','anthemEnableAudio'])$(id)?.addEventListener('click',()=>{
+  enableSound();
+  if(id==='anthemEnableAudio'&&anthemSelection!=='off'&&!goalAnthems.current&&!goalAnthems.intent&&!goalAnthems.status.paused)
+    void goalAnthems.play(anthemSelection);
+});
+// A tab or device change can interrupt audio. The next real interaction is
+// the browser's opportunity to resume it without requiring a page refresh.
+function resumeInterruptedAudio(){if(carAudio.ac&&carAudio.ac.state!=='running'&&carAudio.ac.state!=='closed')sfx.init();}
+addEventListener('pointerdown',resumeInterruptedAudio,{capture:true});
+addEventListener('keydown',resumeInterruptedAudio,{capture:true});
 
 // minimap: your goal at the bottom, attack goal at the top
 const mini = $('mini').getContext('2d');
@@ -3903,6 +3934,7 @@ function showGameEvent(label, color = '#fff') {
 }
 function goal(team, scoringVelocity=ball) {
   goalSpeedMph=RocketReplay.speedToMph(scoringVelocity,PHYSICS_TUNING.REFERENCE_SCALE);
+  replayAnthemToken++;replayAnthemTrack=anthemSelection;
   if (trainingMode) {
     trainingGoals++;
     updateTrainingCounters();
@@ -3914,7 +3946,6 @@ function goal(team, scoringVelocity=ball) {
     resetTrainingBall();
     return;
   }
-  replayAnthemToken++;replayAnthemTrack=anthemSelection;
   score[team]++;
   const scorerIndex = lastTouch ? cars.indexOf(lastTouch) : -1;
   if (scorerIndex >= 0 && playerStats[scorerIndex]) playerStats[scorerIndex].goals++;
@@ -4203,7 +4234,8 @@ function render(dt) {
   }
   stepParts(dt); tickGoalEffects(dt); updateMiniCrowd(dt); drawMini();
   goalAnthems.sync({state,paused,muted,master:gameVolume,volume:anthemVolume,replayId:replayAnthemToken,replayTrack:replayAnthemTrack,
-    allowPreview:state==='menu'&&$('menu').dataset.panel==='effects'});
+    allowPreview:state==='menu'&&$('menu').dataset.panel==='effects',celebrating:trainingMode&&trainingGoals>0});
+  syncAudioControls();
   sfx.update(cars[0], state === 'play' || state === 'replay');
   const splitActive = !trainingMode && localTwoPlayer && state !== 'menu' && state !== 'over';
   document.body.classList.toggle('split-screen', splitActive);
