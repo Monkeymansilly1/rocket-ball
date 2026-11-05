@@ -175,7 +175,7 @@ async function main() {
       }
       return result;
     })()`);
-    for(const [name,track] of Object.entries(anthemAudio))assert(track.duration>10&&track.duration<13&&track.channels===2&&track.peak<.96&&track.rms>.03,'Invalid/inaudible anthem: '+name+' '+JSON.stringify(track));
+    for(const [name,track] of Object.entries(anthemAudio))assert(track.duration>10&&track.duration<20&&track.channels===2&&track.peak<.96&&track.rms>.03,'Invalid/inaudible anthem: '+name+' '+JSON.stringify(track));
     for(const name of ['dnb','grime','rap']){
       await evalJS(`document.querySelector('[data-anthem="${name}"]').click();document.getElementById('anthemPreview').click()`,true);
       await eventually(()=>evalJS(`window.rocketArena.anthemStatus.playing&&window.rocketArena.anthemStatus.track==='${name}'`),15000);
@@ -197,7 +197,7 @@ async function main() {
     assert.equal(await evalJS('document.getElementById("anthemPreview").disabled'),true);
     await evalJS(`document.querySelector('[data-anthem="rap"]').click();document.getElementById('settingAnthemVolume').value='35';document.getElementById('settingAnthemVolume').dispatchEvent(new Event('input',{bubbles:true}));`);
     assert.equal(await evalJS('window.rocketArena.anthemStatus.volume'),.35);
-    console.log('PASS: original DNB/grime/rap stereo clips decode audibly, previews select correctly, Off and separate volume work.');
+    console.log('PASS: uploaded DNB and synthesized grime/rap clips decode audibly, previews select correctly, Off and separate volume work.');
     const signatures=await evalJS(`Object.keys(RocketGoalEffects.STYLES).map(style=>{
       document.querySelector('[data-effect="'+style+'"]').click();
       const effect=window.rocketArena.goalEffects[0];

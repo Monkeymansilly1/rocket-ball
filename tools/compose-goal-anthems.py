@@ -1,4 +1,5 @@
-"""Reproduce Rocket Ball's three original instrumental goal anthems.
+"""Reproduce Rocket Ball's synthesized grime/rap clips or the former DNB demo.
+The current DNB is user-supplied and is never overwritten by this script.
 Requires numpy, scipy and ffmpeg. No sampled songs or external audio are used.
 """
 from pathlib import Path
@@ -137,13 +138,13 @@ def compose(name,bpm,bars):
  with tempfile.NamedTemporaryFile(suffix='.wav') as temp:
   with wave.open(temp.name,'wb') as w:
    w.setnchannels(2);w.setsampwidth(2);w.setframerate(SR);w.writeframes((np.clip(mix,-1,1)*32767).astype('<i2').tobytes())
-  target=ROOT/'assets/anthems'/f'{name}.mp3'
+  target=ROOT/'assets/anthems'/('afterburn-demo.mp3' if name=='dnb' else f'{name}.mp3')
   title='Afterburn (Jump Up)' if name=='dnb' else f'{name.upper()} Goal Anthem'
   subprocess.run(['ffmpeg','-hide_banner','-loglevel','error','-y','-i',temp.name,'-af','loudnorm=I=-16:TP=-1.5:LRA=8','-ar',str(SR),'-codec:a','libmp3lame','-q:a','3','-metadata',f'title={title}','-metadata','artist=Rocket Ball Originals',str(target)],check=True)
  print(name,bpm,'BPM',round(length,2),'seconds',target.stat().st_size,'bytes')
 if __name__=='__main__':
  parser=argparse.ArgumentParser(description=__doc__)
- parser.add_argument('--track',choices=['dnb','grime','rap'],action='append',help='Rebuild only this track; repeat to choose more than one.')
- selected=parser.parse_args().track
+ parser.add_argument('--track',choices=['dnb','grime','rap'],action='append',help='Choose tracks; dnb generates afterburn-demo.mp3. Default: grime and rap.')
+ selected=parser.parse_args().track or ['grime','rap']
  for args in [('dnb',174,8),('grime',140,6),('rap',92,4)]:
-  if not selected or args[0] in selected:compose(*args)
+  if args[0] in selected:compose(*args)
