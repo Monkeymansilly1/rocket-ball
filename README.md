@@ -121,6 +121,7 @@ The browser suite requires system Chrome/Chromium and Node.js 22 or newer. `CHRO
 - `lib/replay.js`, `lib/car-audio.js`: replay sampling, speed conversion and layered engine audio.
 - `lib/ball-camera.js`: stable ball/chase camera rig with the original FOV behaviour.
 - `assets/octane/`: credited Octane model and textures; see [asset credits](assets/octane/CREDITS.txt).
+- All three real car bodies and their four wheel pivots are bundled as native Three.js geometry in each model folder's `body.js`. Garage choices work immediately even if GLTF/GLB, binary, or texture downloads fail. Successful downloads upgrade the texture detail. Rebuild bodies with `python tools/bundle-car-bodies.py`.
 - `assets/fennec/`, `assets/scorpion/`: models supplied by the project owner, converted to web assets with four wheel pivots. Scorpion uses external glTF geometry and resized texture maps for reliable loading. Fennec retains its materials; its three external normal maps were absent from the FBX.
 - `tools/convert-car-assets.py`: Blender conversion script for the supplied FBX files.
 - Three.js is distributed under its included [MIT licence](lib/THREE-LICENSE.txt).

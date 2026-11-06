@@ -36,10 +36,13 @@ jobs:
           node tests/landing.test.js
           node tests/mini-crowd.test.js
           node tests/scorpion-body.test.js
+          node tests/bundled-cars.test.js
           node tests/nexto.test.js
           node tests/online-rooms.test.js
       - name: Browser gameplay smoke check
         run: node tests/browser-smoke.js
+      - name: Car bodies with unavailable model downloads
+        run: node tests/bundled-cars-browser.js
       - name: Install private-room test dependencies
         run: npm ci --prefix tests/online --ignore-scripts --no-audit --no-fund
       - name: Two-player WebRTC match check

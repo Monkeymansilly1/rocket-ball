@@ -1269,8 +1269,10 @@ RocketSceneUtils.batchStaticMeshes(scene);
 
 // Detailed car assets share one fitting path; hitboxes and controls stay independent.
 const carModelAssets = {
-  octane: { url:'assets/octane/scene.gltf', rotation:-Math.PI/2, axle:new THREE.Vector3(0,1,0) },
-  fennec: { url:'assets/fennec/scene.glb', rotation:0, axle:new THREE.Vector3(1,0,0) },
+  octane: { url:'assets/octane/scene.gltf', rotation:-Math.PI/2, axle:new THREE.Vector3(0,1,0),
+    template:window.RocketOctaneBody?.create(THREE), bundled:true },
+  fennec: { url:'assets/fennec/scene.glb', rotation:0, axle:new THREE.Vector3(1,0,0),
+    template:window.RocketFennecBody?.create(THREE), bundled:true },
   scorpion: { url:'assets/scorpion/scene.gltf?v=scorpion-2', rotation:0, axle:new THREE.Vector3(1,0,0),
     template:window.RocketScorpionBody?.create(THREE), bundled:true }
 };
