@@ -4334,6 +4334,9 @@ const onlineRoom=new RocketRooms.Room({
   $('onlineStatus').textContent=info.message;
   $('onlineStatus').dataset.state=info.state;
   $('onlineRoomCode').textContent=info.code||'';
+  const ready=info.role==='host'&&['waiting','connected'].includes(info.state);
+  $('onlineRoomCode').hidden=info.role==='host'&&!ready;
+  $('onlineCopy').hidden=!ready;
   $('onlineInvite').hidden=!info.code||!['waiting','connecting','connected'].includes(info.state);
   $('onlineCreate').disabled=['waiting','connecting','connected'].includes(info.state);
   // A player may create a room, then decide to join their friend's instead.
@@ -4471,7 +4474,7 @@ window.rocketArena = {
   get nextoStatus(){return {state:nextoAI.status,ready:nextoAI.ready,inferences:nextoAI.inferenceCount,lastInferenceMs:nextoAI.lastInferenceMs};},
   get score() { return score; },
   get state() { return state; },
-  get onlineStatus(){return {state:onlineRoom.state,role:onlineMode?.role||onlineRoom.role,code:onlineRoom.code};},
+  get onlineStatus(){return {state:onlineRoom.state,role:onlineMode?.role||onlineRoom.role,code:onlineRoom.code,error:onlineRoom.lastError||null};},
   // Read-only references for browser-level stadium regression checks.
   get stadium() { return scene.getObjectByName('Rocket Ball Championship Arena'); },
   get lakesideScenery() { return lakesideScenery; },

@@ -167,6 +167,7 @@ body:not(.in-menu) #player {display:none;}
 #onlineStatus[data-state="error"] {border-color:#ff9672;color:#ffd5c6;}
 #onlineStatus[data-state="connecting"] {border-color:#ffc165;color:#ffdb9f;}
 #onlineStatus[data-state="ready"] {border-color:#69d6a7;color:#c2f5df;}
+#onlineRoomCode[hidden],#onlineCopy[hidden] {display:none!important;}
 #menu .online-lobby button {font-size:11px;padding:10px 12px;}
 .online-join {display:flex;gap:8px;margin:10px 0;}
 #onlineCode {min-width:0;width:145px;text-transform:uppercase;letter-spacing:.14em;}

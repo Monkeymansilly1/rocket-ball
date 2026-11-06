@@ -24,7 +24,12 @@ const {ExpressPeerServer}=require('./online/node_modules/peer');
 const express=require('./online/node_modules/express');
 const app=express();const server=http.createServer(app);
 const rtcConfig=process.env.ROCKET_TEST_TURN_URL?{iceTransportPolicy:'relay',iceServers:[{urls:process.env.ROCKET_TEST_TURN_URL,username:process.env.ROCKET_TEST_TURN_USER||'localtest',credential:process.env.ROCKET_TEST_TURN_PASSWORD||'localtest'}]}:{iceServers:[]};
-const signal=ExpressPeerServer(server,{path:'/'});app.use('/signal',signal);
+let idRequests=0;
+const signal=ExpressPeerServer(server,{path:'/'});
+// A blocked cloud /id endpoint must not stop joining. Only signaling and
+// WebRTC should be needed; both peers generate their IDs locally.
+app.get('/signal/peerjs/id',(req,res)=>{idRequests++;res.status(503).send('ID service unavailable');});
+app.use('/signal',signal);
 app.get('/game.js',(req,res)=>res.type('js').send(fs.readFileSync('game.js','utf8').replace('window.rocketArena = {','window.__onlineAudioFailure=()=>{sfx.init=()=>{throw Error("Unavailable audio");};};window.__onlineEnd=()=>{clock=.001;score=[1,2];playerStats[1].goals=2;};window.__onlineStep=update;window.__onlineRoom=onlineRoom;window.rocketArena = {')));
 app.get('/lib/three.min.js',(req,res)=>res.type('js').send(fs.readFileSync('lib/three.min.js','utf8')+';THREE.WebGLRenderer=class extends THREE.WebGLRenderer{constructor(...args){super(...args);this.render=function(){}}};'));app.use(express.static(process.cwd()));
 function chromeExecutable() {
@@ -117,7 +122,8 @@ async function main() {
     await guestCall('Page.enable');await guestCall('Runtime.enable');await configure(guestCall);await guestCall('Page.navigate',{url});
     await eventually(()=>guestEval('!!window.rocketArena'),45000);console.log('Guest game loaded');
     for(const evaluate of [evalJS,guestEval])await evaluate("document.getElementById('settingGraphics').value='low';document.getElementById('settingGraphics').dispatchEvent(new Event('change'));THREE.WebGLRenderer=class extends THREE.WebGLRenderer{constructor(...args){super(...args);this.render=function(){}}};");
-    await evalJS("document.getElementById('name').value='HOST';document.getElementById('onlineCreate').click()",true);
+    const creating=await evalJS("(()=>{document.getElementById('name').value='HOST';document.getElementById('onlineCreate').click();return {state:window.rocketArena.onlineStatus.state,hidden:document.getElementById('onlineRoomCode').hidden,copyHidden:document.getElementById('onlineCopy').hidden};})()",true);
+    assert.deepEqual(creating,{state:'connecting',hidden:true,copyHidden:true},'A room code must not be shared before registration succeeds');
     await eventually(()=>evalJS('window.rocketArena.onlineStatus.state==="waiting"'),20000).catch(async e=>{throw Error(e.message+' '+await evalJS('JSON.stringify({status:window.rocketArena.onlineStatus,text:document.getElementById("onlineStatus").textContent,options:window.__testPeer&&String(window.Peer),errors:[]})')+' '+JSON.stringify(errors));});
     console.log('Room waiting');const code=await evalJS('window.rocketArena.onlineStatus.code');assert(/^[A-Z2-9]{6}$/.test(code));
     await guestCall('Page.navigate',{url:url+'?room='+code.toLowerCase()});
@@ -163,8 +169,9 @@ async function main() {
     await evalJS("document.getElementById('onlineLeave').click()");
     assert.equal(await evalJS('window.rocketArena.onlineStatus.state'),'idle');
     assert.deepEqual(errors,[]);
+    assert.equal(idRequests,0,'No player may rely on the blocked HTTP ID service');
     guestSocket.close();
-    console.log('PASS: real WebRTC two-browser room codes, join, human cars, remote keyboard control, shared scoring/replay/skip, disconnect and recreate');
+    console.log('PASS: real WebRTC matches with the HTTP ID endpoint unavailable, registered codes only, join, controls, scoring/replays and disconnect');
   } finally {
     if(socket)socket.close();
     chrome.kill();
