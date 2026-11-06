@@ -32,8 +32,12 @@ const PHYSICS_TUNING = {
   SUSPENSION_COMPRESSION_DAMPING: 25, SUSPENSION_RELAXATION_DAMPING: 40, MAX_SUSPENSION_TRAVEL: 12,
   POWERSLIDE_RISE_RATE: 5, POWERSLIDE_FALL_RATE: 2, THROTTLE_TORQUE: 72000,
   BRAKE_TORQUE: 2625, AIR_THROTTLE_ACCEL_REFERENCE: 66.67,
-  OCTANE_HITBOX_HALF_EXTENTS: { x:120.507, y:86.699, z:38.659 },
+  OCTANE_HITBOX_HALF_EXTENTS: { x:120.507/2, y:86.699/2, z:38.659/2 },
   OCTANE_HITBOX_CENTRE_OFFSET: { x:13.876, y:0, z:20.755 },
+  // Rendered cars rest at .55; the reference rigid-body origin rests at 17 UU.
+  CAR_COLLISION_ORIGIN_UP: 17/50 - .55,
+  CAR_COLLISION_MARGIN: .04,
+  BALL_REST_MARGIN: (93.15 - 91.25) / 50,
   ARENA_HALF_EXTENTS_REFERENCE: { x:4096, y:5120 }, ARENA_HEIGHT_REFERENCE: 2048,
   // Stable scaled values used by the current Three.js arena.
   GRAVITY_FORCE: 650 / 50, MAX_SPEED: 2300 / 50, GROUND_MAX_SPEED: 1410 / 50, REVERSE_MAX_SPEED: 24,
@@ -165,10 +169,12 @@ const CAR_MODELS = [
 
 // Fennec shares the Octane hitbox. Scorpion uses the longer, lower Dominus shape.
 // Body meshes stay independent of collision and all cars use the same controls.
+// These are HALF extents: the reference dimensions are full lengths in UU.
+// Divide by two as well as the 50 UU/world-unit conversion.
 const CAR_HITBOXES = {
-  octane: { length:120.507/50, width:86.699/50, height:38.659/50, forward:13.876/50, up:20.755/50 },
-  fennec: { length:120.507/50, width:86.699/50, height:38.659/50, forward:13.876/50, up:20.755/50 },
-  scorpion: { length:127.926/50, width:83.279/50, height:31.3/50, forward:9/50, up:18.66/50 }
+  octane: { length:120.507/100, width:86.699/100, height:38.659/100, forward:13.876/50, up:20.755/50, originUp:PHYSICS_TUNING.CAR_COLLISION_ORIGIN_UP },
+  fennec: { length:120.507/100, width:86.699/100, height:38.659/100, forward:13.876/50, up:20.755/50, originUp:PHYSICS_TUNING.CAR_COLLISION_ORIGIN_UP },
+  scorpion: { length:130.427/100, width:85.7799/100, height:33.8/100, forward:9/50, up:15.75/50, originUp:PHYSICS_TUNING.CAR_COLLISION_ORIGIN_UP }
 };
 
 // ---------- renderer / scene ----------
@@ -3608,21 +3614,28 @@ function hitBall(c) {
   const rx=right.x, ry=right.y, rz=right.z;
   const ux=up.x, uy=up.y, uz=up.z;
   const fx=nose.x, fy=nose.y, fz=nose.z;
-  const dx = ball.x - c.x, dy = ball.y - c.y, dz = ball.z - c.z;
   const box = c.hitbox || {
     length: c.hit || 1.7, width: (c.hit || 1.7) * 0.6, height: 0.55,
     forward: 0, up: 0
   };
+  // Convert the mesh/suspension origin to the rigid-body origin in the car's
+  // local up direction, including when pitched, rolled or driving on a wall.
+  const originUp = box.originUp || 0;
+  const originX = c.x + ux * originUp, originY = c.y + uy * originUp, originZ = c.z + uz * originUp;
+  const dx = ball.x - originX, dy = ball.y - originY, dz = ball.z - originZ;
   const forward = dx * fx + dy * fy + dz * fz - box.forward;
   const side = dx * rx + dy * ry + dz * rz;
   const height = dx * ux + dy * uy + dz * uz - box.up;
-  const halfLength = box.length, halfWidth = box.width, halfHeight = box.height;
+  // A rounded collision skin keeps edge contacts continuous, like Bullet's
+  // box margin. Shrink the core so the outer dimensions stay unchanged.
+  const margin = c.hitbox ? PHYSICS_TUNING.CAR_COLLISION_MARGIN : 0;
+  const halfLength = box.length-margin, halfWidth = box.width-margin, halfHeight = box.height-margin;
   const nearForward = clamp(forward, -halfLength, halfLength);
   const nearSide = clamp(side, -halfWidth, halfWidth);
   const nearHeight = clamp(height, -halfHeight, halfHeight);
   let nf = forward - nearForward, ns = side - nearSide, nh = height - nearHeight;
   let distance = Math.hypot(nf, ns, nh);
-  if (distance >= BR) return;
+  if (distance >= BR+margin) return;
 
   // When the ball centre is inside the car hitbox, find the closest face.
   // The old fallback always sent it straight upwards, causing random launches.
@@ -3640,7 +3653,7 @@ function hitBall(c) {
   const nx = fx * nf + rx * ns + ux * nh;
   const ny = fy * nf + ry * ns + uy * nh;
   const nz = fz * nf + rz * ns + uz * nh;
-  const penetration = BR - distance;
+  const penetration = BR + margin - distance;
   const separation = Math.min(penetration + 0.001, BR + 0.7);
   ball.x += nx * separation;
   ball.y += ny * separation;
@@ -3649,7 +3662,7 @@ function hitBall(c) {
   // Relative velocity includes the velocity of the car's contact point,
   // not only its centre. Rolling the nose onto the ball now gives a real
   // tangential touch instead of a random extra forward force.
-  const arm = new THREE.Vector3(ball.x-nx*BR-c.x, ball.y-ny*BR-c.y, ball.z-nz*BR-c.z);
+  const arm = new THREE.Vector3(ball.x-nx*BR-originX, ball.y-ny*BR-originY, ball.z-nz*BR-originZ);
   const omega = c.airOmega ? new THREE.Vector3(
     c.airOmega.pitch, c.airOmega.yaw, c.airOmega.roll).applyQuaternion(orientation)
     : new THREE.Vector3();
@@ -3685,10 +3698,29 @@ function hitBall(c) {
 
   const inverseBallMass = 1 / PHYSICS_TUNING.BALL_MASS_REFERENCE;
   const inverseCarMass = 1 / PHYSICS_TUNING.CAR_MASS_REFERENCE;
-  const impulse = closing * (1 + PHYSICS_TUNING.CAR_BALL_RESTITUTION) / (inverseBallMass + inverseCarMass);
+  const inverseInertia = c.hitbox ? new THREE.Vector3(
+    3*inverseCarMass/(box.length**2+box.height**2),
+    3*inverseCarMass/(box.length**2+box.width**2),
+    3*inverseCarMass/(box.width**2+box.height**2)) : null;
+  function angularMass(direction) {
+    if(!inverseInertia)return 0;
+    const torque=arm.clone().cross(direction).applyQuaternion(orientation.clone().invert());
+    return torque.x**2*inverseInertia.x+torque.y**2*inverseInertia.y+torque.z**2*inverseInertia.z;
+  }
+  function angularRecoil(impulseOnBall) {
+    if(!inverseInertia||c.ground)return;
+    const delta=arm.clone().cross(impulseOnBall).negate()
+      .applyQuaternion(orientation.clone().invert()).multiply(inverseInertia);
+    if(!c.airOmega)c.airOmega={pitch:0,yaw:0,roll:0};
+    c.airOmega.pitch+=delta.x;c.airOmega.yaw+=delta.y;c.airOmega.roll+=delta.z;
+  }
+  const normal=new THREE.Vector3(nx,ny,nz);
+  const impulse = closing * (1 + PHYSICS_TUNING.CAR_BALL_RESTITUTION) /
+    (inverseBallMass + inverseCarMass + angularMass(normal));
   const ballChange = impulse * inverseBallMass, carChange = impulse * inverseCarMass;
   ball.vx += nx * ballChange; ball.vy += ny * ballChange; ball.vz += nz * ballChange;
   c.vx -= nx * carChange; c.vy -= ny * carChange; c.vz -= nz * carChange;
+  angularRecoil(normal.clone().multiplyScalar(impulse));
   // Tangential impulses act at the surface of a solid sphere (I = 2/5 mr²).
   // Include existing spin so a rolling contact is not mistaken for sliding.
   const contactX=rvx-BR*((ball.wy||0)*nz-(ball.wz||0)*ny);
@@ -3698,12 +3730,16 @@ function hitBall(c) {
   const tx=contactX-normalContact*nx,ty=contactY-normalContact*ny,tz=contactZ-normalContact*nz;
   const slip=Math.hypot(tx,ty,tz);
   if(slip>1e-6){
-    const change=Math.min(slip/(3.5+inverseCarMass/inverseBallMass),ballChange*PHYSICS_TUNING.CAR_BALL_FRICTION);
+    // The car can pitch/roll about this contact too. Treating it as a point
+    // mass made corner friction drag chips downward far more than it should.
+    const tangent=new THREE.Vector3(tx,ty,tz).multiplyScalar(1/slip);
+    const change=Math.min(slip/(3.5+(inverseCarMass+angularMass(tangent))/inverseBallMass),ballChange*PHYSICS_TUNING.CAR_BALL_FRICTION);
     const k=change/slip;
     const dvx=-tx*k,dvy=-ty*k,dvz=-tz*k;
     ball.vx+=dvx;ball.vy+=dvy;ball.vz+=dvz;
     const reaction=inverseCarMass/inverseBallMass;
     c.vx-=dvx*reaction;c.vy-=dvy*reaction;c.vz-=dvz*reaction;
+    angularRecoil(new THREE.Vector3(dvx,dvy,dvz).multiplyScalar(1/inverseBallMass));
     ball.wx-=2.5/BR*(ny*dvz-nz*dvy);
     ball.wy-=2.5/BR*(nz*dvx-nx*dvz);
     ball.wz-=2.5/BR*(nx*dvy-ny*dvx);
@@ -3862,7 +3898,7 @@ function stepBall(dt, body=ball, predicting=false) {
   // Only hold the ball on a ramp when actually touching it; never snap an
   // airborne ball down from several units above the slope.
   const ramp = arenaRampAt(body.x, body.z);
-  const surface = BR + ramp.height;
+  const surface = BR + p.BALL_REST_MARGIN + ramp.height;
   const normalLength = Math.hypot(-ramp.dx, 1, -ramp.dz);
   const nx = -ramp.dx / normalLength, ny = 1 / normalLength, nz = -ramp.dz / normalLength;
   const normalSpeed = body.vx * nx + body.vy * ny + body.vz * nz;

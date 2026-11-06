@@ -14,6 +14,8 @@ Championship Dusk is the default stadium theme, with Day, Night, Winter and Suns
 
 Ball physics options have been removed. All modes use the same ball response, including Free Play; old saved ball-feel preferences are ignored. Keyboard aerial assistance remains available under Settings → Keyboard aerial handling. The standard solver uses 650 UU/s² gravity, 0.6 floor/wall restitution, Bullet-style 0.03 damping, a 30:180 ball/car mass ratio, and friction that transfers surface slip into spin. Car touches use the relative-speed extra-hit curve and direction adjustment documented in [RocketSim](https://github.com/ZealanL/RocketSim/blob/main/src/Sim/Ball/Ball.cpp), without scripted boost/flip bonuses or upward pop. These are reference-based approximations in this custom solver, rather than an exact reproduction of Rocket League's engine.
 
+Car collision dimensions use half extents, a rounded collision margin and a local offset from the visible model to the reference rigid-body origin. Octane/Fennec share the Octane box; Scorpion uses the Dominus box from the [reference presets](https://github.com/ZealanL/RocketSim/blob/main/src/Sim/Car/CarConfig/CarConfig.cpp). Contact impulses account for car rotational inertia, including angular recoil in air. The ball keeps its 93.15 UU resting height. An uncontested straight boosted centre kickoff now clears the crossbar with all three cars; slower approaches produce lower chips, while face and underside touches retain their own directions.
+
 ## Moving 3D goal explosions
 
 Select a celebration in **Goal FX** to watch it at the actual goal with a dedicated preview camera. The same model plays when you score, including in Free Play. Each effect has its own geometry and animation:
@@ -91,6 +93,7 @@ Run these commands from the repository root:
 ```sh
 node --check game.js
 node tests/physics-smoke.js
+node tests/kickoff-physics.test.js
 node tests/wall-physics.test.js
 node tests/ai-regression.test.js
 node tests/nexto.test.js

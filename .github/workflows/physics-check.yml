@@ -16,7 +16,9 @@ jobs:
       - name: Syntax check
         run: node --check game.js
       - name: Physics regression checks
-        run: node tests/physics-smoke.js
+        run: |
+          node tests/physics-smoke.js
+          node tests/kickoff-physics.test.js
       - name: Wall, ceiling and wall-jump regression checks
         run: node tests/wall-physics.test.js
       - name: AI steering and pursuit regression checks
