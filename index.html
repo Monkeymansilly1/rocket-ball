@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Rocket Arena Reloaded | Rocket Ball</title>
 <link rel="stylesheet" href="style.css">
-<link rel="stylesheet" href="lobby.css?v=private-rooms-3">
+<link rel="stylesheet" href="lobby.css?v=room-join-fix-4">
 </head>
 <body class="in-menu">
 <canvas id="c"></canvas>
@@ -87,10 +87,10 @@
         <section class="online-lobby" aria-label="Private online 1v1">
           <h3>PLAY A FRIEND · ONLINE 1v1</h3>
           <p>Create a room and share its six-character code.</p>
+          <p id="onlineStatus" role="status" aria-live="polite">One player creates a room. The other enters that code and presses Join Room.</p>
           <button id="onlineCreate" type="button">CREATE ROOM</button>
           <div class="online-join"><input id="onlineCode" aria-label="Room code" placeholder="ROOM CODE" maxlength="6" autocomplete="off" autocapitalize="characters" spellcheck="false"><button id="onlineJoin" type="button">JOIN ROOM</button></div>
           <div id="onlineInvite" hidden><output id="onlineRoomCode" aria-label="Your room code"></output><button id="onlineCopy" type="button">COPY INVITE</button><button id="onlineLeave" type="button">CANCEL ROOM</button></div>
-          <p id="onlineStatus" role="status" aria-live="polite">Both players keep the game open. No account needed.</p>
         </section>
         <details class="custom-match"><summary>CUSTOM MATCH OPTIONS</summary><div class="opts"><span>Players</span><label class="toggle-label"><input id="localTwo" type="checkbox"> Local 2-player</label></div><div class="opts"><span>Match</span><button data-mode="1">1v1</button><button data-mode="2">2v2</button><button data-mode="3">3v3</button></div><div class="opts"><span>Bots</span><button data-diff="0">Easy</button><button data-diff="1">Medium</button><button data-diff="2">Hard</button><button data-diff="3">Nexto</button></div>
 </details>
@@ -300,7 +300,7 @@
 <script src="lib/nexto/client.js?v=1"></script>
 <script src="assets/scorpion/body.js?v=4"></script>
 <script src="vendor/peerjs.min.js"></script>
-<script src="lib/online-rooms.js?v=1"></script>
-<script src="game.js?v=private-rooms-8"></script>
+<script src="lib/online-rooms.js?v=2"></script>
+<script src="game.js?v=room-join-fix-9"></script>
 </body>
 </html>

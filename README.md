@@ -59,6 +59,8 @@ The selected clip starts once when a match replay begins or a Free Play goal is 
 
 On **Play**, choose **Create Room**, then send the six-character code or **Copy Invite** link to a friend. Your friend opens the game and enters the code under **Join Room** (invite links fill it in). The match starts when both players connect: creator is Blue, friend is Orange, each uses their own keyboard/controller and selected car, with no bots or split screen. Either player can skip a goal replay. **Leave Match** closes the connection; create a new room to play again.
 
+After typing a complete code, press **Join Room** or Enter. You can join a friend's room even if you already created one; joining closes your previous waiting room. Connection progress and errors appear above the room controls. Audio initialization failures do not block joining.
+
 The creator's browser runs the shared physics, five-minute clock, score, boost pads, and replays. The friend's controls travel over a WebRTC data connection; host snapshots update the friend's view with smoothing. Input is cleared when stale and a lost connection returns players to the menu. Room codes expire when the creator leaves. Keep both game tabs open, particularly the host's. These are casual private matches; latency depends on both connections and the host's performance.
 
 GitHub Pages serves the game unchanged. PeerJS 1.5.5 (bundled under MIT in `vendor/`, with its license) uses the public PeerJS signaling service and its default STUN/TURN servers, including TCP TURN fallbacks. No account or dedicated game server is required. Those public services must be reachable; restrictive networks or service outages can prevent joining, which the room status reports. Local/offline modes do not contact these services.

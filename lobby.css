@@ -163,6 +163,10 @@ body:not(.in-menu) #player {display:none;}
 .online-lobby {margin:18px 0;padding:16px;border:1px solid #5785ad66;background:#0b2136;border-radius:8px;}
 .online-lobby h3 {font-size:13px;color:#ffc165;margin:0 0 8px;}
 .online-lobby p {font-size:11px;line-height:1.5;color:#bad0e2;}
+#onlineStatus {padding:9px 10px;border-left:3px solid #6997ba;background:#ffffff08;min-height:32px;}
+#onlineStatus[data-state="error"] {border-color:#ff9672;color:#ffd5c6;}
+#onlineStatus[data-state="connecting"] {border-color:#ffc165;color:#ffdb9f;}
+#onlineStatus[data-state="ready"] {border-color:#69d6a7;color:#c2f5df;}
 #menu .online-lobby button {font-size:11px;padding:10px 12px;}
 .online-join {display:flex;gap:8px;margin:10px 0;}
 #onlineCode {min-width:0;width:145px;text-transform:uppercase;letter-spacing:.14em;}

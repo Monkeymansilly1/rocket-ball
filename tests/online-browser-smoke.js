@@ -25,7 +25,7 @@ const express=require('./online/node_modules/express');
 const app=express();const server=http.createServer(app);
 const rtcConfig=process.env.ROCKET_TEST_TURN_URL?{iceTransportPolicy:'relay',iceServers:[{urls:process.env.ROCKET_TEST_TURN_URL,username:process.env.ROCKET_TEST_TURN_USER||'localtest',credential:process.env.ROCKET_TEST_TURN_PASSWORD||'localtest'}]}:{iceServers:[]};
 const signal=ExpressPeerServer(server,{path:'/'});app.use('/signal',signal);
-app.get('/game.js',(req,res)=>res.type('js').send(fs.readFileSync('game.js','utf8').replace('window.rocketArena = {','window.__onlineEnd=()=>{clock=.001;score=[1,2];playerStats[1].goals=2;};window.__onlineStep=update;window.__onlineRoom=onlineRoom;window.rocketArena = {')));
+app.get('/game.js',(req,res)=>res.type('js').send(fs.readFileSync('game.js','utf8').replace('window.rocketArena = {','window.__onlineAudioFailure=()=>{sfx.init=()=>{throw Error("Unavailable audio");};};window.__onlineEnd=()=>{clock=.001;score=[1,2];playerStats[1].goals=2;};window.__onlineStep=update;window.__onlineRoom=onlineRoom;window.rocketArena = {')));
 app.get('/lib/three.min.js',(req,res)=>res.type('js').send(fs.readFileSync('lib/three.min.js','utf8')+';THREE.WebGLRenderer=class extends THREE.WebGLRenderer{constructor(...args){super(...args);this.render=function(){}}};'));app.use(express.static(process.cwd()));
 function chromeExecutable() {
   for(const name of [process.env.CHROME_BIN,'google-chrome','google-chrome-stable','chromium','chromium-browser']) {
@@ -123,7 +123,13 @@ async function main() {
     await guestCall('Page.navigate',{url:url+'?room='+code.toLowerCase()});
     await eventually(()=>guestEval('!!window.rocketArena'),45000);
     assert.equal(await guestEval('document.getElementById("onlineCode").value'),code,'Invite URL must prefill the room code');
-    await guestEval(`document.querySelector('[data-car=fennec]').click();document.getElementById('name').value='FRIEND';document.getElementById('onlineCode').value='${code.toLowerCase()}';document.getElementById('onlineJoin').click()`);
+    await guestEval("document.getElementById('onlineCreate').click()");
+    await eventually(()=>guestEval('window.rocketArena.onlineStatus.state==="waiting"'),20000);
+    assert.equal(await guestEval('document.getElementById("onlineJoin").disabled'),false,'A player who created their own room must still be able to join a friend');
+    await guestEval('window.__onlineAudioFailure()');
+    await guestEval(`document.querySelector('[data-car=fennec]').click();document.getElementById('name').value='FRIEND';document.getElementById('onlineCode').value='${code.toLowerCase()}';document.getElementById('onlineCode').dispatchEvent(new Event('input',{bubbles:true}));`);
+    assert((await guestEval('document.getElementById("onlineStatus").textContent')).includes('Press JOIN ROOM'),'Typing a complete code must explain the next step');
+    await guestEval("document.getElementById('onlineJoin').click()");
     await eventually(()=>evalJS('window.rocketArena.onlineStatus.state==="connected"'),25000).catch(async e=>{throw Error(e.message+' HOST '+await evalJS('JSON.stringify({s:window.rocketArena.onlineStatus,t:document.getElementById("onlineStatus").textContent})')+' GUEST '+await guestEval('JSON.stringify({s:window.rocketArena.onlineStatus,t:document.getElementById("onlineStatus").textContent})'));});
     await eventually(()=>guestEval('window.rocketArena.onlineStatus.state==="connected"&&window.rocketArena.cars.length===2'),25000);
     assert.equal(await guestEval('window.rocketArena.onlineStatus.role'),'guest');

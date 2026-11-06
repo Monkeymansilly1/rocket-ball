@@ -21,10 +21,13 @@ const flush=()=>new Promise(resolve=>setTimeout(resolve,20));
  assert.deepEqual(profile(null),{name:'PLAYER',car:'octane'});
  const input=controls({throttle:100,steer:NaN,jump:'yes',boost:true,pitch:-4});
  assert.equal(input.throttle,1);assert.equal(input.steer,0);assert.equal(input.jump,false);assert.equal(input.boost,true);assert.equal(input.pitch,-1);
- let starts=0,received,ended='';const host=new Room({Peer,onStart:()=>starts++,onData:p=>received=p,onClose:m=>ended=m});
+ let starts=0,received,ended='',status;const host=new Room({Peer,onStatus:s=>status=s,onStart:()=>starts++,onData:p=>received=p,onClose:m=>ended=m});
  const guest=new Room({Peer,onStart:()=>starts++});const third=new Room({Peer});
  try{
   host.create({name:'Host',car:'scorpion'});await flush();assert.equal(host.state,'waiting');assert(validCode(host.code));
+  const originalCode=host.code,originalPeer=host.peer;
+  host.join('bad',{});assert.equal(status.code,originalCode,'An invalid join attempt must not hide the existing room code');
+  host.join(originalCode.toLowerCase(),{});assert.equal(host.peer,originalPeer,'Joining your own code must preserve the hosting room');assert(status.message.includes('own room code'));
   guest.join(host.code.toLowerCase(),{name:'Friend',car:'fennec'});await flush();assert.equal(host.state,'connected');assert.equal(guest.state,'connected');assert.equal(starts,2);
   assert.equal(host.remote.car,'fennec');assert.equal(guest.remote.name,'Host');
   guest.send({type:'input',seq:1,controls:{throttle:1}});await flush();assert.equal(received.seq,1);
@@ -32,6 +35,8 @@ const flush=()=>new Promise(resolve=>setTimeout(resolve,20));
   guest.close();await flush();assert.equal(host.state,'error');assert(ended.includes('disconnected'));
   host.create({});const stale=host.peer;host.close();stale.emit('open');assert.equal(host.state,'idle','Closed attempts cannot reopen the room');
   guest.join('AB2CD3',{});await flush();assert.equal(guest.state,'error');
+  const broken=new Room({Peer,onStart(){throw Error('Startup failed');}});const conn=new Connection();broken.role='guest';broken.attach(conn,broken.generation);
+  try{assert.doesNotThrow(()=>conn.emit('data',{type:'welcome',version:1,profile:{}}));assert.equal(broken.state,'error','A match startup exception must produce an error, not a silent connected state');}finally{broken.close();}
   console.log('PASS: room codes, profiles, input validation, two-player handshake, full rooms, missing rooms, disconnect and stale callbacks');
  }finally{host.close();guest.close();third.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

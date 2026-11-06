@@ -1811,7 +1811,7 @@ function start(freePlay = false) {
   clearHeldInput();
   for(const rig of [cam,cam2]){delete rig.heading;delete rig.offset;delete rig.direction;}
   stopGoalPreview();lobbyArenaTour=false;camera.clearViewOffset();
-  sfx.init(); // read UI choices
+  if(onlineStarting)unlockOnlineAudio();else sfx.init(); // read UI choices
   trainingMode = !!freePlay;
   trainingGoals = 0;
   trainingAttempts = 0;
@@ -4332,9 +4332,15 @@ let onlineRemoteInput={},onlineInputAt=0,onlineInputSeq=-1,onlineSendTime=0,onli
 const onlineRoom=new RocketRooms.Room({
  onStatus(info){
   $('onlineStatus').textContent=info.message;
+  $('onlineStatus').dataset.state=info.state;
   $('onlineRoomCode').textContent=info.code||'';
   $('onlineInvite').hidden=!info.code||!['waiting','connecting','connected'].includes(info.state);
-  $('onlineCreate').disabled=$('onlineJoin').disabled=['waiting','connecting','connected'].includes(info.state);
+  $('onlineCreate').disabled=['waiting','connecting','connected'].includes(info.state);
+  // A player may create a room, then decide to join their friend's instead.
+  // Room.join closes the old room; leaving this button disabled hid that path.
+  $('onlineJoin').disabled=['connecting','connected'].includes(info.state);
+  $('onlineJoin').textContent=info.state==='connecting'&&info.role==='guest'?'JOINING…':'JOIN ROOM';
+  $('onlineCode').disabled=['connecting','connected'].includes(info.state);
  },
  onStart:beginOnlineMatch,
  onData(packet){
@@ -4346,11 +4352,20 @@ const onlineRoom=new RocketRooms.Room({
    }else if(packet.type==='skip'&&state==='replay')replayElapsed=RocketReplay.duration(replayFrames);
   }else if(packet.type==='snapshot'&&validOnlineSnapshot(packet))onlineSnapshot=packet;
  },
- onClose(message){leaveOnline(message);}
+ onClose(message){leaveOnline(message);$('onlineStatus').dataset.state='error';}
 });
 function localOnlineProfile(){return {name:$('name').value,car:playerCarModel};}
-$('onlineCreate').addEventListener('click',()=>{sfx.init();onlineRoom.create(localOnlineProfile());});
-$('onlineJoin').addEventListener('click',()=>{sfx.init();onlineRoom.join($('onlineCode').value,localOnlineProfile());});
+function unlockOnlineAudio(){try{sfx.init();}catch(_){/* Audio failure must not prevent a player joining. */}}
+$('onlineCreate').addEventListener('click',()=>{unlockOnlineAudio();onlineRoom.create(localOnlineProfile());});
+$('onlineJoin').addEventListener('click',()=>{unlockOnlineAudio();onlineRoom.join($('onlineCode').value,localOnlineProfile());});
+$('onlineCode').addEventListener('input',()=>{
+ if(['connecting','connected'].includes(onlineRoom.state))return;
+ const value=RocketRooms.normalize($('onlineCode').value),status=$('onlineStatus');
+ if(RocketRooms.validCode(value)){
+  status.textContent=onlineRoom.role==='host'&&onlineRoom.code===value?'This is your own room code. Send it to your friend.':'Code ready. Press JOIN ROOM or Enter to connect.';
+  status.dataset.state='ready';
+ }else{status.textContent='Enter your friend’s full six-character code, then press JOIN ROOM.';status.dataset.state='idle';}
+});
 $('onlineCode').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();$('onlineJoin').click();}});
 for(const id of ['onlineLeave','onlineMatchLeave'])$(id).addEventListener('click',()=>leaveOnline('Room closed. Create or join another room.'));
 $('onlineCopy').addEventListener('click',async()=>{
@@ -4381,6 +4396,7 @@ function leaveOnline(message){
  if(onlineMode)clearInterval(onlineMode.backgroundTimer);
  onlineMode=null;onlineSnapshot=null;onlineRemoteInput={};onlineRoom.close();
  $('onlineMatchBar').hidden=true;$('onlineInvite').hidden=true;$('onlineCreate').disabled=$('onlineJoin').disabled=false;$('quickPlayButton').hidden=false;
+ $('onlineCode').disabled=false;$('onlineJoin').textContent='JOIN ROOM';$('onlineStatus').dataset.state='idle';
  if(onlineSaved){({mode,diff,playerName,player2Name,localTwoPlayer,goalExplosionStyle}=onlineSaved);onlineSaved=null;}
  if(wasOnline){
   paused=false;state='menu';trainingMode=false;clearHeldInput();goalEffects.clear();goalAnthems.stop();
