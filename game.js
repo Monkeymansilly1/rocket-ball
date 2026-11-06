@@ -4451,6 +4451,9 @@ $('onlineCopy').addEventListener('click',async()=>{
 const invitedCode=RocketRooms.normalize(new URLSearchParams(location.search).get('room'));
 if(RocketRooms.validCode(invitedCode)){$('onlineCode').value=invitedCode;$('onlineStatus').textContent='Your friend invited you. Press JOIN ROOM to connect.';selectLobbyPanel('play');}
 function beginOnlineMatch(session){
+ // Goal counters belong to the host's room, so a previous local replay ID
+ // must not suppress the first anthem in a newly joined match.
+ goalAnthems.stop();goalAnthems.lastReplayId=null;
  onlineSaved={mode,diff,playerName,player2Name,localTwoPlayer,goalExplosionStyle};
  onlineMode=session;onlineStarting=true;mode=1;diff=0;localTwoPlayer=false;
  try{start(false);}finally{onlineStarting=false;}

@@ -85,6 +85,9 @@ function make(fetcher=async()=>response()){
  p.sync({...state,replayId:2,replayTrack:'off'});await flush();assert.equal(p.starts,3,'Off must suppress the next replay anthem');
  p.sync({...state,replayId:3,replayTrack:'dnb'});await flush();assert.equal(p.starts,4);
  a.sources.at(-1).onended();p.sync({...state,replayId:3,replayTrack:'dnb'});await flush();assert.equal(p.starts,4,'Natural clip end must not restart within the same replay');
+ // A new online host may restart its goal counter at an already seen ID.
+ p.stop();p.lastReplayId=null;p.sync({...state,replayId:3,replayTrack:'grime'});await flush();
+ assert.equal(p.starts,5,'A fresh room must play its first anthem even when the goal ID was used previously');
  const deferred={};const pending=make(url=>new Promise(resolve=>deferred[url]=resolve));
  pending.player.sync({state:'replay',replayId:1,replayTrack:'dnb'});await flush();
  pending.player.sync({state:'kick',replayId:1,replayTrack:'dnb'});
