@@ -59,7 +59,7 @@ assert(Math.abs(updateHarness.at(-1).cars[0].x-2)<1e-9);
 console.log('PASS: physics-timed replay capture, interpolation, wall/ceiling orientation, bounded history, respawns and accurate 3D scoring-line speed');
 
 // Replay framing is anchored to the ball, even while the scorer stays behind.
-const settings={fov:87,distance:5.6,height:1.8};
+const settings={fov:87,distance:5.6,height:1.8,stiffness:10};
 const replayCamera=new THREE.PerspectiveCamera(settings.fov,16/9,.5,2000),cameraState={};
 for(const frame of [
   {x:0,y:2,z:-40,vx:0,vy:0,vz:70},
@@ -89,11 +89,12 @@ const heading=track.heading;moving.vz=-70;
 Replay.updateCamera(track,{ball:moving,settings,dt:1/120});
 assert(Math.abs(track.heading-heading)<=1.8/120+1e-9,'A rebound must not snap the camera through 180 degrees');
 const camera=new THREE.PerspectiveCamera(),cam={},sun={position:new THREE.Vector3(),target:{position:new THREE.Vector3(),updateMatrixWorld(){}}};
-const wireReplayCamera=new Function('RocketReplay','camera','cam','ball','cameraSettings','cars','sun',`
-  let replayAnthemToken=1,replayCameraCarIndex=0,camShakeTime=0;const arenaRampAt=()=>({height:0});
+const wireReplayCamera=new Function('RocketReplay','RocketBallCamera','camera','cam','ball','cameraSettings','cars','sun',`
+  let replayAnthemToken=1,replayCameraCarIndex=0,camShakeTime=0,replayCameraMode='ball';const arenaRampAt=()=>({height:0});
+  const getCarForward=()=>({x:0,y:0,z:1});
   ${extract('updateReplayCam')}
-  return {step:updateReplayCam,next:()=>replayAnthemToken++};
-`)(Replay,camera,cam,moving,settings,[{team:0,x:-70,z:-90}],sun);
+  return {step:updateReplayCam,next:()=>replayAnthemToken++,mode:value=>replayCameraMode=value};
+`)(Replay,require('../lib/ball-camera.js'),camera,cam,moving,settings,[{team:0,x:-40,y:.55,z:-50,vx:0,vy:0,vz:0}],sun);
 wireReplayCamera.step(1/60);
 assert.deepEqual([cam.lx,cam.ly,cam.lz],[moving.x,moving.y,moving.z],'The live replay camera must follow the ball instead of the scorer');
 assert.equal(camera.fov,87);
@@ -103,4 +104,10 @@ const secondCamera=new THREE.PerspectiveCamera(),secondState={};
 wireReplayCamera.step(1/60,secondCamera,secondState);
 assert.deepEqual([secondState.lx,secondState.ly,secondState.lz],[moving.x,moving.y,moving.z],
   'The second split-screen view must also follow the ball');
+wireReplayCamera.mode('car');wireReplayCamera.step(1/60);
+assert(Math.abs(camera.position.x+40)<1e-9&&Math.abs(camera.position.z+50+settings.distance)<1e-9,
+  'Car replay view must follow the scorer, independently of the ball position');
+assert.equal(camera.fov,87,'Switching replay modes must not change FOV');
+wireReplayCamera.mode('ball');wireReplayCamera.step(1/60);
+assert.deepEqual([cam.lx,cam.ly,cam.lz],[moving.x,moving.y,moving.z],'Switching back must immediately reacquire the ball');
 console.log('PASS: centred ball-follow replay camera, high shots, fast shots, rebounds, arena bounds, replay resets and saved FOV');

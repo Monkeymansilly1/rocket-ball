@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Rocket Arena Reloaded | Rocket Ball</title>
-<link rel="stylesheet" href="style.css">
-<link rel="stylesheet" href="lobby.css?v=room-connect-fix-5">
+<link rel="stylesheet" href="style.css?v=replay-choice-14">
+<link rel="stylesheet" href="lobby.css?v=goal-fx-6">
 </head>
 <body class="in-menu">
 <canvas id="c"></canvas>
@@ -16,7 +16,12 @@
     <button id="fullscreenToggle" type="button" title="Toggle fullscreen">⛶</button>
     <button id="enableSoundButton" type="button" title="Enable sound" aria-label="Enable sound" hidden>🔊 <span>ENABLE SOUND</span></button>
   </div>
-  <button id="skipReplayButton" type="button">SKIP REPLAY <kbd>SPACE</kbd></button>
+  <div id="replayControls" aria-label="Replay controls">
+    <div class="replay-camera-choice" role="group" aria-label="Replay camera">
+      <span>REPLAY CAMERA</span><button type="button" data-replay-camera="car" aria-pressed="false">CAR</button><button type="button" data-replay-camera="ball" aria-pressed="true">BALL</button>
+    </div>
+    <button id="skipReplayButton" type="button">SKIP REPLAY <kbd>SPACE</kbd></button>
+  </div>
   <div id="onlineMatchBar" hidden><span id="onlineMatchLabel"></span><button id="onlineMatchLeave" type="button">LEAVE MATCH</button></div>
   <button id="quickPlayButton" type="button">▶ PLAY <small>MATCHES &amp; MODES</small></button>
   <details id="trainingTools" aria-label="Free Play tools" hidden>
@@ -86,7 +91,7 @@
         </div>
         <section class="online-lobby" aria-label="Private online 1v1">
           <h3>PLAY A FRIEND · ONLINE 1v1</h3>
-          <p>Create a room and share its six-character code.</p>
+          <p>Choose your car and colour in Garage, and your explosion and song in Goal FX before creating or joining a room. Each player brings their own choices.</p>
           <p id="onlineStatus" role="status" aria-live="polite">One player creates a room. The other enters that code and presses Join Room.</p>
           <button id="onlineCreate" type="button">CREATE ROOM</button>
           <div class="online-join"><input id="onlineCode" aria-label="Room code" placeholder="ROOM CODE" maxlength="6" autocomplete="off" autocapitalize="characters" spellcheck="false"><button id="onlineJoin" type="button">JOIN ROOM</button></div>
@@ -291,10 +296,10 @@
 <script src="lib/three.min.js"></script>
 <script src="lib/GLTFLoader.legacy.js"></script>
 <script src="lib/scene-utils.js"></script>
-<script src="lib/goal-effects.js"></script>
+<script src="lib/goal-effects.js?v=volumetric-2"></script>
 <script src="lib/replay.js?v=ball-follow-2"></script>
 <script src="lib/car-audio.js?v=3"></script>
-<script src="lib/goal-anthems.js?v=4"></script>
+<script src="lib/goal-anthems.js?v=full-song-5"></script>
 <script src="lib/ball-camera.js"></script>
 <script src="lib/nexto/adapter.js?v=1"></script>
 <script src="lib/nexto/client.js?v=1"></script>
@@ -302,7 +307,7 @@
 <script src="assets/octane/body.js?v=1"></script>
 <script src="assets/fennec/body.js?v=1"></script>
 <script src="vendor/peerjs.min.js"></script>
-<script src="lib/online-rooms.js?v=3"></script>
-<script src="game.js?v=ball-follow-replay-13"></script>
+<script src="lib/online-rooms.js?v=player-choices-4"></script>
+<script src="game.js?v=personal-goal-fx-14"></script>
 </body>
 </html>

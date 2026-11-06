@@ -740,3 +740,11 @@ body.split-screen #boost2 {
   #score #clock { min-width:64px!important; font-size:23px!important; }
   #leaguePresetHint { font-size:10px!important; }
 }
+#replayControls {display:none;position:fixed;z-index:15;left:50%;bottom:22px;transform:translateX(-50%);align-items:center;gap:14px;padding:8px 10px;border:1px solid #7aaad15c;border-radius:10px;background:#071b2ee8;box-shadow:0 6px 25px #0005;pointer-events:auto;}
+body.replay-active #replayControls {display:flex;}
+.replay-camera-choice {display:flex;align-items:center;gap:5px;}
+.replay-camera-choice span {font:800 9px "Segoe UI",sans-serif;letter-spacing:.12em;color:#bedaf0;margin:0 8px;white-space:nowrap;}
+.replay-camera-choice button {border:1px solid #75a5cd66;border-radius:5px;background:#123459;color:#fff;padding:11px 14px;font:800 11px "Segoe UI",sans-serif;cursor:pointer;}
+.replay-camera-choice button[aria-pressed="true"] {background:#ffb64d;border-color:#ffe0ac;color:#102039;}
+#replayControls #skipReplayButton {display:block;position:static;min-height:38px;white-space:nowrap;box-shadow:none;border-radius:5px;}
+@media(max-width:600px){#replayControls{bottom:12px;gap:7px;max-width:calc(100vw - 24px);padding:7px;}.replay-camera-choice span{display:none;}.replay-camera-choice button{padding:11px;}#replayControls #skipReplayButton{font-size:10px;padding:0 10px;}#replayControls kbd{display:none;}}

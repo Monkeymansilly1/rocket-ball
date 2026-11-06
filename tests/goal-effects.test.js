@@ -18,6 +18,9 @@ for(const quality of ['low','balanced','high'])for(const [style,data] of Object.
   assert.equal(scene.children.length,1);
   assert.equal(effect.group.rotation.y,Math.PI,'Goal must face into the pitch');
   assert(effect.geometries.size>0 && effect.materials.size>0,'Effect must own actual 3D resources');
+  assert(effect.group.getObjectByName('Volumetric goal glow')?.isSprite,'Every upgraded effect must include a soft world-space glow');
+  if(['classic','fire','lightning','supernova','pixel'].includes(style))
+    assert(effect.group.children.some(o=>o.name.startsWith('Layered shockwave')),'Burst effects must have expanding shockwaves');
   assert(effect.signature.length>=3);
   if(quality==='balanced')signatures.add(effect.signature.join(','));
   manager.update(.1,100);
@@ -26,14 +29,16 @@ for(const quality of ['low','balanced','high'])for(const [style,data] of Object.
   const next=snapshot(effect);
   assert.notDeepEqual(first,next,style+' must animate geometry or transforms');
   for(const n of next)if(typeof n==='number')assert(Number.isFinite(n),style+' animation became non-finite');
-  let disposedGeometry=0,disposedMaterial=0;
+  let disposedGeometry=0,disposedMaterial=0,disposedTexture=0;
   effect.geometries.forEach(g=>g.addEventListener('dispose',()=>disposedGeometry++));
   effect.materials.forEach(m=>m.addEventListener('dispose',()=>disposedMaterial++));
+  effect.textures.forEach(t=>t.addEventListener('dispose',()=>disposedTexture++));
   manager.update(.1,(data.duration+1)*1000);
   assert.equal(manager.effects.length,0,style+' must expire even on a slow frame');
   assert.equal(scene.children.length,0);
   assert.equal(disposedGeometry,effect.geometries.size,'Every owned geometry must be disposed exactly once');
   assert.equal(disposedMaterial,effect.materials.size,'Every owned material must be disposed exactly once');
+  assert.equal(disposedTexture,effect.textures.size,'Glow textures must be released after every preview');
 }
 assert.equal(signatures.size,8,'Every selection must have a different model and animation structure');
 const manager=new Manager(new THREE.Scene());

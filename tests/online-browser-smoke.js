@@ -30,7 +30,7 @@ const signal=ExpressPeerServer(server,{path:'/'});
 // WebRTC should be needed; both peers generate their IDs locally.
 app.get('/signal/peerjs/id',(req,res)=>{idRequests++;res.status(503).send('ID service unavailable');});
 app.use('/signal',signal);
-app.get('/game.js',(req,res)=>res.type('js').send(fs.readFileSync('game.js','utf8').replace('window.rocketArena = {','window.__onlineAudioFailure=()=>{sfx.init=()=>{throw Error("Unavailable audio");};};window.__onlineEnd=()=>{clock=.001;score=[1,2];playerStats[1].goals=2;};window.__onlineStep=update;window.__onlineRoom=onlineRoom;window.rocketArena = {')));
+app.get('/game.js',(req,res)=>res.type('js').send(fs.readFileSync('game.js','utf8').replace('window.rocketArena = {','window.__onlineCelebration=()=>({style:activeGoalExplosionStyle,track:replayAnthemTrack,ownStyle:goalExplosionStyle,ownTrack:anthemSelection});window.__onlineAudioFailure=()=>{sfx.init=()=>{throw Error("Unavailable audio");};};window.__onlineEnd=()=>{clock=.001;score=[1,2];playerStats[1].goals=2;};window.__onlineStep=update;window.__onlineRoom=onlineRoom;window.rocketArena = {')));
 app.get('/lib/three.min.js',(req,res)=>res.type('js').send(fs.readFileSync('lib/three.min.js','utf8')+';THREE.WebGLRenderer=class extends THREE.WebGLRenderer{constructor(...args){super(...args);this.render=function(){}}};'));app.use(express.static(process.cwd()));
 function chromeExecutable() {
   for(const name of [process.env.CHROME_BIN,'google-chrome','google-chrome-stable','chromium','chromium-browser']) {
@@ -122,6 +122,7 @@ async function main() {
     await guestCall('Page.enable');await guestCall('Runtime.enable');await configure(guestCall);await guestCall('Page.navigate',{url});
     await eventually(()=>guestEval('!!window.rocketArena'),45000);console.log('Guest game loaded');
     for(const evaluate of [evalJS,guestEval])await evaluate("document.getElementById('settingGraphics').value='low';document.getElementById('settingGraphics').dispatchEvent(new Event('change'));THREE.WebGLRenderer=class extends THREE.WebGLRenderer{constructor(...args){super(...args);this.render=function(){}}};");
+    await evalJS(`document.querySelector('[data-car=scorpion]').click();document.getElementById('paint').value='#42cafe';document.getElementById('paint').dispatchEvent(new Event('input'));document.querySelector('[data-effect=fire]').click();document.querySelector('[data-anthem=rap]').click();`);
     const creating=await evalJS("(()=>{document.getElementById('name').value='HOST';document.getElementById('onlineCreate').click();return {state:window.rocketArena.onlineStatus.state,hidden:document.getElementById('onlineRoomCode').hidden,copyHidden:document.getElementById('onlineCopy').hidden};})()",true);
     assert.deepEqual(creating,{state:'connecting',hidden:true,copyHidden:true},'A room code must not be shared before registration succeeds');
     await eventually(()=>evalJS('window.rocketArena.onlineStatus.state==="waiting"'),20000).catch(async e=>{throw Error(e.message+' '+await evalJS('JSON.stringify({status:window.rocketArena.onlineStatus,text:document.getElementById("onlineStatus").textContent,options:window.__testPeer&&String(window.Peer),errors:[]})')+' '+JSON.stringify(errors));});
@@ -132,6 +133,7 @@ async function main() {
     await guestEval("document.getElementById('onlineCreate').click()");
     await eventually(()=>guestEval('window.rocketArena.onlineStatus.state==="waiting"'),20000);
     assert.equal(await guestEval('document.getElementById("onlineJoin").disabled'),false,'A player who created their own room must still be able to join a friend');
+    await guestEval(`document.getElementById('paint').value='#f21a86';document.getElementById('paint').dispatchEvent(new Event('input'));document.querySelector('[data-effect=galaxy]').click();document.querySelector('[data-anthem=grime]').click();`);
     await guestEval('window.__onlineAudioFailure()');
     await guestEval(`document.querySelector('[data-car=fennec]').click();document.getElementById('name').value='FRIEND';document.getElementById('onlineCode').value='${code.toLowerCase()}';document.getElementById('onlineCode').dispatchEvent(new Event('input',{bubbles:true}));`);
     assert((await guestEval('document.getElementById("onlineStatus").textContent')).includes('Press JOIN ROOM'),'Typing a complete code must explain the next step');
@@ -142,6 +144,12 @@ async function main() {
     if(rtcConfig.iceTransportPolicy==='relay')assert(await evalJS('(async()=>{const stats=await window.__onlineRoom.conn.peerConnection.getStats();return [...stats.values()].some(s=>s.type==="local-candidate"&&s.candidateType==="relay");})()'),'The two clients must exchange actual WebRTC traffic through the relay');
     assert.equal(await evalJS('window.rocketArena.cars[1].model'),'fennec');assert.equal(await guestEval('window.rocketArena.cars[1].model'),'fennec');
     assert.deepEqual(await evalJS('window.rocketArena.cars.map(c=>({ai:c.ai,name:c.displayName}))'),[{ai:false,name:'HOST'},{ai:false,name:'FRIEND'}]);
+    const choices=[{name:'HOST',car:'scorpion',colour:'#42cafe',explosion:'fire',anthem:'rap'},
+      {name:'FRIEND',car:'fennec',colour:'#f21a86',explosion:'galaxy',anthem:'grime'}];
+    for(const evaluate of [evalJS,guestEval]){
+      assert.deepEqual(await evaluate('window.rocketArena.cars.map(c=>c.cosmetics)'),choices,'Both clients must retain each player’s complete choices');
+      assert.deepEqual(await evaluate(`window.rocketArena.cars.map(c=>{const colours=[];c.mesh.detailedRoot.traverse(o=>{if(o.isMesh)for(const m of [o.material].flat())if(/paint/i.test(m.name))colours.push('#'+m.color.getHexString());});return colours.includes(c.cosmetics.colour);})`),[true,true],'Actual imported car materials must use each player’s paint');
+    }
     await eventually(()=>evalJS('window.rocketArena.state==="play"'),20000).catch(async e=>{throw Error(e.message+' '+await evalJS('JSON.stringify({state:window.rocketArena.state,status:window.rocketArena.onlineStatus})')+' ERRORS '+JSON.stringify(errors));});
     await eventually(()=>guestEval('window.rocketArena.state==="play"'),20000);
     const z=await evalJS('window.rocketArena.cars[1].z');
@@ -152,9 +160,25 @@ async function main() {
     await evalJS('Object.assign(window.rocketArena.ball,{x:0,y:2,z:105,vx:0,vy:0,vz:32})');
     await eventually(()=>guestEval('window.rocketArena.score[0]===1'),10000);
     assert.equal(await evalJS('window.rocketArena.score[0]'),1);
+    for(const evaluate of [evalJS,guestEval])await eventually(async()=>{
+      const choice=await evaluate('window.__onlineCelebration()');return choice.style==='fire'&&choice.track==='rap';
+    });
     await eventually(()=>guestEval('window.rocketArena.state==="replay"'),15000);
     await guestEval("document.getElementById('skipReplayButton').click()");
     await eventually(()=>evalJS('window.rocketArena.state==="kick"||window.rocketArena.state==="play"'),10000);
+    await eventually(()=>evalJS('window.rocketArena.state==="play"'),10000);
+    await evalJS('Object.assign(window.rocketArena.ball,{x:0,y:2,z:-105,vx:0,vy:0,vz:-32})');
+    await eventually(()=>guestEval('window.rocketArena.score[1]===1'),10000);
+    for(const evaluate of [evalJS,guestEval])await eventually(async()=>{
+      const choice=await evaluate('window.__onlineCelebration()');return choice.style==='galaxy'&&choice.track==='grime';
+    });
+    assert.deepEqual(await evalJS('window.__onlineCelebration()'),{style:'galaxy',track:'grime',ownStyle:'fire',ownTrack:'rap'},'A friend’s goal must not overwrite the host’s garage');
+    assert.deepEqual(await guestEval('window.__onlineCelebration()'),{style:'galaxy',track:'grime',ownStyle:'galaxy',ownTrack:'grime'});
+    await eventually(()=>guestEval('window.rocketArena.state==="replay"'),15000);
+    await guestEval("document.querySelector('[data-replay-camera=car]').click()");
+    assert.equal(await guestEval('window.rocketArena.cameraView.replayMode'),'car');
+    assert.equal(await evalJS('window.rocketArena.cameraView.replayMode'),'ball','Online replay cameras must be an individual choice');
+    await guestEval("document.getElementById('skipReplayButton').click()");
     await eventually(()=>evalJS('window.rocketArena.state==="play"'),10000);
     await evalJS('window.__onlineEnd()');
     await eventually(()=>guestEval('window.rocketArena.state==="over"'),10000);

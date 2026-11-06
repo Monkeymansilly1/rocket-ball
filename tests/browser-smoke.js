@@ -165,6 +165,7 @@ async function main() {
     await evalJS('document.getElementById("returnGoalPreview").click()');
     assert.equal(await evalJS('document.body.classList.contains("preview-fullscreen")'),false);
     assert.deepEqual(await evalJS('Array.from(document.querySelectorAll("[data-anthem]")).map(b=>b.dataset.anthem)'),['dnb','grime','rap','off']);
+    assert.equal(await evalJS('Array.from(document.querySelectorAll("[data-anthem] strong,[data-anthem] small")).every(el=>getComputedStyle(el).color==="rgb(255, 255, 255)")'),true,'Song choices must have white text in every selection state');
     const anthemAudio=await evalJS(`(async()=>{
       const context=new OfflineAudioContext(2,44100,44100),result={};
       for(const [name,track] of Object.entries(RocketGoalAnthems.TRACKS)){
@@ -205,6 +206,13 @@ async function main() {
       return effect.signature.join(',');
     })`);
     assert.equal(new Set(signatures).size,8,'Selections must use eight different 3D models');
+    for(const style of ['fire','blackhole']){
+      await evalJS(`document.querySelector('[data-effect="${style}"]').click();document.getElementById('fullGoalPreview').click()`);
+      await delay(1000);
+      const picture=await call('Page.captureScreenshot',{format:'png'});
+      fs.writeFileSync(path.join(os.tmpdir(),'rocket-upgraded-'+style+'.png'),Buffer.from(picture.data,'base64'));
+      await evalJS('document.getElementById("returnGoalPreview").click()');
+    }
     assert.equal(await evalJS('window.rocketArena.pitch.material.map.encoding===THREE.sRGBEncoding'),true,
       'Pitch texture must use the colour API supported by bundled Three.js');
     assert.equal(await evalJS('window.rocketArena.ballShadow.isMesh'),true);
@@ -478,11 +486,18 @@ async function main() {
     assert(Math.abs(goalSpeed-35.8)<.2,'Goal speed must use the 32-world-unit ball velocity, not the car speed');
     assert.equal(matchGoal.speedText, 'GOAL SPEED · '+goalSpeed.toFixed(1)+' MPH');
     const goalClock=matchGoal.clock;
-    const replayView=await eventually(()=>evalJS(`(()=>{const a=window.rocketArena;return a.state==='replay'&&a.replayStatus.elapsed>0?{view:a.cameraView,ball:{x:a.ball.x,y:a.ball.y,z:a.ball.z},clock:document.getElementById('clock').textContent}:null;})()`),15000);
+    const replayView=await eventually(()=>evalJS(`(()=>{const a=window.rocketArena;if(a.state!=='replay'||a.replayStatus.elapsed<=0||!a.anthemStatus.playing)return null;const result={view:a.cameraView,ball:{x:a.ball.x,y:a.ball.y,z:a.ball.z},clock:document.getElementById('clock').textContent};for(const type of ['keydown','keyup'])window.dispatchEvent(new KeyboardEvent(type,{code:'KeyP',bubbles:true}));return result;})()`),15000);
     assert.deepEqual(replayView.view.target,[replayView.ball.x,replayView.ball.y,replayView.ball.z],
       'Actual goal replay must track the ball, independently of the scorer');
     assert.equal(replayView.view.verticalFov,87,'Replay must use the saved FOV');
+    assert.equal(await evalJS('getComputedStyle(document.getElementById("replayControls")).display'), 'flex','Replay camera choice must be visible');
+    await evalJS('document.querySelector("[data-replay-camera=car]").click()');
+    const carReplay=await eventually(()=>evalJS(`(()=>{const a=window.rocketArena;return a.cameraView.replayMode==='car'&&a.cameraView.target.some((v,i)=>Math.abs(v-[a.ball.x,a.ball.y,a.ball.z][i])>.1)?a.cameraView:null;})()`));
+    assert.equal(carReplay.verticalFov,87,'Car replay view must preserve FOV');
+    await evalJS('document.querySelector("[data-replay-camera=ball]").click()');
+    await eventually(()=>evalJS(`(()=>{const a=window.rocketArena;return a.cameraView.target.every((v,i)=>v===[a.ball.x,a.ball.y,a.ball.z][i]);})()`));
     assert.equal(replayView.clock,goalClock,'Match clock must stay frozen through the replay');
+    await evalJS(`for(const type of ['keydown','keyup'])window.dispatchEvent(new KeyboardEvent(type,{code:'KeyP',bubbles:true}))`);
     await eventually(()=>evalJS('window.rocketArena.anthemStatus.playing&&window.rocketArena.anthemStatus.mode==="replay"'),10000);
     await eventually(()=>evalJS('window.__testAnthemRms()>.003'),5000);
     assert.equal(await evalJS('window.rocketArena.anthemStatus.track'),'rap');
@@ -495,8 +510,10 @@ async function main() {
     await eventually(()=>evalJS('window.rocketArena.state==="kick" || window.rocketArena.state==="play"'),10000);
     assert.equal(await evalJS('Math.abs(window.rocketArena.ball.z)<1'),true,'Skipping replay must restore kickoff instead of leaving the scored ball in the goal');
     assert.equal(await evalJS('window.rocketArena.cameraView.ballCam'),false,'Ball-follow replay must preserve the live camera toggle');
-    await eventually(()=>evalJS('!window.rocketArena.anthemStatus.playing'));
-    assert.equal(await evalJS('window.rocketArena.anthemStatus.starts'),anthemStartsBeforeGoal+1,'Skipping must stop the anthem without restarting it');
+    await eventually(()=>evalJS('window.rocketArena.anthemStatus.fading&&window.rocketArena.anthemStatus.playing'));
+    await eventually(()=>evalJS('window.__testAnthemRms()>.0003'));
+    await eventually(()=>evalJS('!window.rocketArena.anthemStatus.playing'),22000);
+    assert.equal(await evalJS('window.rocketArena.anthemStatus.starts'),anthemStartsBeforeGoal+1,'Skipping must finish the anthem without restarting it');
     await evalJS('document.getElementById("quickPlayButton").click()');
     assert.equal(await evalJS('window.rocketArena.state'),'menu');
     await evalJS('document.getElementById("quickCasual").click()');

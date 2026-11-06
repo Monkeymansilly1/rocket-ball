@@ -76,6 +76,8 @@ const TEAM_COLOR_PRESETS = {
 let BLUE = 0x2fb8ff, ORANGE = 0xff8a1f;
 let gameVolume = 0.75, colourVisionMode = 'normal', controllerDeadZone = 0.12;
 let anthemSelection='dnb',anthemVolume=.55;
+let replayCameraMode='ball';
+try{const saved=localStorage.getItem('rocketArenaReplayCameraV1');if(['car','ball'].includes(saved))replayCameraMode=saved;}catch(_){}
 try{
   const saved=JSON.parse(localStorage.getItem('rocketArenaAnthemV1')||'{}');
   if(saved.track==='off'||RocketGoalAnthems.TRACKS[saved.track])anthemSelection=saved.track;
@@ -1286,8 +1288,8 @@ function makeDetailedCar(car) {
   const asset = car && carModelAssets[car.model];
   if (!asset?.template || car.mesh.assetTemplate===asset.template) return;
   const m = car.mesh, model = asset.template.clone(true);
-  const col = onlineMode || car.ai ? (car.team ? hexCss(ORANGE) : hexCss(BLUE)) :
-    car.team ? (localTwoPlayer && !car.ai ? player2Paint : hexCss(ORANGE)) : playerPaint;
+  const col = car.paintColour || (onlineMode || car.ai ? (car.team ? hexCss(ORANGE) : hexCss(BLUE)) :
+    car.team ? (localTwoPlayer && !car.ai ? player2Paint : hexCss(ORANGE)) : playerPaint);
   const paint = new THREE.Color(col);
   const wheelNodes = [];
   model.traverse(object => {
@@ -1638,11 +1640,13 @@ try {
   const saved=JSON.parse(localStorage.getItem('rocketArenaGarageV1')||'{}');
   if(CAR_MODELS.some(car=>car.name===saved.p1))playerCarModel=saved.p1;
   if(CAR_MODELS.some(car=>car.name===saved.p2))player2CarModel=saved.p2;
+  if(typeof saved.p1Colour==='string'&&/^#[0-9a-f]{6}$/i.test(saved.p1Colour)){playerPaint=saved.p1Colour;playerPaintCustom=true;}
+  if(typeof saved.p2Colour==='string'&&/^#[0-9a-f]{6}$/i.test(saved.p2Colour)){player2Paint=saved.p2Colour;player2PaintCustom=true;}
   const requested=new URLSearchParams(location.search).get('car');
   if(CAR_MODELS.some(car=>car.name===requested))playerCarModel=requested;
 }catch(_){}
 function saveGarageSelection(){
-  try{localStorage.setItem('rocketArenaGarageV1',JSON.stringify({p1:playerCarModel,p2:player2CarModel}));}catch(_){}
+  try{localStorage.setItem('rocketArenaGarageV1',JSON.stringify({p1:playerCarModel,p2:player2CarModel,p1Colour:playerPaint,p2Colour:player2Paint}));}catch(_){}
 }
 for(const button of document.querySelectorAll('[data-car]'))button.classList.toggle('on',button.dataset.car===playerCarModel);
 for(const button of document.querySelectorAll('[data-car2]'))button.classList.toggle('on',button.dataset.car2===player2CarModel);
@@ -1654,6 +1658,7 @@ let onlineMode=null,onlineStarting=false,onlineBackgroundFrame=null;
 const nextoAI=new RocketNexto.Controller(updateNextoStatus);
 let nextoObservationTime=0,nextoLastObservation=0;
 let goalExplosionStyle = 'classic';
+let activeGoalExplosionStyle = 'classic';
 try {
   const previous=localStorage.getItem('rocketArenaExplosionV1');
   if(['classic','fire','galaxy','lightning','blackhole','supernova','pixel','aurora'].includes(previous))
@@ -1708,12 +1713,13 @@ const SKILL = [
   { thr: 0.85, boost: true, steer: 3, cap: 0.82, wait: 0.8, sloppy: 4, flip: 0.4, aerial: false, drift: false },
   { thr: 1, boost: true, steer: 4, cap: 1, wait: 0.25, sloppy: 1.2, flip: 0.9, aerial: true, drift: true },
   { thr: 1, boost: true, steer: 4, cap: 1, wait: 0, sloppy: 0, flip: 1, aerial: true, drift: true }];
-function mkCar(team, k, ai, modelName) {
+function mkCar(team, k, ai, modelName,colourOverride) {
   const model = CAR_MODELS.some(m => m.name === modelName) ? modelName : CAR_MODELS[k % CAR_MODELS.length].name;
-  const col = new THREE.Color(onlineMode ? (team ? ORANGE : BLUE) : !ai && k === 0 ? (team ? player2Paint : playerPaint) : (team ? ORANGE : BLUE)).offsetHSL(0, 0, -0.09 * k);
+  const col = new THREE.Color(colourOverride || (onlineMode ? (team ? ORANGE : BLUE) : !ai && k === 0 ? (team ? player2Paint : playerPaint) : (team ? ORANGE : BLUE))).offsetHSL(0, 0, -0.09 * k);
   const car = { team, k, x: 0, y: 0.55, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, pitch: 0, roll: 0, airQuat: null, airOmega: null, surfaceQuat: null, surfaceNormal: null, surfaceForward: null, landingQuat:null, ceilingRide:false, wallRide: false, wallVerticalAxis: null, wallVerticalSign: 0, ai, aiCd: 0, boost: 34, jumps: 0, jt: 0, flip: 0, flipPitchScale: 1, aerialAssistDelay: 0, fx: 0, fz: 0, fl: 0, ground: true, demoTimer: 0, demoCooldown: 0, boostImpactTimer: 0 };
   car.mesh = carMesh(col, model);
   car.model = model;
+  car.paintColour = colourOverride || null;
   car.nexto=ai&&diff===3;
   car.displayName = ai ? (team ? 'ORANGE BOT ' : 'BLUE BOT ') + (k + 1) : playerName;
   // model-based properties
@@ -2207,6 +2213,14 @@ if (fullscreenToggle) fullscreenToggle.addEventListener('click', async () => {
   } catch (_) {}
 });
 const skipReplayButton = $('skipReplayButton');
+for(const button of document.querySelectorAll('[data-replay-camera]')){
+  button.setAttribute('aria-pressed',String(button.dataset.replayCamera===replayCameraMode));
+  button.addEventListener('click',()=>{
+    replayCameraMode=button.dataset.replayCamera;
+    try{localStorage.setItem('rocketArenaReplayCameraV1',replayCameraMode);}catch(_){}
+    for(const choice of document.querySelectorAll('[data-replay-camera]'))choice.setAttribute('aria-pressed',String(choice.dataset.replayCamera===replayCameraMode));
+  });
+}
 if (skipReplayButton) skipReplayButton.addEventListener('click', () => {
   if(state==='replay'&&onlineMode?.role==='guest')onlineRoom.send({type:'skip'});
   else if (state === 'replay') replayElapsed = RocketReplay.duration(replayFrames);
@@ -2472,9 +2486,11 @@ function updateGaragePreview() {
   $('previewHint').textContent='YOUR PAINT · '+playerPaint.toUpperCase();
 }
 const paintInput = $('paint');
-if (paintInput) paintInput.addEventListener('input', () => { playerPaint = paintInput.value || '#2fb8ff'; playerPaintCustom = true; updateGaragePreview(); if (state === 'menu' || state === 'over') { buildTeams(); kickoff(); } });
+if(paintInput)paintInput.value=playerPaint;
+if (paintInput) paintInput.addEventListener('input', () => { playerPaint = paintInput.value || '#2fb8ff'; playerPaintCustom = true;saveGarageSelection(); updateGaragePreview(); if (state === 'menu' || state === 'over') { buildTeams(); kickoff(); } });
 const paint2Input = $('paint2');
-if (paint2Input) paint2Input.addEventListener('input', () => { player2Paint = paint2Input.value || '#ff8a1f'; player2PaintCustom = true; if (state === 'menu' || state === 'over') { buildTeams(); kickoff(); } });
+if(paint2Input)paint2Input.value=player2Paint;
+if (paint2Input) paint2Input.addEventListener('input', () => { player2Paint = paint2Input.value || '#ff8a1f'; player2PaintCustom = true;saveGarageSelection(); if (state === 'menu' || state === 'over') { buildTeams(); kickoff(); } });
 updateGaragePreview();
 
 function saveAnthemSettings(){
@@ -3813,8 +3829,8 @@ let goalPreviewUntil = 0;
 let goalCameraView = null;
 function clearGoalEffect(effect) { goalEffects.remove(effect); }
 function tickGoalEffects(dt) { goalEffects.update(dt); }
-function goalExplosion(team, preview=false) {
-  const style=Object.hasOwn(GOAL_EFFECT_DATA,goalExplosionStyle)?goalExplosionStyle:'classic';
+function goalExplosion(team, preview=false,selectedStyle=goalExplosionStyle) {
+  const style=Object.hasOwn(GOAL_EFFECT_DATA,selectedStyle)?selectedStyle:'classic';
   const end=preview?1:(ball.z>=0?1:-1);
   // Anchor the whole celebration at the goal mouth, facing into the pitch.
   const position=new THREE.Vector3(preview?0:clamp(ball.x,-GW+3,GW-3),6,end*(HL-1));
@@ -3976,7 +3992,9 @@ function showGameEvent(label, color = '#fff') {
 }
 function goal(team, scoringVelocity=ball) {
   goalSpeedMph=RocketReplay.speedToMph(scoringVelocity,PHYSICS_TUNING.REFERENCE_SCALE);
-  replayAnthemToken++;replayAnthemTrack=anthemSelection;
+  const choices=onlineMode?cars.find(c=>c.team===team)?.cosmetics:null;
+  activeGoalExplosionStyle=choices?.explosion||goalExplosionStyle;
+  replayAnthemToken++;replayAnthemTrack=choices?.anthem||anthemSelection;
   if (trainingMode) {
     trainingGoals++;
     updateTrainingCounters();
@@ -3995,7 +4013,7 @@ function goal(team, scoringVelocity=ball) {
   if (assistIndex >= 0 && assistIndex !== scorerIndex && cars[assistIndex].team === team && playerStats[assistIndex]) playerStats[assistIndex].assists++;
   if (scorerIndex >= 0 && playerStats[scorerIndex]) playerStats[scorerIndex].shotsOnGoal++;
   state = 'goal';
-  cd = GOAL_EFFECT_DATA[goalExplosionStyle]?.duration || 4.3; // let the full 3D celebration play
+  cd = GOAL_EFFECT_DATA[activeGoalExplosionStyle]?.duration || 4.3; // let the full 3D celebration play
   // Keep ten seconds of live gameplay plus the frame in which the goal was scored.
   saveReplayFrame();
   replayFrames = replayHistory.slice(-301);
@@ -4020,7 +4038,7 @@ function goal(team, scoringVelocity=ball) {
   m.style.color = team ? '#ff8a1f' : '#2fb8ff';
 
   // fireworks + explosion
-  goalExplosion(team);
+  goalExplosion(team,false,activeGoalExplosionStyle);
   cheerMiniCrowd(team);
 
   // The selected 3D celebration owns its particles; no generic burst obscures it.
@@ -4236,12 +4254,16 @@ function updateCam(dt, carIndex=0, targetCamera=camera, camState=cam) {
 }
 function updateReplayCam(dt,targetCamera=camera,camState=cam) {
   // Each goal gets its own orbit, including guest replays received by snapshot.
-  if(!camState.replay||camState.replay.id!==replayAnthemToken)camState.replay={id:replayAnthemToken};
-  const result=RocketReplay.updateCamera(camState.replay,{ball,settings:cameraSettings,dt,
-    forwardZ:cars[replayCameraCarIndex]?.team?-1:1,heightAt:(x,z)=>arenaRampAt(x,z).height});
+  if(!camState.replay||camState.replay.id!==replayAnthemToken||camState.replay.mode!==replayCameraMode)
+    camState.replay={id:replayAnthemToken,mode:replayCameraMode};
+  const car=cars[replayCameraCarIndex]||cars[0],heightAt=(x,z)=>arenaRampAt(x,z).height;
+  const result=replayCameraMode==='car'&&car?
+    RocketBallCamera.update(camState.replay,{car,ball,forward:getCarForward(car),settings:cameraSettings,
+      ballCam:false,aspect:targetCamera.aspect,dt,heightAt}):
+    RocketReplay.updateCamera(camState.replay,{ball,settings:cameraSettings,dt,forwardZ:car?.team?-1:1,heightAt});
   targetCamera.position.set(result.position.x,result.position.y,result.position.z);
   targetCamera.up.set(0,1,0);targetCamera.lookAt(result.target.x,result.target.y,result.target.z);
-  targetCamera.fov=result.fov;targetCamera.updateProjectionMatrix();
+  targetCamera.fov=cameraSettings.fov;targetCamera.updateProjectionMatrix();
   camShakeTime=Math.max(0,camShakeTime-dt);
   Object.assign(camState,{x:result.position.x,y:result.position.y,z:result.position.z,lx:result.target.x,ly:result.target.y,lz:result.target.z});
   sun.position.set(ball.x+30,80,ball.z+25);sun.target.position.set(ball.x,0,ball.z);sun.target.updateMatrixWorld();
@@ -4250,6 +4272,7 @@ function updateReplayCam(dt,targetCamera=camera,camState=cam) {
 function render(dt) {
   document.body.classList.toggle('in-menu',state==='menu');
   document.body.classList.toggle('goal-celebration',state==='goal');
+  document.body.classList.toggle('replay-active',state==='replay');
   document.body.classList.toggle('local-two-enabled',localTwoPlayer);
   if(state==='replay'&&onlineMode?.role!=='guest')applyReplayFrame(RocketReplay.sample(replayFrames,replayElapsed));
   for (const c of cars) {
@@ -4290,7 +4313,7 @@ function render(dt) {
   sfx.update(cars[localCarIndex], state === 'play' || state === 'replay');
   const splitActive = !trainingMode && localTwoPlayer && state !== 'menu' && state !== 'over';
   document.body.classList.toggle('split-screen', splitActive);
-  // Replays follow the recorded ball independently of the live ball-cam toggle.
+  // Replay camera choice is independent of the live ball-cam toggle.
   if (state === 'menu') {
     const preview=cars[0];
     const showingGoal=performance.now()<goalPreviewUntil;
@@ -4406,7 +4429,7 @@ const onlineRoom=new RocketRooms.Room({
  },
  onClose(message){leaveOnline(message);$('onlineStatus').dataset.state='error';}
 });
-function localOnlineProfile(){return {name:$('name').value,car:playerCarModel};}
+function localOnlineProfile(){return {name:$('name').value,car:playerCarModel,colour:playerPaint,explosion:goalExplosionStyle,anthem:anthemSelection};}
 function unlockOnlineAudio(){try{sfx.init();}catch(_){/* Audio failure must not prevent a player joining. */}}
 $('onlineCreate').addEventListener('click',()=>{unlockOnlineAudio();onlineRoom.create(localOnlineProfile());});
 $('onlineJoin').addEventListener('click',()=>{unlockOnlineAudio();onlineRoom.join($('onlineCode').value,localOnlineProfile());});
@@ -4433,7 +4456,7 @@ function beginOnlineMatch(session){
  try{start(false);}finally{onlineStarting=false;}
  const profiles=session.role==='host'?[session.local,session.remote]:[session.remote,session.local];
  for(const c of cars)scene.remove(c.mesh.root);
- cars=profiles.map((p,i)=>{const c=mkCar(i,0,false,p.car);c.displayName=p.name;c.nexto=false;return c;});
+ cars=profiles.map((p,i)=>{const c=mkCar(i,0,false,p.car,p.colour);c.displayName=p.name;c.cosmetics={...p};c.nexto=false;return c;});
  playerName=profiles[0].name;player2Name=profiles[1].name;
  kickoff();state='kick';cd=3;replayCameraCarIndex=0;onlineSnapshot=null;onlineInputSeq=-1;onlineRemoteInput={};onlineSendTime=0;
  $('onlineMatchBar').hidden=false;$('onlineMatchLabel').textContent='ROOM '+onlineRoom.code+' · '+(session.role==='host'?'BLUE':'ORANGE');
@@ -4479,7 +4502,7 @@ function sendOnlineSnapshot(dt){
  onlineSendTime+=dt;if(onlineSendTime<1/30)return;onlineSendTime=0;
  if(state==='menu'){leaveOnline('You left the match.');return;}
  onlineRoom.send({type:'snapshot',state,score:[...score],clock,cd,ot,ball:{...ball,q:ball.q||[0,0,0,1]},cars:cars.map(onlineMotion),pads:pads.map(p=>p.t),
-  anthem:replayAnthemToken,track:replayAnthemTrack,style:goalExplosionStyle,speed:goalSpeedMph,scorer:replayCameraCarIndex,scorerName:goalScorerText,elapsed:replayElapsed,stats:playerStats,
+  anthem:replayAnthemToken,track:replayAnthemTrack,style:activeGoalExplosionStyle,speed:goalSpeedMph,scorer:replayCameraCarIndex,scorerName:goalScorerText,elapsed:replayElapsed,stats:playerStats,
   message:$('msg').textContent});
 }
 function onlineFrame(dt){
@@ -4504,11 +4527,11 @@ function onlineFrame(dt){
  ball.q=[...p.ball.q];pads.forEach((pad,i)=>pad.t=p.pads[i]);
  goalSpeedMph=p.speed;goalScorerText=String(p.scorerName||'PLAYER').slice(0,12);replayCameraCarIndex=p.scorer;
  replayAnthemToken=p.anthem;replayAnthemTrack=RocketGoalAnthems.TRACKS[p.track]?p.track:'off';
- if(Object.hasOwn(GOAL_EFFECT_DATA,p.style))goalExplosionStyle=p.style;
+ if(Object.hasOwn(GOAL_EFFECT_DATA,p.style))activeGoalExplosionStyle=p.style;
  $('msg').textContent=String(p.message||'').slice(0,100);$('msg').classList.toggle('replay-title',state==='replay');
  $('goalBy').textContent=['goal','replay'].includes(state)?'Goal by '+goalScorerText+'!!!':'';
  $('goalSpeed').textContent=['goal','replay'].includes(state)?'GOAL SPEED · '+goalSpeedMph.toFixed(1)+' MPH':'';
- if(snap&&state==='goal'){goalExplosion(score[0]>onlineMode.lastBlue?0:1);cheerMiniCrowd(score[0]>onlineMode.lastBlue?0:1);}
+ if(snap&&state==='goal'){goalExplosion(score[0]>onlineMode.lastBlue?0:1,false,activeGoalExplosionStyle);cheerMiniCrowd(score[0]>onlineMode.lastBlue?0:1);}
  onlineMode.lastBlue=score[0];
  if(state==='over')showVictoryScreen();
 }
@@ -4535,7 +4558,7 @@ window.rocketArena = {
   get anthemStatus(){return goalAnthems.status;},
   get audioStatus(){return {state:carAudio.ac?.state||'uninitialised',engineGain:carAudio.engineGain?.gain.value||0,boostGain:carAudio.boostGain?.gain.value||0};},
   get goalSpeedMph(){return goalSpeedMph;},
-  get cameraView(){return {position:camera.position.toArray(),target:[cam.lx,cam.ly,cam.lz],verticalFov:camera.fov,configuredFov:cameraSettings.fov,ballCam};},
+  get cameraView(){return {position:camera.position.toArray(),target:[cam.lx,cam.ly,cam.lz],verticalFov:camera.fov,configuredFov:cameraSettings.fov,ballCam,replayMode:replayCameraMode};},
   get renderStats() { return {calls:renderer.info.render.calls,triangles:renderer.info.render.triangles,geometries:renderer.info.memory.geometries,textures:renderer.info.memory.textures}; },
   get ballShadow() { return ballGroundShadow; },
   get ballTrail() { return ballTrail; },
