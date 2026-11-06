@@ -57,3 +57,50 @@ assert.equal(updateHarness.length,61,'Two simulation seconds must produce 60 uni
 assert(Math.abs(Replay.duration(updateHarness)-2)<1e-9);
 assert(Math.abs(updateHarness.at(-1).cars[0].x-2)<1e-9);
 console.log('PASS: physics-timed replay capture, interpolation, wall/ceiling orientation, bounded history, respawns and accurate 3D scoring-line speed');
+
+// Replay framing is anchored to the ball, even while the scorer stays behind.
+const settings={fov:87,distance:5.6,height:1.8};
+const replayCamera=new THREE.PerspectiveCamera(settings.fov,16/9,.5,2000),cameraState={};
+for(const frame of [
+  {x:0,y:2,z:-40,vx:0,vy:0,vz:70},
+  {x:0,y:2,z:-10,vx:0,vy:0,vz:70},
+  {x:10,y:30,z:20,vx:25,vy:20,vz:60},
+  {x:65,y:42,z:85,vx:25,vy:0,vz:60},
+  {x:74,y:7,z:98,vx:-30,vy:-15,vz:-40},
+  {x:0,y:3,z:112,vx:0,vy:0,vz:40},
+  {x:0,y:2,z:0,vx:0,vy:0,vz:0}
+]){
+  const view=Replay.updateCamera(cameraState,{ball:frame,settings,dt:1/60,heightAt:()=>5.12});
+  assert.deepEqual(view.target,{x:frame.x,y:frame.y,z:frame.z},'Replay must aim at the recorded ball itself');
+  assert.equal(view.fov,87,'Replay must preserve the saved FOV');
+  assert(view.position.y>=6.12&&view.position.y<=43,'Replay camera must stay above ramps and below the ceiling');
+  assert(Math.abs(view.position.x)<=79&&Math.abs(view.position.z)<=103,'Replay camera must stay inside the stands');
+  replayCamera.position.set(view.position.x,view.position.y,view.position.z);
+  replayCamera.lookAt(view.target.x,view.target.y,view.target.z);replayCamera.updateMatrixWorld();
+  const projected=new THREE.Vector3(frame.x,frame.y,frame.z).project(replayCamera);
+  assert(Math.abs(projected.x)<1e-9&&Math.abs(projected.y)<1e-9,'The ball must remain at the centre of the replay image');
+}
+const track={},moving={x:0,y:2,z:0,vx:0,vy:0,vz:70};
+const start=Replay.updateCamera(track,{ball:moving,settings,dt:1/120});
+moving.z=30;
+const end=Replay.updateCamera(track,{ball:moving,settings,dt:1/120});
+assert(Math.abs(end.position.z-start.position.z-30)<1e-9,'Fast shots must not outrun the replay camera');
+const heading=track.heading;moving.vz=-70;
+Replay.updateCamera(track,{ball:moving,settings,dt:1/120});
+assert(Math.abs(track.heading-heading)<=1.8/120+1e-9,'A rebound must not snap the camera through 180 degrees');
+const camera=new THREE.PerspectiveCamera(),cam={},sun={position:new THREE.Vector3(),target:{position:new THREE.Vector3(),updateMatrixWorld(){}}};
+const wireReplayCamera=new Function('RocketReplay','camera','cam','ball','cameraSettings','cars','sun',`
+  let replayAnthemToken=1,replayCameraCarIndex=0,camShakeTime=0;const arenaRampAt=()=>({height:0});
+  ${extract('updateReplayCam')}
+  return {step:updateReplayCam,next:()=>replayAnthemToken++};
+`)(Replay,camera,cam,moving,settings,[{team:0,x:-70,z:-90}],sun);
+wireReplayCamera.step(1/60);
+assert.deepEqual([cam.lx,cam.ly,cam.lz],[moving.x,moving.y,moving.z],'The live replay camera must follow the ball instead of the scorer');
+assert.equal(camera.fov,87);
+wireReplayCamera.next();moving.vz=70;wireReplayCamera.step(1/60);
+assert(Math.abs(Math.abs(cam.replay.heading)-Math.PI)<1e-9,'A new replay must reset its orbit from the new ball trajectory');
+const secondCamera=new THREE.PerspectiveCamera(),secondState={};
+wireReplayCamera.step(1/60,secondCamera,secondState);
+assert.deepEqual([secondState.lx,secondState.ly,secondState.lz],[moving.x,moving.y,moving.z],
+  'The second split-screen view must also follow the ball');
+console.log('PASS: centred ball-follow replay camera, high shots, fast shots, rebounds, arena bounds, replay resets and saved FOV');

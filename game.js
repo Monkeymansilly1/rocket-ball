@@ -4008,8 +4008,8 @@ function goal(team, scoringVelocity=ball) {
   if (goalByEl) goalByEl.textContent = 'Goal by ' + goalScorerText + '!!!';
   const goalSpeedEl = $('goalSpeed');
   if (goalSpeedEl) goalSpeedEl.textContent = 'GOAL SPEED · ' + goalSpeedMph.toFixed(1) + ' MPH';
-  // Only trust lastTouch when it belongs to the team that was awarded the goal.
-  // Otherwise follow the first car on the scoring team, never default to P1.
+  // Keep the scoring team's replay attribution and initial viewing direction,
+  // including own goals where lastTouch belongs to the opposing team.
   replayCameraCarIndex = lastTouch && lastTouch.team === team
     ? cars.indexOf(lastTouch)
     : cars.findIndex(c => c.team === team);
@@ -4073,18 +4073,9 @@ function update(dt) {
         replayElapsed = 0;
         applyReplayFrame(RocketReplay.sample(replayFrames,0));
         resetBallTrail();
-        // Snap the replay camera behind the selected scorer immediately; don't
-        // let the previous player's camera position linger into the replay.
-        const scorer = cars[replayCameraCarIndex] || cars[0];
-        const backX = -Math.sin(scorer.yaw), backZ = -Math.cos(scorer.yaw);
+        // The first replay frame starts with a fresh ball-follow camera.
         for (const camState of [cam, ...(localTwoPlayer ? [cam2] : [])]) {
-          delete camState.heading;delete camState.offset;delete camState.direction;
-          camState.x = scorer.x + backX * 11;
-          camState.y = clamp(scorer.y + 4.6, 2, CEIL - 1);
-          camState.z = scorer.z + backZ * 11;
-          camState.lx = scorer.x - backX * 9;
-          camState.ly = 1.5;
-          camState.lz = scorer.z - backZ * 9;
+          delete camState.replay;
         }
         const m = $('msg'); if (m) { m.textContent = 'GOAL REPLAY'; m.style.color = '#fff'; m.classList.add('replay-title'); }
         const goalByEl = $('goalBy'); if (goalByEl) goalByEl.textContent = 'Goal by ' + goalScorerText + '!!!';
@@ -4223,6 +4214,9 @@ const cam = { x: 0, y: 6, z: -60, lx: 0, ly: 2, lz: 0 };
 const cam2 = { x: 0, y: 6, z: 60, lx: 0, ly: 2, lz: 0 };
 const axis = new THREE.Vector3();
 function updateCam(dt, carIndex=0, targetCamera=camera, camState=cam) {
+  if(camState.replay){
+    delete camState.replay;delete camState.heading;delete camState.offset;delete camState.direction;
+  }
   const car=cars[carIndex]||cars[0];if(!car)return;
   const pad=controllerForPlayer(localTwoPlayer&&carIndex===mode?'p2':'p1');
   const stick=raw=>{if(!Number.isFinite(raw))return 0;const magnitude=Math.abs(clamp(raw,-1,1));return magnitude<=controllerDeadZone?0:Math.sign(raw)*(magnitude-controllerDeadZone)/(1-controllerDeadZone);};
@@ -4239,6 +4233,18 @@ function updateCam(dt, carIndex=0, targetCamera=camera, camState=cam) {
   // Retain compatibility with the replay camera reset/debug state.
   Object.assign(camState,{x:result.position.x,y:result.position.y,z:result.position.z,lx:result.target.x,ly:result.target.y,lz:result.target.z});
   sun.position.set(car.x+30,80,car.z+25);sun.target.position.set(car.x,0,car.z);sun.target.updateMatrixWorld();
+}
+function updateReplayCam(dt,targetCamera=camera,camState=cam) {
+  // Each goal gets its own orbit, including guest replays received by snapshot.
+  if(!camState.replay||camState.replay.id!==replayAnthemToken)camState.replay={id:replayAnthemToken};
+  const result=RocketReplay.updateCamera(camState.replay,{ball,settings:cameraSettings,dt,
+    forwardZ:cars[replayCameraCarIndex]?.team?-1:1,heightAt:(x,z)=>arenaRampAt(x,z).height});
+  targetCamera.position.set(result.position.x,result.position.y,result.position.z);
+  targetCamera.up.set(0,1,0);targetCamera.lookAt(result.target.x,result.target.y,result.target.z);
+  targetCamera.fov=result.fov;targetCamera.updateProjectionMatrix();
+  camShakeTime=Math.max(0,camShakeTime-dt);
+  Object.assign(camState,{x:result.position.x,y:result.position.y,z:result.position.z,lx:result.target.x,ly:result.target.y,lz:result.target.z});
+  sun.position.set(ball.x+30,80,ball.z+25);sun.target.position.set(ball.x,0,ball.z);sun.target.updateMatrixWorld();
 }
 
 function render(dt) {
@@ -4284,7 +4290,7 @@ function render(dt) {
   sfx.update(cars[localCarIndex], state === 'play' || state === 'replay');
   const splitActive = !trainingMode && localTwoPlayer && state !== 'menu' && state !== 'over';
   document.body.classList.toggle('split-screen', splitActive);
-  // During a replay, follow the player who scored instead of always following P1.
+  // Replays follow the recorded ball independently of the live ball-cam toggle.
   if (state === 'menu') {
     const preview=cars[0];
     const showingGoal=performance.now()<goalPreviewUntil;
@@ -4328,8 +4334,13 @@ function render(dt) {
   } else {
     camera.clearViewOffset();
     cars.forEach(c => { c.mesh.root.visible = c.demoTimer <= 0; }); ballMesh.visible = true;
-    updateCam(dt, state === 'replay' ? replayCameraCarIndex : localCarIndex);
-    if (splitActive) updateCam(dt, state === 'replay' ? replayCameraCarIndex : mode, camera2, cam2);
+    if(state==='replay'){
+      updateReplayCam(dt);
+      if(splitActive)updateReplayCam(dt,camera2,cam2);
+    }else{
+      updateCam(dt,localCarIndex);
+      if(splitActive)updateCam(dt,mode,camera2,cam2);
+    }
   }
   $('s0').textContent = score[0]; $('s1').textContent = score[1];
   const s = Math.ceil(clock); $('clock').textContent = trainingMode ? 'FREE PLAY' : ot ? 'OT' : Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
