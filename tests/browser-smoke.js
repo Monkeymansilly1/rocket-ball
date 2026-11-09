@@ -164,7 +164,7 @@ async function main() {
     assert.equal(await evalJS('document.body.classList.contains("preview-fullscreen")'),true);
     await evalJS('document.getElementById("returnGoalPreview").click()');
     assert.equal(await evalJS('document.body.classList.contains("preview-fullscreen")'),false);
-    assert.deepEqual(await evalJS('Array.from(document.querySelectorAll("[data-anthem]")).map(b=>b.dataset.anthem)'),['dnb','grime','rap','off']);
+    assert.deepEqual(await evalJS('Array.from(document.querySelectorAll("[data-anthem]")).map(b=>b.dataset.anthem)'),['dnb','grime','rap','dubstep','off']);
     assert.equal(await evalJS('Array.from(document.querySelectorAll("[data-anthem] strong,[data-anthem] small")).every(el=>getComputedStyle(el).color==="rgb(255, 255, 255)")'),true,'Song choices must have white text in every selection state');
     const anthemAudio=await evalJS(`(async()=>{
       const context=new OfflineAudioContext(2,44100,44100),result={};
@@ -177,7 +177,7 @@ async function main() {
       return result;
     })()`);
     for(const [name,track] of Object.entries(anthemAudio))assert(track.duration>10&&track.duration<20&&track.channels===2&&track.peak<.96&&track.rms>.03,'Invalid/inaudible anthem: '+name+' '+JSON.stringify(track));
-    for(const name of ['dnb','grime','rap']){
+    for(const name of ['dnb','grime','rap','dubstep']){
       await evalJS(`document.querySelector('[data-anthem="${name}"]').click();document.getElementById('anthemPreview').click()`,true);
       await eventually(()=>evalJS(`window.rocketArena.anthemStatus.playing&&window.rocketArena.anthemStatus.track==='${name}'`),15000);
       await eventually(()=>evalJS('window.__testAnthemRms()>.003'),10000);
@@ -198,7 +198,7 @@ async function main() {
     assert.equal(await evalJS('document.getElementById("anthemPreview").disabled'),true);
     await evalJS(`document.querySelector('[data-anthem="rap"]').click();document.getElementById('settingAnthemVolume').value='35';document.getElementById('settingAnthemVolume').dispatchEvent(new Event('input',{bubbles:true}));`);
     assert.equal(await evalJS('window.rocketArena.anthemStatus.volume'),.35);
-    console.log('PASS: all three uploaded goal-song clips decode audibly, previews select correctly, Off and separate volume work.');
+    console.log('PASS: all uploaded goal-song clips decode audibly, previews select correctly, Off and separate volume work.');
     const signatures=await evalJS(`Object.keys(RocketGoalEffects.STYLES).map(style=>{
       document.querySelector('[data-effect="'+style+'"]').click();
       const effect=window.rocketArena.goalEffects[0];

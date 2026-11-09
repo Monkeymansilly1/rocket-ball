@@ -30,6 +30,17 @@ MP3 encoding. In-game replay-ending fades still run through the remaining clip.
 The uploaded tracks were provided for use in Rocket Ball; they are not covered
 by the synthesized-demo MIT grant below.
 
+## Dubstep Riddim — uploaded dubstep
+
+`dubstep.mp3` comes from the user-supplied file `Dubstepriddim.wav`.
+The full **12.806-second** recording is retained in stereo, with no tempo or
+pitch changes. An 8 ms fade-in and 180 ms ending fade prevent clicks. Two-pass
+loudness normalization matches the other songs at approximately -16 LUFS,
+with a -1.8 dBTP ceiling, before 44.1 kHz stereo MP3 encoding.
+
+This uploaded recording was provided for use in Rocket Ball and is not covered
+by the synthesized-demo MIT grant below.
+
 ## Original synthesized demos
 
 - **East Stand** — grime instrumental, 140 BPM.
@@ -41,6 +52,6 @@ No sampled songs, artists' recordings, Spotify audio or external audio were used
 for these synthesized clips. They are distributed under the project's MIT license.
 
 Render the original demos using Python, numpy, scipy and ffmpeg. The script
-writes `grime-demo.mp3` and `rap-demo.mp3`, preserving all three uploaded goal
+writes `grime-demo.mp3` and `rap-demo.mp3`, preserving the uploaded goal
 songs. Its optional `--track dnb` renders the former synthetic **Afterburn**
 jump-up demo to `afterburn-demo.mp3` instead.

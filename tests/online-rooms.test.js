@@ -25,7 +25,7 @@ const flush=async()=>{for(let i=0;i<4;i++)await new Promise(setImmediate);};
  let starts=0,received,ended='',status;const host=new Room({Peer,onStatus:s=>status=s,onStart:()=>starts++,onData:p=>received=p,onClose:m=>ended=m});
  const guest=new Room({Peer,onStart:()=>starts++});const third=new Room({Peer});
  try{
-  host.create({name:'Host',car:'scorpion',colour:'#42CAFE',explosion:'fire',anthem:'rap'});await flush();assert.equal(host.state,'waiting');assert(validCode(host.code));
+  host.create({name:'Host',car:'scorpion',colour:'#42CAFE',explosion:'fire',anthem:'dubstep'});await flush();assert.equal(host.state,'waiting');assert(validCode(host.code));
   const originalCode=host.code,originalPeer=host.peer;
   host.join('bad',{});assert.equal(status.code,originalCode,'An invalid join attempt must not hide the existing room code');
   host.join(originalCode.toLowerCase(),{});assert.equal(host.peer,originalPeer,'Joining your own code must preserve the hosting room');assert(status.message.includes('own room code'));
@@ -33,7 +33,7 @@ const flush=async()=>{for(let i=0;i<4;i++)await new Promise(setImmediate);};
   assert(guest.peer.clientAssignedId,'Joining must not depend on the public service HTTP player-ID endpoint');
   assert.equal(host.remote.car,'fennec');assert.equal(guest.remote.name,'Host');
   assert.deepEqual(host.remote,{name:'Friend',car:'fennec',colour:'#f21a86',explosion:'galaxy',anthem:'grime'});
-  assert.deepEqual(guest.remote,{name:'Host',car:'scorpion',colour:'#42cafe',explosion:'fire',anthem:'rap'});
+  assert.deepEqual(guest.remote,{name:'Host',car:'scorpion',colour:'#42cafe',explosion:'fire',anthem:'dubstep'});
   guest.send({type:'input',seq:1,controls:{throttle:1}});await flush();assert.equal(received.seq,1);
   third.join(host.code,{});await flush();assert.equal(third.state,'error');assert.equal(host.state,'connected','A third player must not replace either participant');
   guest.close();await flush();assert.equal(host.state,'error');assert(ended.includes('disconnected'));

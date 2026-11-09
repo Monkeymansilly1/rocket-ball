@@ -1,5 +1,5 @@
 """Render the original synthesized anthem demos.
-All three current goal songs are user-supplied and are never overwritten.
+User-supplied goal songs are never overwritten.
 Requires numpy, scipy and ffmpeg. No sampled songs or external audio are used.
 """
 from pathlib import Path

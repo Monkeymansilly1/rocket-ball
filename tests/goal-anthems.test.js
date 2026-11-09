@@ -28,8 +28,9 @@ function make(fetcher=async()=>response()){
  const context=new Context(),player=new Player({fetcher});player.init(context);return {player,context};
 }
 (async()=>{
- assert.deepEqual(Object.keys(TRACKS),['dnb','grime','rap']);
+ assert.deepEqual(Object.keys(TRACKS),['dnb','grime','rap','dubstep']);
  assert.equal(TRACKS.grime.title,'Iron Underpass');assert.equal(TRACKS.rap.title,'High Rise Solitude');
+ assert.equal(TRACKS.dubstep.title,'Dubstep Riddim');
  const interrupted=make();interrupted.context.state='interrupted';
  assert(await interrupted.player.play('dnb'));
  assert.equal(interrupted.context.state,'running','An interrupted browser audio context must be resumed before song playback');
@@ -107,5 +108,5 @@ function make(fetcher=async()=>response()){
  let attempts=0;const retry=make(async()=>{if(!attempts++)throw Error('network');return response();});
  assert.equal(await retry.player.play('grime'),false);assert.equal(retry.player.status.playing,false);
  assert.equal(await retry.player.play('grime'),true,'Failed clip downloads must be retryable');
- console.log('PASS: audible context state, gesture/interruption recovery, silent-volume feedback, Free Play goals, three genres, replay lifecycle and cancellation');
+ console.log('PASS: audible context state, gesture/interruption recovery, silent-volume feedback, Free Play goals, four genres, replay lifecycle and cancellation');
 })().catch(error=>{console.error(error);process.exitCode=1;});
