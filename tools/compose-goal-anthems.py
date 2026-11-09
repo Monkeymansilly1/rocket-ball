@@ -1,5 +1,5 @@
-"""Reproduce Rocket Ball's synthesized grime/rap clips or the former DNB demo.
-The current DNB is user-supplied and is never overwritten by this script.
+"""Render the original synthesized anthem demos.
+All three current goal songs are user-supplied and are never overwritten.
 Requires numpy, scipy and ffmpeg. No sampled songs or external audio are used.
 """
 from pathlib import Path
@@ -138,7 +138,7 @@ def compose(name,bpm,bars):
  with tempfile.NamedTemporaryFile(suffix='.wav') as temp:
   with wave.open(temp.name,'wb') as w:
    w.setnchannels(2);w.setsampwidth(2);w.setframerate(SR);w.writeframes((np.clip(mix,-1,1)*32767).astype('<i2').tobytes())
-  target=ROOT/'assets/anthems'/('afterburn-demo.mp3' if name=='dnb' else f'{name}.mp3')
+  target=ROOT/'assets/anthems'/('afterburn-demo.mp3' if name=='dnb' else f'{name}-demo.mp3')
   title='Afterburn (Jump Up)' if name=='dnb' else f'{name.upper()} Goal Anthem'
   subprocess.run(['ffmpeg','-hide_banner','-loglevel','error','-y','-i',temp.name,'-af','loudnorm=I=-16:TP=-1.5:LRA=8','-ar',str(SR),'-codec:a','libmp3lame','-q:a','3','-metadata',f'title={title}','-metadata','artist=Rocket Ball Originals',str(target)],check=True)
  print(name,bpm,'BPM',round(length,2),'seconds',target.stat().st_size,'bytes')

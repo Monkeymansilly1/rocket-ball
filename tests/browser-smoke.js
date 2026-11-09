@@ -198,7 +198,7 @@ async function main() {
     assert.equal(await evalJS('document.getElementById("anthemPreview").disabled'),true);
     await evalJS(`document.querySelector('[data-anthem="rap"]').click();document.getElementById('settingAnthemVolume').value='35';document.getElementById('settingAnthemVolume').dispatchEvent(new Event('input',{bubbles:true}));`);
     assert.equal(await evalJS('window.rocketArena.anthemStatus.volume'),.35);
-    console.log('PASS: uploaded DNB and synthesized grime/rap clips decode audibly, previews select correctly, Off and separate volume work.');
+    console.log('PASS: all three uploaded goal-song clips decode audibly, previews select correctly, Off and separate volume work.');
     const signatures=await evalJS(`Object.keys(RocketGoalEffects.STYLES).map(style=>{
       document.querySelector('[data-effect="'+style+'"]').click();
       const effect=window.rocketArena.goalEffects[0];

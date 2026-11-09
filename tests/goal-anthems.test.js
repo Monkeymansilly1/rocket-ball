@@ -28,7 +28,8 @@ function make(fetcher=async()=>response()){
  const context=new Context(),player=new Player({fetcher});player.init(context);return {player,context};
 }
 (async()=>{
- assert.deepEqual(Object.keys(TRACKS),['dnb','grime','rap']);assert.equal(TRACKS.rap.bpm,92);
+ assert.deepEqual(Object.keys(TRACKS),['dnb','grime','rap']);
+ assert.equal(TRACKS.grime.title,'Iron Underpass');assert.equal(TRACKS.rap.title,'High Rise Solitude');
  const interrupted=make();interrupted.context.state='interrupted';
  assert(await interrupted.player.play('dnb'));
  assert.equal(interrupted.context.state,'running','An interrupted browser audio context must be resumed before song playback');
