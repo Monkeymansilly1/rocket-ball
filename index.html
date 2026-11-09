@@ -9,6 +9,7 @@
 <link rel="apple-touch-icon" href="assets/branding/apple-touch-icon.png?v=1" sizes="180x180">
 <link rel="stylesheet" href="style.css?v=replay-choice-14">
 <link rel="stylesheet" href="lobby.css?v=goal-fx-6">
+<link rel="stylesheet" href="features.css?v=1">
 </head>
 <body class="in-menu">
 <canvas id="c"></canvas>
@@ -24,7 +25,39 @@
       <span>REPLAY CAMERA</span><button type="button" data-replay-camera="car" aria-pressed="false">CAR</button><button type="button" data-replay-camera="ball" aria-pressed="true">BALL</button>
     </div>
     <button id="skipReplayButton" type="button">SKIP REPLAY <kbd>SPACE</kbd></button>
+    <button id="saveGoalReplay" class="feature-button" type="button">SAVE GOAL</button>
+    <div id="savedPlayback" hidden>
+      <button id="replayPlayPause" type="button">PAUSE</button>
+      <label>Speed <select id="replaySpeed"><option value=".25">¼×</option><option value=".5">½×</option><option value="1" selected>1×</option><option value="2">2×</option></select></label>
+      <input id="replayTimeline" type="range" min="0" max="10" step=".02" value="0" aria-label="Replay timeline">
+      <output id="replayTime">0:00</output><button id="replayExit" type="button">EXIT REPLAY</button>
+    </div>
   </div>
+  <div id="networkBanner" role="status" hidden></div>
+  <div id="quickChatFeed" aria-live="polite" aria-label="Quick chat"></div>
+  <div id="quickChatChoices" hidden><span>QUICK CHAT · 1–4</span><div></div></div>
+  <div id="featureNotice" role="status" hidden></div>
+  <section id="pauseMenu" class="feature-overlay" role="dialog" aria-modal="true" aria-label="Pause menu" hidden>
+    <div class="feature-panel pause-panel">
+      <p class="feature-eyebrow">ROCKET BALL</p><h2>PAUSED</h2><p id="pauseMatchSummary"></p><p id="pauseNetwork" class="feature-muted"></p>
+      <button id="pauseResume" class="feature-primary" type="button">RESUME</button>
+      <div class="feature-grid">
+        <button id="pauseSettings" type="button">SETTINGS &amp; CONTROLS</button><button id="pauseCamera" type="button">TOGGLE BALL CAM</button>
+        <button id="pauseResetView" type="button">RECENTRE CAMERA</button><button id="pauseFullscreen" type="button">FULLSCREEN</button>
+        <button id="pauseSaveReplay" type="button">SAVE MATCH REPLAY</button><button id="pauseTraining" type="button">TRAINING TOOLS</button>
+        <button id="pauseCopyRoom" type="button">COPY ROOM INVITE</button><button id="pauseCopyWatch" type="button">COPY SPECTATOR INVITE</button>
+      </div>
+      <div id="spectatorOptions" hidden><label>Watch <select id="spectatorTarget"><option value="ball">Ball</option><option value="0">Blue car</option><option value="1">Orange car</option></select></label></div>
+      <p class="feature-muted">Tab shows the score. 1–3 opens quick chat. Esc or P resumes.</p>
+      <button id="pauseLeave" class="feature-danger" type="button">LEAVE TO GARAGE</button>
+    </div>
+  </section>
+  <section id="replayLibrary" class="feature-overlay" role="dialog" aria-modal="true" aria-label="Saved replays" hidden>
+    <div class="feature-panel"><p class="feature-eyebrow">YOUR HIGHLIGHTS</p><h2>SAVED REPLAYS</h2><p class="feature-muted">Keep up to five recordings in this browser, or export them to share.</p>
+      <div class="feature-actions"><label class="feature-button">IMPORT REPLAY<input id="replayImport" type="file" accept=".json,.rocketreplay,application/json" hidden></label><button id="replayLibraryClose" type="button">CLOSE</button></div>
+      <p id="replayLibraryStatus" role="status"></p><div id="replayLibraryList"></div>
+    </div>
+  </section>
   <div id="onlineMatchBar" hidden><span id="onlineMatchLabel"></span><button id="onlineMatchLeave" type="button">LEAVE MATCH</button></div>
   <button id="quickPlayButton" type="button">▶ PLAY <small>MATCHES &amp; MODES</small></button>
   <details id="trainingTools" aria-label="Free Play tools" hidden>
@@ -59,7 +92,7 @@
   <div id="boost2"><i id="bf2"></i><span id="bt2">34</span></div>
   <div id="splitDivider"></div><div id="p1Tag">P1 · BLUE</div><div id="p2Tag">P2 · ORANGE</div>
   <div id="flightHint" hidden></div>
-  <div id="cam">Chase cam (C)</div>
+  <button id="cam" type="button" aria-pressed="true" title="Toggle ball camera (C)">BALL CAM · C</button>
   <div id="msg"></div>
   <div id="goalBy" aria-live="polite"></div>
   <div id="goalSpeed" aria-live="polite"></div>
@@ -70,6 +103,7 @@
       <div id="victoryCars" class="victory-cars"></div>
       <div id="victoryStats" class="victory-stats" style="display:none"><div class="stats-wrap"><table class="stats-table"><thead><tr><th>PLAYER</th><th>G</th><th>A</th><th>SHOTS</th><th>SAVES</th><th>CLEAR</th><th>DEMOS</th></tr></thead><tbody id="statsBody"></tbody></table></div></div>
       <button id="victoryPlayAgain" type="button">BACK TO GARAGE</button>
+      <div id="matchEndActions"><p id="seriesResult"></p><p id="rematchStatus" role="status"></p><button id="rematchButton" type="button">REMATCH</button><button id="saveMatchReplay" type="button">SAVE MATCH REPLAY</button><p id="rankedResult"></p></div>
     </div>
   </section>
     <div id="menu" data-panel="play" style="display:grid">
@@ -98,16 +132,19 @@
           <p id="onlineStatus" role="status" aria-live="polite">One player creates a room. The other enters that code and presses Join Room.</p>
           <button id="onlineCreate" type="button">CREATE ROOM</button>
           <div class="online-join"><input id="onlineCode" aria-label="Room code" placeholder="ROOM CODE" maxlength="6" autocomplete="off" autocapitalize="characters" spellcheck="false"><button id="onlineJoin" type="button">JOIN ROOM</button></div>
-          <div id="onlineInvite" hidden><output id="onlineRoomCode" aria-label="Your room code"></output><button id="onlineCopy" type="button">COPY INVITE</button><button id="onlineLeave" type="button">CANCEL ROOM</button></div>
+          <button id="onlineSpectate" type="button">SPECTATE ROOM</button><div id="onlineInvite" hidden><output id="onlineRoomCode" aria-label="Your room code"></output><button id="onlineCopy" type="button">COPY INVITE</button><button id="onlineLeave" type="button">CANCEL ROOM</button></div>
         </section>
         <details class="custom-match"><summary>CUSTOM MATCH OPTIONS</summary><div class="opts"><span>Players</span><label class="toggle-label"><input id="localTwo" type="checkbox"> Local 2-player</label></div><div class="opts"><span>Match</span><button data-mode="1">1v1</button><button data-mode="2">2v2</button><button data-mode="3">3v3</button></div><div class="opts"><span>Bots</span><button data-diff="0">Easy</button><button data-diff="1">Medium</button><button data-diff="2">Hard</button><button data-diff="3">Nexto</button></div>
 </details>
         <p id="nextoStatus" class="setting-help" role="status" aria-live="polite" hidden>Nexto · Experimental</p>
+        <div class="feature-lobby-row"><label>Series <select id="seriesLength"><option value="1">Single match</option><option value="3">Best of three</option><option value="5">Best of five</option></select></label><button id="openReplayLibrary" type="button">SAVED REPLAYS</button></div>
+        <section class="ranked-card"><h3>RANKED 1v1</h3><p id="rankedRating">Play placement matches to earn your rank.</p><p id="rankedStatus" role="status">Configure your hosted ranked server in Settings.</p><button id="rankedFind" type="button">FIND RANKED MATCH</button><button id="rankedCancel" type="button" hidden>CANCEL SEARCH</button><button id="rankedLeaderboard" type="button">LEADERBOARD</button><ol id="rankedBoard" hidden></ol></section>
         <div class="start-actions"><button id="playBtn" class="play-btn" type="button">PLAY MATCH <span>→</span></button><button id="freePlayBtn" class="free-play-btn" type="button">TRAINING</button></div>
         <p class="go" id="go">Choose your setup, then press PLAY</p>
       </section>
       <section class="lobby-panel" id="panel-garage" aria-label="Car customisation" hidden>
         <span class="panel-eyebrow">MAKE IT YOURS</span><h2>YOUR GARAGE.</h2><p class="panel-description">Pick your body, paint and player identity.</p>
+        <div class="cosmetic-choices"><label>Wheel finish<select id="wheelFinish"><option value="stock">Stock</option><option value="chrome">Chrome</option><option value="blackout">Blackout</option></select></label><label>Decal<select id="decalStyle"><option value="none">None</option><option value="stripes">Racing stripes</option><option value="lightning">Lightning</option></select></label><label>Boost trail<select id="boostStyle"><option value="blue">Cool blue</option><option value="amber">Amber</option><option value="purple">Ion purple</option><option value="smoke">Smoke</option></select></label></div>
 <div class="opts">
       <span>Player 1</span>
       <input id="name" type="text" placeholder="Your name" maxlength="12" value="PLAYER">
@@ -243,7 +280,7 @@
           <label class="camera-shake-option"><input id="settingCameraShake" type="checkbox"> Goal camera shake</label>
           <button id="settingCameraCompetitive" class="settings-preset-button" type="button">USE COMPETITIVE CAMERA</button>
           <p class="setting-help">Customise your view of the pitch. Settings apply to both players and save automatically.</p>
-          <h3>Keyboard aerial handling</h3>
+          <h3>Online matchmaking</h3><label for="rankedServerUrl">Ranked server URL</label><input id="rankedServerUrl" type="url" placeholder="wss://your-host.example/ranked" autocomplete="off"><button id="rankedServerSave" type="button">SAVE SERVER</button><p id="rankedServerStatus" class="setting-help" role="status">Connect to your hosted ranked service. Ratings belong to that server.</p><h3>Keyboard aerial handling</h3>
           <div class="setting-row">
             <label for="settingKeyboardFlight">Flight control mode</label>
             <select id="settingKeyboardFlight">
@@ -301,7 +338,7 @@
 <script src="lib/GLTFLoader.legacy.js"></script>
 <script src="lib/scene-utils.js"></script>
 <script src="lib/goal-effects.js?v=volumetric-2"></script>
-<script src="lib/replay.js?v=ball-follow-2"></script>
+<script src="lib/replay.js?v=match-tools-3"></script>
 <script src="lib/car-audio.js?v=3"></script>
 <script src="lib/goal-anthems.js?v=dubstep-7"></script>
 <script src="lib/ball-camera.js"></script>
@@ -311,7 +348,13 @@
 <script src="assets/octane/body.js?v=1"></script>
 <script src="assets/fennec/body.js?v=1"></script>
 <script src="vendor/peerjs.min.js"></script>
-<script src="lib/online-rooms.js?v=dubstep-choice-5"></script>
-<script src="game.js?v=personal-goal-fx-14-1"></script>
+<script src="lib/online-rooms.js?v=match-tools-6"></script>
+<script src="lib/arena-network.js?v=1"></script>
+<script src="lib/advanced-mechanics.js?v=1"></script>
+<script src="lib/match-tools.js?v=1"></script>
+<script src="lib/cosmetics.js?v=1"></script>
+<script src="config.js?v=1"></script>
+<script src="lib/ranked-client.js?v=1"></script>
+<script src="game.js?v=match-tools-ranked-15"></script>
 </body>
 </html>

@@ -36,7 +36,7 @@ const code=[
  ...funcs.map(extractFunction),
  'return {step:stepCar,orientation:getCarOrientation};'
 ].join('\n');
-const sim=new Function('THREE','assert',code)(THREE,assert);
+const sim=new Function('THREE','assert','RocketArenaNet','RocketMechanics',code)(THREE,assert,require('../lib/arena-network'),require('../lib/advanced-mechanics'));
 function tipped(roll,x=0,z=0){return {x,y:1.3,z,yaw:0,pitch:0,roll,vx:0,vy:0,vz:0,ground:false,
  demoTimer:0,demoCooldown:0,wallRide:false,wallVerticalAxis:null,wallDetachTimer:0,
  airQuat:new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1),roll),airOmega:null,
@@ -74,3 +74,7 @@ const landingPose=sim.orientation(jump).clone();tick(jump,{jump:true});
 assert(!jump.ground&&jump.jumps===1,'A landed car must be able to jump again');
 assert(sim.orientation(jump).angleTo(landingPose)<.15,'Jumping during suspension alignment must preserve the actual pose');
 console.log('PASS: tilted pitch/roll landings, body clearance, smooth suspension, momentum, boost-held landings and immediate re-jump');
+
+const dash=tipped(0);Object.assign(dash,{y:.58,vy:-1,vz:20,jumps:1,jt:.2});tick(dash,{jump:true,dodge:[1,0]});assert.equal(dash.waveDashes,1,'Dodge during tyre landing performs a wave dash');assert(dash.ground&&dash.vz>29&&dash.vy<.1,'Wave dash preserves tyre contact and adds tangent momentum');
+const reset=tipped(0);Object.assign(reset,{y:15,jumps:1,jt:4,flipReset:true});tick(reset,{jump:true,dodge:[1,0]});assert.equal(reset.jumps,2);assert(!reset.flipReset&&reset.flip>0,'A tyre reset permits a flip beyond the original second-jump window');
+console.log('PASS: live solver wave dash on landing and reset flips after the normal timer expires');

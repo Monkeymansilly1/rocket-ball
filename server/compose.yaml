@@ -1,0 +1,15 @@
+services:
+  ranked:
+    build:
+      context: ..
+      dockerfile: server/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8787:8787"
+    environment:
+      ALLOWED_ORIGINS: https://monkeymansilly1.github.io
+    volumes:
+      - ranked-data:/app/data
+    init: true
+volumes:
+  ranked-data:

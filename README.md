@@ -59,7 +59,7 @@ The selected clip starts once when a match replay begins or a Free Play goal is 
 
 ## Private online 1v1
 
-On **Play**, choose **Create Room**, then send the six-character code or **Copy Invite** link to a friend. Your friend opens the game and enters the code under **Join Room** (invite links fill it in). The match starts when both players connect: creator is Blue, friend is Orange, each uses their own keyboard/controller and selected car, with no bots or split screen. Either player can skip a goal replay. **Leave Match** closes the connection; create a new room to play again.
+On **Play**, choose **Create Room**, then send the six-character code or **Copy Invite** link to a friend. Your friend opens the game and enters the code under **Join Room** (invite links fill it in). The match starts when both players connect: creator is Blue, friend is Orange, each uses their own keyboard/controller and selected car, with no bots or split screen. Either player can skip a goal replay. **Leave Match** in the pause menu closes the connection. Choose **Rematch** on both screens to play again in the same room. The creator can choose a single game, best of three or best of five before creating the room.
 
 Before creating or joining, each player chooses their own car and colour in **Garage**, and their own explosion and song in **Goal FX**. Both clients use those individual car paints, including when detailed models finish loading. A goal plays the scoring player's explosion and anthem on both screens; an own goal uses the choices of the team awarded the goal. Seeing a friend's celebration does not replace your saved garage choices. Each player can choose their own replay camera.
 
@@ -67,11 +67,31 @@ After typing a complete code, press **Join Room** or Enter. You can join a frien
 
 Room codes appear only once the creator registers with the signaling service. Both players generate their own temporary player IDs; joining does not depend on the public service's separate HTTP ID endpoint. Connection failures distinguish unsupported browsers, signaling failures, and player-to-player failures.
 
-The creator's browser runs the shared physics, five-minute clock, score, boost pads, and replays. The friend's controls travel over a WebRTC data connection; host snapshots update the friend's view with smoothing. Input is cleared when stale and a lost connection returns players to the menu. Room codes expire when the creator leaves. Keep both game tabs open, particularly the host's. These are casual private matches; latency depends on both connections and the host's performance.
+The creator's browser runs the shared physics, five-minute clock, score, boost pads, and replays. The friend's controls travel over a WebRTC data connection; timestamped host snapshots update the friend's view through a 90 ms interpolation buffer, with no extrapolation through walls. Input and directional dodge intent travel independently of rendering. Full rotated body bounds constrain walls, rounded corners, the ceiling and the back of each goal. Stale inputs clear automatically. A transport interruption holds the match for up to 30 seconds while reconnecting; deliberate leaving still closes the room. Room codes expire when the creator leaves. Keep both game tabs open, particularly the host's. These are casual private matches; latency depends on both connections and the host's performance.
 
 GitHub Pages serves the game unchanged. PeerJS 1.5.5 (bundled under MIT in `vendor/`, with its license) uses the public PeerJS signaling service and its default STUN/TURN servers, including TCP TURN fallbacks. No account or dedicated game server is required. Those public services must be reachable; restrictive networks or service outages can prevent joining, which the room status reports. Local/offline modes do not contact these services.
 
 Room protocol checks: `node tests/online-rooms.test.js`. For a real two-browser WebRTC match test, run `npm ci --prefix tests/online` then `node tests/online-browser-smoke.js`. It runs a local signaling server. Environments that restrict direct UDP can supply a **local** TCP relay using `ROCKET_TEST_TURN_URL`, `ROCKET_TEST_TURN_USER`, and `ROCKET_TEST_TURN_PASSWORD`; browser network policies remain in force.
+
+## Match controls, spectators and saved replays
+
+During live play, the HUD shows Ball Cam and Boost. Hold **Tab** for the score and clock. **Esc**, **P**, or controller **Options/Start** opens the pause menu for settings, camera controls, replay saving, room invitations and leaving. Offline play pauses; online matches continue with your driving input neutral while the menu is open.
+
+Use **1–3**, then **1–4**, to send one of twelve quick-chat messages. The host limits each player to three messages per four seconds. Up to four spectators can choose **Spectate Room** using an active room's code or open the spectator invitation copied from Pause. Spectators can follow the ball or either car and cannot drive, skip or ready a participant.
+
+Choose **Save Goal** during a goal replay, or **Save Match Replay** from Pause or the result screen. Saved Replays in the lobby keeps up to five recordings in IndexedDB, with localStorage fallback. Recordings sample match movement at 15 Hz, preserve kickoff cuts and cosmetics, and offer play/pause, quarter/half/double speed, a timeline, and Car/Ball cameras. Export a `.rocketreplay` JSON file to share or import it on another browser. Imports validate motion and strip arbitrary properties. A recording contains up to twenty minutes of simulation; long overtime retains the most recent portion.
+
+## Advanced mechanics and cosmetics
+
+Four-tyre ball contact grants a flip reset without adding a jump impulse or changing the car's pose. A directional dodge on the tyre-contact landing frame performs a wave dash, adding momentum along the surface. Cancelling a pitch flip permits manual roll/yaw for half-flip recovery. Normal flight still uses the existing selectable Assisted/Manual controls.
+
+Garage now includes Stock/Chrome/Blackout wheel finishes, roof-following Racing Stripes/Lightning decals, and Cool Blue/Amber/Ion Purple/Smoke boost trails. These choices save locally and travel with each online player, alongside their existing car, paint, explosion and anthem. Boost flames and particles are dimmer.
+
+## Ranked 1v1 server
+
+The deployable Node/WebSocket service in [server/](server/README.md) provides a public queue, persistent SQLite Elo ratings, five placement games, rank labels and a leaderboard. Both clients must confirm a result before MMR changes; forfeits and extended ranked disconnects are handled by the server. In-room rematches after ranked games are explicitly casual.
+
+**Hosting is required:** GitHub Pages cannot run the service. Deploy it with the supplied Dockerfile/Compose setup and configure its WSS URL in `config.js` or Settings → Online matchmaking. Unconfigured clients show that the service is unavailable. This community ladder uses host-run gameplay; it does not provide authoritative anti-cheat or recoverable cross-device accounts. See the server guide for deployment, storage and trust limits.
 
 ## Nexto opponents
 
@@ -83,7 +103,7 @@ The Nexto model and adapted observation/action component are **CC BY-NC-SA 4.0**
 
 ## Controls and rules
 
-- **Drive:** W/S or arrows; **steer:** A/D; **jump/dodge:** Space; **boost:** Left Shift; **drift:** E; **air roll:** Q/E; **ball camera:** C; **pause:** P; **mute:** M.
+- **Drive:** W/S or arrows; **steer:** A/D; **jump/dodge:** Space; **boost:** Left Shift; **drift:** E; **air roll:** Q/E; **ball camera:** C; **pause:** Esc/P; **score:** hold Tab; **quick chat:** 1–3, then 1–4; **mute:** M.
 - Assisted aerial mode: hold Space to jump, then hold Shift to pitch upward and climb (W is optional). K/I override nose up/down; Q/E air-roll. Manual aerial mode uses W/S for pitch. Controls can be rebound in Settings.
 - Controllers use the left stick to steer/pitch, triggers to drive/reverse, A/✕ to jump, X/□ to boost, LB/L1 for drift/air roll and Y/△ for ball camera. A second controller enables local split screen.
 - Matches last five minutes. A tie goes to sudden-death overtime. Large boost pads refill to 100; small pads add 12. Free Play provides unlimited boost and aerial, wall-dribble, save and kickoff drills.
@@ -112,7 +132,14 @@ node tests/mini-crowd.test.js
 node tests/scorpion-body.test.js
 node tests/goal-effects.test.js
 node tests/scene-utils.test.js
+node tests/match-features.test.js
 node tests/browser-smoke.js
+node tests/match-features-browser.js
+npm ci --prefix server
+npm test --prefix server
+npm ci --prefix tests/online
+node tests/online-browser-smoke.js
+node tests/ranked-browser-smoke.js
 ```
 
 The browser suite requires system Chrome/Chromium and Node.js 22 or newer. `CHROME_BIN` can select a different installed Chrome executable. It starts its own local HTTP server and checks WebGL startup, the lobby, explosion selection and cleanup, the real arena geometry, Free Play, scoring, camera settings, kickoff and driving. The effects suite checks all eight animations at three quality levels and verifies resource disposal. The clock suite covers slow-frame timing and pause. The aerial suite starts a car on its wheels and verifies assisted and manual takeoffs. Text fields accept bound keys normally; starting play or leaving the tab clears held keyboard input. CI runs these checks.

@@ -1339,6 +1339,7 @@ function makeDetailedCar(car) {
   m.detailedWheels = wheelNodes;
   m.detailedWheelAxis = asset.axle;
   m.wheels = [];
+  if(typeof RocketCosmetics!=='undefined')RocketCosmetics.apply(car);
 }
 function updateCarModelStatus() {
   const status = $('modelLoadStatus');
@@ -1636,6 +1637,8 @@ let playerCarModel = 'scorpion';
 let playerPaint = '#2fb8ff', playerPaintCustom = false;
 let player2CarModel = 'fennec';
 let player2Paint = '#ff8a1f', player2PaintCustom = false;
+let carCosmeticChoice=typeof RocketCosmetics!=='undefined'?RocketCosmetics.profile():{};
+try{if(typeof RocketCosmetics!=='undefined')carCosmeticChoice=RocketCosmetics.profile(JSON.parse(localStorage.getItem('rocketCarCosmeticsV1')||'{}'));}catch(_){}
 try {
   const saved=JSON.parse(localStorage.getItem('rocketArenaGarageV1')||'{}');
   if(CAR_MODELS.some(car=>car.name===saved.p1))playerCarModel=saved.p1;
@@ -1692,6 +1695,7 @@ function saveReplayFrame() {
       wx:ball.wx,wy:ball.wy,wz:ball.wz,q:ball.q?[...ball.q]:[0,0,0,1],onRamp:ball.onRamp},
     pads:pads.map(p=>p.t)
   };
+  if(typeof recordMatchFrame==='function')recordMatchFrame(frame);
   if(replayHistory.length && replayHistory[replayHistory.length-1].time===frame.time)replayHistory[replayHistory.length-1]=frame;
   else replayHistory.push(frame);
   if(replayHistory.length>REPLAY_HISTORY_LIMIT)replayHistory.shift();
@@ -1713,19 +1717,21 @@ const SKILL = [
   { thr: 0.85, boost: true, steer: 3, cap: 0.82, wait: 0.8, sloppy: 4, flip: 0.4, aerial: false, drift: false },
   { thr: 1, boost: true, steer: 4, cap: 1, wait: 0.25, sloppy: 1.2, flip: 0.9, aerial: true, drift: true },
   { thr: 1, boost: true, steer: 4, cap: 1, wait: 0, sloppy: 0, flip: 1, aerial: true, drift: true }];
-function mkCar(team, k, ai, modelName,colourOverride) {
+function mkCar(team, k, ai, modelName,colourOverride,cosmeticChoices) {
   const model = CAR_MODELS.some(m => m.name === modelName) ? modelName : CAR_MODELS[k % CAR_MODELS.length].name;
   const col = new THREE.Color(colourOverride || (onlineMode ? (team ? ORANGE : BLUE) : !ai && k === 0 ? (team ? player2Paint : playerPaint) : (team ? ORANGE : BLUE))).offsetHSL(0, 0, -0.09 * k);
   const car = { team, k, x: 0, y: 0.55, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, pitch: 0, roll: 0, airQuat: null, airOmega: null, surfaceQuat: null, surfaceNormal: null, surfaceForward: null, landingQuat:null, ceilingRide:false, wallRide: false, wallVerticalAxis: null, wallVerticalSign: 0, ai, aiCd: 0, boost: 34, jumps: 0, jt: 0, flip: 0, flipPitchScale: 1, aerialAssistDelay: 0, fx: 0, fz: 0, fl: 0, ground: true, demoTimer: 0, demoCooldown: 0, boostImpactTimer: 0 };
   car.mesh = carMesh(col, model);
   car.model = model;
   car.paintColour = colourOverride || null;
+  car.cosmetics={...(cosmeticChoices||(!ai&&k===0?carCosmeticChoice:{}))};
   car.nexto=ai&&diff===3;
   car.displayName = ai ? (team ? 'ORANGE BOT ' : 'BLUE BOT ') + (k + 1) : playerName;
   // model-based properties
   const mdef = CAR_MODELS.find(m => m.name === model);
   car.hit = mdef.hit; car.hitbox = CAR_HITBOXES[model] || CAR_HITBOXES.octane; car.mass = 4; car.cap = 1; car.baseCap = 1;
   makeDetailedCar(car);
+  if(typeof RocketCosmetics!=='undefined'&&!car.mesh.detailed)RocketCosmetics.apply(car);
   return car;
 }
 function buildTeams() {
@@ -1789,6 +1795,7 @@ for (const [x,z,big] of [...bigPads,...smallPads]) {
 }
 const FORM = [[0, 4608 / 50 / HL], [-40.96, 2560 / 50 / HL], [40.96, 2560 / 50 / HL]];
 function kickoff() {
+  if(typeof matchFeatures!=='undefined')matchFeatures.cut=true;
   nextoAI.reset();nextoObservationTime=0;nextoLastObservation=0;
   for(const car of cars)car.nextoPreviousQuat=null;
   for(const c of cars){c.recoveryTimer=0;c.recoveryTarget=null;c.bodyRestTime=0;c.bodyContact=false;}
@@ -1809,7 +1816,7 @@ function kickoff() {
   lastTouch = null;
   for (const c of cars) {
     const f = FORM[c.k], s = c.team ? 1 : -1;
-    Object.assign(c, { x: f[0] * (c.team ? -1 : 1), y: 0.55, z: s * f[1] * HL, vx: 0, vy: 0, vz: 0, yaw: c.team ? Math.PI : 0, pitch: 0, roll: 0, airQuat: null, airOmega: null, surfaceQuat:null, surfaceNormal:null, surfaceForward:null, landingQuat:null, ceilingRide:false, flipAxis:null, wallDetachTimer: 0, wallRide: false, wallVerticalAxis: null, wallVerticalSign: 0, boost: 34, jumps: 0, jt: 0, flip: 0, flipPitchScale: 1, aerialAssistDelay: 0, fl: 0, ground: true, aiCd: 0, wait: SKILL[diff].wait });
+    Object.assign(c, { x: f[0] * (c.team ? -1 : 1), y: 0.55, z: s * f[1] * HL, vx: 0, vy: 0, vz: 0, yaw: c.team ? Math.PI : 0, pitch: 0, roll: 0, airQuat: null, airOmega: null, surfaceQuat:null, surfaceNormal:null, surfaceForward:null, landingQuat:null, ceilingRide:false, flipAxis:null, wallDetachTimer: 0, wallRide: false, wallVerticalAxis: null, wallVerticalSign: 0, boost: 34, jumps: 0, jt: 0, flip: 0, flipPitchScale: 1, aerialAssistDelay: 0, fl: 0, ground: true, flipReset:false,ballResetContact:false,flipResetCooldown:0,aiCd: 0, wait: SKILL[diff].wait });
   }
   if(!trainingMode)saveReplayFrame();
 }
@@ -1857,6 +1864,7 @@ function start(freePlay = false) {
   score = [0, 0]; clock = MATCH; ot = false; pads.forEach(p => p.t = 0);
   playerStats = cars.map(() => ({ goals: 0, assists: 0, shots: 0, saves: 0, clears: 0, shotsOnGoal: 0, demos: 0 }));
   const victory = $('victory'); if (victory) { victory.style.display = 'none'; victory.dataset.shown = ''; }
+  beginMatchFeatures();
   kickoff(); state = 'kick'; cd = 3; $('menu').style.display = 'none'; $('msg').textContent = '';
   if (trainingMode) {
     state = 'play'; cd = 0;
@@ -2043,8 +2051,8 @@ function stepParts(dt) {
   pgeo.attributes.position.needsUpdate = true; pgeo.attributes.color.needsUpdate = true;
 }
 function emitBoost(c) {
-  const cp = Math.cos(c.pitch), fx = Math.sin(c.yaw) * cp, fy = Math.sin(c.pitch), fz = Math.cos(c.yaw) * cp;
-  for (let n = 0; n < 4; n++) emit(c.x - fx * 2.3 + (Math.random()-0.5)*0.4, c.y - fy * 2.3, c.z - fz * 2.3 + (Math.random()-0.5)*0.4, -fx * 9 + (Math.random() - 0.5) * 4, -fy * 9 + (Math.random() - 0.5) * 3, -fz * 9 + (Math.random() - 0.5) * 4, 0.4, 1, 0.6, 0.2);
+  const nose=getCarForward(c),fx=nose.x,fy=nose.y,fz=nose.z,tint=c.boostTint||{r:.18,g:.28,b:.34};
+  for (let n = 0; n < 2; n++) emit(c.x - fx * 2.1 + (Math.random()-0.5)*0.2, c.y - fy * 2.1, c.z - fz * 2.1 + (Math.random()-0.5)*0.2, -fx * 7 + (Math.random() - 0.5) * 2, -fy * 7 + (Math.random() - 0.5) * 1.5, -fz * 7 + (Math.random() - 0.5) * 2, .18, tint.r, tint.g, tint.b);
 }
 function sparks(vn) {
   for (let i = 0; i < 12; i++) emit(ball.x, ball.y, ball.z, (Math.random() - 0.5) * 18, Math.random() * 12, (Math.random() - 0.5) * 18, 0.45, 1, 1, 0.9);
@@ -2195,7 +2203,7 @@ if (quickPlayButton) quickPlayButton.addEventListener('click', () => {
 });
 function setBallCamera(enabled,controlHint='C') {
   ballCam=!!enabled;
-  if($('cam'))$('cam').textContent=(ballCam?'BALL CAM':'CAR CAM')+' · '+controlHint;
+  if($('cam')){$('cam').textContent=(ballCam?'BALL CAM':'CAR CAM')+' · '+controlHint;$('cam').setAttribute('aria-pressed',String(ballCam));}
   const button=$('viewToggle');
   if(button){button.innerHTML=ballCam?'◉ <span>BALL CAM</span>':'◉ <span>CAR CAM</span>';button.setAttribute('aria-pressed',String(ballCam));button.classList.toggle('on',ballCam);}
 }
@@ -2313,13 +2321,7 @@ function pollControllers() {
           !Object.values(controlBindings.p1.pad).includes(9) &&
           !($('controlsSettings') && $('controlsSettings').open)) {
         if (state === 'menu' || state === 'over') start();
-        else if (state === 'play' && !onlineMode) {
-          paused = !paused;
-          if ($('msg')) {
-            $('msg').textContent = paused ? 'PAUSED · PRESS OPTIONS TO RESUME' : '';
-            $('msg').style.color = '#fff';
-          }
-        }
+        else togglePauseMenu();
       }
       const jumpIndex = controlBindings.p1.pad.jump;
       if (state === 'play' && !paused && Number.isInteger(jumpIndex) && current[first.index + ':' + jumpIndex] && !previousPadButtons[first.index + ':' + jumpIndex]) padJumpQueued.p1 = true;
@@ -2362,6 +2364,7 @@ addEventListener('blur',clearHeldInput);
 document.addEventListener('visibilitychange',()=>{if(document.hidden)clearHeldInput();});
 document.addEventListener('focusin',event=>{if(isEditingTarget(event.target))clearHeldInput();});
 addEventListener('keydown', e => {
+  if(e.code==='Escape'&&matchFeatures.pause&&!pendingKeyCapture){togglePauseMenu(false);e.preventDefault();return;}
   // Text editing and IME composition belong to the browser, including A,
   // Space, arrows and menu shortcuts. Do not queue driving input from them.
   if(e.isComposing || isEditingTarget(e.target)||e.target?.closest?.('.online-lobby, #onlineMatchBar'))return;
@@ -2378,6 +2381,7 @@ addEventListener('keydown', e => {
     e.preventDefault(); e.stopPropagation(); return;
   }
   if(e.ctrlKey || e.metaKey || e.altKey)return;
+  if(featureKey(e))return;
   if(state==='replay' && e.code==='Space'){
     if(onlineMode?.role==='guest'){onlineRoom.send({type:'skip'});clearHeldInput();e.preventDefault();return;}
     replayElapsed=RocketReplay.duration(replayFrames);clearHeldInput();e.preventDefault();return;
@@ -2403,14 +2407,9 @@ addEventListener('keydown', e => {
     if (n) pick('mode', n); if (d !== undefined) pick('diff', d);
   }
   if (e.code === 'KeyM') muted = !muted;
-  if (e.code === 'KeyP' && !onlineMode) {
-    paused = !paused;
-    if (paused) { $('msg').textContent = 'PAUSED'; $('msg').style.color = '#fff'; }
-    else { $('msg').textContent = ''; }
-  }
   keys[e.code] = true;
 });
-addEventListener('keyup', e => { keys[e.code] = false; });
+addEventListener('keyup', e => { keys[e.code] = false;if(e.code==='Tab')document.body.classList.remove('scoreboard-visible'); });
 $('playBtn').addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); if (state === 'menu' || state === 'over') start(); });
 initProfilePictureControls();
 const nameInput = $('name');
@@ -2807,11 +2806,13 @@ function playerActions(who) {
   };
 }
 function playerCtl() {
+  if(matchFeatures.pause||onlineMode?.role==='spectator'){jumpQ=false;padJumpQueued.p1=false;return RocketRooms.controls();}
   const j = jumpQ || padJumpQueued.p1; jumpQ = false; padJumpQueued.p1 = false;
   const actions = playerActions('p1'); actions.jump = j;
   return actions;
 }
 function player2Ctl() {
+  if(matchFeatures.pause){jumpQ2=false;padJumpQueued.p2=false;return RocketRooms.controls();}
   const j = jumpQ2 || padJumpQueued.p2; jumpQ2 = false; padJumpQueued.p2 = false;
   const actions = playerActions('p2'); actions.jump = j;
   return actions;
@@ -2977,7 +2978,15 @@ function aerialControl(c, ct, dt) {
     const axis=c.flipAxis.clone();axis.x*=c.flipPitchScale;
     const magnitude=axis.length();
     if(magnitude>1e-6)c.airQuat.multiply(new THREE.Quaternion().setFromAxisAngle(axis.multiplyScalar(1/magnitude),angle*magnitude));
-    omega.pitch*=Math.exp(-20*dt);omega.yaw*=Math.exp(-20*dt);omega.roll*=Math.exp(-20*dt);
+    omega.pitch*=Math.exp(-20*dt);
+    if(Math.abs(c.flipAxis.x)>.1&&c.flipPitchScale<.15){
+      // Once the pitch is cancelled, air roll can complete a half-flip.
+      // It does not add a second somersault to an ordinary held-direction dodge.
+      omega.roll+=(36.080*(-clamp(ct.roll||0,-1,1))-4.472*omega.roll)*dt;
+      omega.yaw+=(8.920*clamp(ct.airYaw??ct.steer??0,-1,1)-1.886*omega.yaw)*dt;
+      const spin=new THREE.Vector3(0,omega.yaw,omega.roll).clampLength(0,5.5),speed=spin.length();
+      if(speed>1e-6)c.airQuat.multiply(new THREE.Quaternion().setFromAxisAngle(spin.multiplyScalar(1/speed),speed*dt));
+    }else {omega.yaw*=Math.exp(-20*dt);omega.roll*=Math.exp(-20*dt);}
     c.flip=Math.max(0,c.flip-dt);
     if(c.flip<1e-8){c.flip=0;c.flipAxis=null;}
     c.airQuat.normalize();
@@ -3181,6 +3190,8 @@ function snapCarToContact(c,contact) {
   }
 }
 function stepCar(c, ct, dt) {
+  const landingDodge=c.jumps===1&&(c.flipReset||c.jt<PHYSICS_TUNING.DOUBLE_JUMP_WINDOW)&&c.vy<=0;
+  c.flipResetCooldown=Math.max(0,(c.flipResetCooldown||0)-dt);
   c.engineLoad=Math.abs(ct.throttle||0);
   c.demoCooldown = Math.max(0, (c.demoCooldown || 0) - dt);
   c.ballHitCooldown = Math.max(0, (c.ballHitCooldown || 0) - dt);
@@ -3273,6 +3284,7 @@ function stepCar(c, ct, dt) {
   c.wallVerticalAxis=ground ? contact.axis : null;
   c.wallVerticalSign=ground ? contact.sign : 0;
   if(ground) {
+    c.flipReset=false;c.ballResetContact=false;
     c.recoveryTimer=0;c.recoveryTarget=null;c.bodyRestTime=0;c.bodyContact=false;
     if(!wasGrounded && c.airQuat) {
       c.landingQuat=contact.normal.y>.7?c.airQuat.clone():null;
@@ -3375,7 +3387,10 @@ function stepCar(c, ct, dt) {
   // The nose, air roll and pitch determine the true rocket thrust vector.
   if (bo) applyDirectionalBoost(c, dt, ground);
   if(ct.jump) {
-    if(ground) {
+    if(ground&&!wasGrounded&&landingDodge&&typeof RocketMechanics!=='undefined'&&
+       RocketMechanics.waveDash(c,ct,c.surfaceNormal,getCarForward(c),PHYSICS_TUNING.DODGE_IMPULSE)){
+      c.hold=0;c.airOmega=null;c.flip=0;c.flipAxis=null;
+    }else if(ground) {
       // Jump along tyre contact normal, preserving the last wall attitude
       // and wall-tangent momentum for real wall-to-air dribble control.
       const n=contact.normal;
@@ -3388,7 +3403,8 @@ function stepCar(c, ct, dt) {
       c.ground=false;c.wallRide=false;c.ceilingRide=false;c.wallVerticalAxis=null;
       c.wallVerticalSign=0;c.wallDetachTimer=0.30;
       c.jumps=1;c.jt=0;c.hold=PHYSICS_TUNING.JUMP_HOLD_DURATION;
-    } else if (c.jumps === 1 && c.jt < PHYSICS_TUNING.DOUBLE_JUMP_WINDOW) {
+    } else if (c.jumps === 1 && (c.flipReset || c.jt < PHYSICS_TUNING.DOUBLE_JUMP_WINDOW)) {
+      c.flipReset=false;
       c.jumps = 2;c.hold=0;c.jumpNormal=null;
       const f = ct.dodge ? ct.dodge[0] : (Number.isFinite(ct.pitch) ? ct.pitch : ct.throttle), s = ct.dodge ? ct.dodge[1] : ct.steer;
       // Avoid accidental dodges from tiny analog stick movement.
@@ -3520,6 +3536,7 @@ function stepCar(c, ct, dt) {
     if (referenceSpeed < PHYSICS_TUNING.SUPERSONIC_DROP_REFERENCE && c.supersonicTimer <= 0) c.supersonic = false;
   }
   if (c.mesh && c.mesh.root) c.mesh.root.userData.supersonic = !!c.supersonic;
+  if(typeof RocketArenaNet!=='undefined')RocketArenaNet.constrain(c,{quaternion:getCarOrientation(c),bounds:c.mesh?.bodyBounds,heightAt:(x,z)=>arenaRampAt(x,z).height,bounce:.25});
   for (const p of pads) {
     // Cooldown is global to the pad, not accelerated by the number of cars in a match.
     if (cars[0] === c) p.t = Math.max(0, p.t - dt);
@@ -3624,6 +3641,7 @@ function hitBall(c) {
   // ignored pitch and roll, so a car pointing up a wall could visually touch
   // the ball while the collision system thought it had missed it completely.
   const orientation = getCarOrientation(c);
+  if(typeof RocketMechanics!=='undefined')RocketMechanics.flipReset(c,ball,orientation);
   const right = AIR_X.clone().applyQuaternion(orientation);
   const up = AIR_Y.clone().applyQuaternion(orientation);
   const nose = AIR_Z.clone().applyQuaternion(orientation);
@@ -4045,7 +4063,9 @@ function goal(team, scoringVelocity=ball) {
   [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => sfx.tone(f, 0.35, 'triangle', 0.2), i * 120));
 }
 function update(dt) {
-  if(typeof onlineMode!=='undefined'&&onlineMode?.role==='guest')return;
+  if(savedViewer){updateSavedReplay(dt);return;}
+  if(onlineMode&&(onlineMode.role!=='host'||onlineMode.suspended))return;
+  if(state==='play'&&!trainingMode)matchFeatures.time+=dt;
   t += dt;
   if(state==='play' && !trainingMode)replaySimulationTime+=dt;
   if (state === 'kick') { cd -= dt; jumpQ = false; $('msg').style.color = '#fff'; $('msg').textContent = cd > 0 ? Math.ceil(cd) : 'GO!'; if (cd <= 0) { state = 'play'; $('msg').textContent = ''; } return; }
@@ -4144,6 +4164,7 @@ function update(dt) {
 
 function showVictoryScreen() {
   const panel = $('victory'); if (!panel || panel.dataset.shown === 'yes') return;
+  finishMatchFeatures();
   panel.dataset.shown = 'yes'; panel.style.display = 'grid';
   const winner = score[0] > score[1] ? playerName.toUpperCase() : score[1] > score[0] ? 'ORANGE' : 'DRAW';
   $('victoryTitle').textContent = winner;
@@ -4269,12 +4290,13 @@ function updateReplayCam(dt,targetCamera=camera,camState=cam) {
   sun.position.set(ball.x+30,80,ball.z+25);sun.target.position.set(ball.x,0,ball.z);sun.target.updateMatrixWorld();
 }
 
-function render(dt) {
+function render(dt,background=false) {
+  featureFrame();
   document.body.classList.toggle('in-menu',state==='menu');
   document.body.classList.toggle('goal-celebration',state==='goal');
   document.body.classList.toggle('replay-active',state==='replay');
   document.body.classList.toggle('local-two-enabled',localTwoPlayer);
-  if(state==='replay'&&onlineMode?.role!=='guest')applyReplayFrame(RocketReplay.sample(replayFrames,replayElapsed));
+  if(state==='replay'&&(!onlineMode||onlineMode.role==='host'))applyReplayFrame(RocketReplay.sample(replayFrames,replayElapsed));
   for (const c of cars) {
     const m = c.mesh;
     m.root.position.set(c.x, c.y, c.z);
@@ -4283,7 +4305,7 @@ function render(dt) {
     } else {
       m.root.rotation.set(-c.pitch, c.yaw, c.roll || 0, 'YXZ');
     }
-    m.flame.visible = !!c.fl; m.flame.scale.set(1, 0.7 + Math.random() * 0.6, 1);
+    m.flame.visible = !!c.fl; m.flame.scale.set(.7, .6 + Math.random() * .2, .7);
     m.body.rotation.set(0, 0, 0);
     // Detailed wheels use their real axle pivots.
     const wheelSpeed = Math.hypot(c.vx, c.vz) * 0.6;
@@ -4306,7 +4328,7 @@ function render(dt) {
     p.group.visible = active || p.t > 0;
   }
   stepParts(dt); tickGoalEffects(dt); updateMiniCrowd(dt); drawMini();
-  goalAnthems.sync({state,paused,muted,master:gameVolume,volume:anthemVolume,replayId:replayAnthemToken,replayTrack:replayAnthemTrack,
+  goalAnthems.sync({state:savedViewer?'watching':state,paused,muted,master:gameVolume,volume:anthemVolume,replayId:replayAnthemToken,replayTrack:replayAnthemTrack,
     allowPreview:state==='menu'&&$('menu').dataset.panel==='effects',celebrating:trainingMode&&trainingGoals>0});
   syncAudioControls();
   const localCarIndex=onlineMode?.role==='guest'?1:0;
@@ -4357,7 +4379,7 @@ function render(dt) {
   } else {
     camera.clearViewOffset();
     cars.forEach(c => { c.mesh.root.visible = c.demoTimer <= 0; }); ballMesh.visible = true;
-    if(state==='replay'){
+    if(state==='replay'||onlineMode?.role==='spectator'){
       updateReplayCam(dt);
       if(splitActive)updateReplayCam(dt,camera2,cam2);
     }else{
@@ -4386,6 +4408,7 @@ function render(dt) {
   if (bf2 && bt2) { const b2 = p2 ? p2.boost : 0; bf2.style.width = Math.round(clamp(b2, 0, 100)) + '%'; bt2.textContent = Math.round(b2); bf2.style.background = b2 > 66 ? '#ffd35a' : '#ff8a1f'; }
   const pHUD = $('player'); if (pHUD) pHUD.textContent = onlineMode?cars[localCarIndex].displayName:playerName;
   const p2Tag = $('p2Tag'); if (p2Tag) p2Tag.textContent = player2Name.toUpperCase();
+  if(background)return;
   if (splitActive) {
     const half = Math.floor(innerWidth / 2);
     renderer.setScissorTest(true);
@@ -4400,10 +4423,12 @@ function render(dt) {
 }
 
 // ---------- private online 1v1 ----------
+const onlineBuffer=new RocketArenaNet.SnapshotBuffer();
 let onlineRemoteInput={},onlineInputAt=0,onlineInputSeq=-1,onlineSendTime=0,onlineSnapshot=null,onlineSaved=null;
 const onlineRoom=new RocketRooms.Room({
  onStatus(info){
   $('onlineStatus').textContent=info.message;
+  if(typeof rankedRoomStatus==='function')rankedRoomStatus(info);
   $('onlineStatus').dataset.state=info.state;
   $('onlineRoomCode').textContent=info.code||'';
   const ready=info.role==='host'&&['waiting','connected'].includes(info.state);
@@ -4418,21 +4443,29 @@ const onlineRoom=new RocketRooms.Room({
   $('onlineCode').disabled=['connecting','connected'].includes(info.state);
  },
  onStart:beginOnlineMatch,
- onData(packet){
+ onSuspend(){if(onlineMode){onlineMode.suspended=true;onlineRemoteInput={};clearHeldInput();$('networkBanner').textContent='Connection interrupted · waiting up to 30 seconds to reconnect…';$('networkBanner').hidden=false;}},
+ onResume(){if(onlineMode){onlineMode.suspended=false;onlineBuffer.clear();onlineSnapshot=null;onlineInputSeq=-1;$('networkBanner').hidden=true;clearHeldInput();}},
+ onSpectators(count){if(onlineMode)$('onlineMatchLabel').textContent='ROOM '+onlineRoom.code+' · '+count+' WATCHING';},
+ onData(packet,context={}){
   if(!onlineMode)return;
   if(onlineMode.role==='host'){
+   if(context.role==='spectator')return;
+   if(packet.type==='chat')acceptedChat(packet.index,1);
+   if(packet.type==='rematch'&&state==='over'){matchFeatures.ready[1]=true;if(matchFeatures.ready.every(Boolean))startRematch();}
    if(packet.type==='input'&&Number.isSafeInteger(packet.seq)&&packet.seq>onlineInputSeq){
     const next=RocketRooms.controls(packet.controls);next.jump=state==='play'&&(next.jump||onlineRemoteInput.jump);
     onlineRemoteInput=next;onlineInputSeq=packet.seq;onlineInputAt=performance.now();
    }else if(packet.type==='skip'&&state==='replay')replayElapsed=RocketReplay.duration(replayFrames);
-  }else if(packet.type==='snapshot'&&validOnlineSnapshot(packet))onlineSnapshot=packet;
+  }else if(packet.type==='snapshot'&&validOnlineSnapshot(packet)){if(onlineBuffer.push(packet,performance.now()/1000))onlineSnapshot=packet;}
+  else if(packet.type==='chat'&&RocketMatchTools.CHATS[packet.index]&&[0,1].includes(packet.player))displayChat(packet.index,packet.player);
  },
  onClose(message){leaveOnline(message);$('onlineStatus').dataset.state='error';}
 });
-function localOnlineProfile(){return {name:$('name').value,car:playerCarModel,colour:playerPaint,explosion:goalExplosionStyle,anthem:anthemSelection};}
+function localOnlineProfile(){return {name:$('name').value,car:playerCarModel,colour:playerPaint,explosion:goalExplosionStyle,anthem:anthemSelection,...carCosmeticChoice};}
 function unlockOnlineAudio(){try{sfx.init();}catch(_){/* Audio failure must not prevent a player joining. */}}
 $('onlineCreate').addEventListener('click',()=>{unlockOnlineAudio();onlineRoom.create(localOnlineProfile());});
-$('onlineJoin').addEventListener('click',()=>{unlockOnlineAudio();onlineRoom.join($('onlineCode').value,localOnlineProfile());});
+$('onlineJoin').addEventListener('click',()=>{unlockOnlineAudio();if(new URLSearchParams(location.search).get('watch')==='1')onlineRoom.spectate($('onlineCode').value,localOnlineProfile());else onlineRoom.join($('onlineCode').value,localOnlineProfile());});
+$('onlineSpectate').addEventListener('click',()=>{unlockOnlineAudio();onlineRoom.spectate($('onlineCode').value,localOnlineProfile());});
 $('onlineCode').addEventListener('input',()=>{
  if(['connecting','connected'].includes(onlineRoom.state))return;
  const value=RocketRooms.normalize($('onlineCode').value),status=$('onlineStatus');
@@ -4454,28 +4487,33 @@ function beginOnlineMatch(session){
  // Goal counters belong to the host's room, so a previous local replay ID
  // must not suppress the first anthem in a newly joined match.
  goalAnthems.stop();goalAnthems.lastReplayId=null;
- onlineSaved={mode,diff,playerName,player2Name,localTwoPlayer,goalExplosionStyle};
+ onlineSaved={mode,diff,playerName,player2Name,localTwoPlayer,goalExplosionStyle,replayCameraMode};
  onlineMode=session;onlineStarting=true;mode=1;diff=0;localTwoPlayer=false;
  try{start(false);}finally{onlineStarting=false;}
- const profiles=session.role==='host'?[session.local,session.remote]:[session.remote,session.local];
+ const profiles=session.players||(session.role==='host'?[session.local,session.remote]:[session.remote,session.local]);
  for(const c of cars)scene.remove(c.mesh.root);
- cars=profiles.map((p,i)=>{const c=mkCar(i,0,false,p.car,p.colour);c.displayName=p.name;c.cosmetics={...p};c.nexto=false;return c;});
+ cars=profiles.map((p,i)=>{const c=mkCar(i,0,false,p.car,p.colour,p);c.displayName=p.name;c.cosmetics={...p};c.nexto=false;return c;});
  playerName=profiles[0].name;player2Name=profiles[1].name;
- kickoff();state='kick';cd=3;replayCameraCarIndex=0;onlineSnapshot=null;onlineInputSeq=-1;onlineRemoteInput={};onlineSendTime=0;
+ beginMatchFeatures();if(rankedMatch)matchSeries.reset(1);
+ kickoff();state='kick';cd=3;replayCameraCarIndex=0;onlineBuffer.clear();onlineSnapshot=null;onlineInputSeq=-1;onlineRemoteInput={};onlineSendTime=0;
  $('onlineMatchBar').hidden=false;$('onlineMatchLabel').textContent='ROOM '+onlineRoom.code+' · '+(session.role==='host'?'BLUE':'ORANGE');
  $('quickPlayButton').hidden=true;
- if(session.role==='host')onlineMode.backgroundTimer=setInterval(()=>{
+ onlineMode.transportTimer=setInterval(()=>{if(!onlineMode)return;if(onlineMode.role==='host')sendOnlineSnapshot(1/30);else if(onlineMode.role==='guest')onlineRoom.send({type:'input',seq:onlineMode.seq=(onlineMode.seq||0)+1,controls:playerCtl()});},1000/30);
+ if(rankedMatch)rankedClient.send({type:'started',match:rankedMatch.id});
+ onlineMode.backgroundTimer=setInterval(()=>{
   if(document.hidden&&onlineBackgroundFrame)onlineBackgroundFrame(performance.now(),true);
  },50);
  clearHeldInput();
 }
 function leaveOnline(message){
  const wasOnline=!!onlineMode,hadRoom=onlineRoom.state!=='idle';
- if(onlineMode)clearInterval(onlineMode.backgroundTimer);
+ if(onlineMode){clearInterval(onlineMode.backgroundTimer);clearInterval(onlineMode.transportTimer);if(onlineSaved&&onlineMode.role!=='spectator')onlineSaved.replayCameraMode=replayCameraMode;}
+ if(typeof rankedMatch!=='undefined'&&!onlineStarting)rankedLeave();
+ if(typeof matchFeatures!=='undefined'){matchFeatures.pause=false;$('pauseMenu').hidden=true;document.body.classList.remove('pause-open');}$('networkBanner').hidden=true;
  onlineMode=null;onlineSnapshot=null;onlineRemoteInput={};onlineRoom.close();
  $('onlineMatchBar').hidden=true;$('onlineInvite').hidden=true;$('onlineCreate').disabled=$('onlineJoin').disabled=false;$('quickPlayButton').hidden=false;
  $('onlineCode').disabled=false;$('onlineJoin').textContent='JOIN ROOM';$('onlineStatus').dataset.state='idle';
- if(onlineSaved){({mode,diff,playerName,player2Name,localTwoPlayer,goalExplosionStyle}=onlineSaved);onlineSaved=null;}
+ if(onlineSaved){({mode,diff,playerName,player2Name,localTwoPlayer,goalExplosionStyle,replayCameraMode}=onlineSaved);onlineSaved=null;}
  if(wasOnline){
   paused=false;state='menu';trainingMode=false;clearHeldInput();goalEffects.clear();goalAnthems.stop();
   $('victory').style.display='none';$('victory').dataset.shown='';document.body.classList.remove('victory-screen');
@@ -4504,40 +4542,237 @@ function validOnlineSnapshot(p){
 function sendOnlineSnapshot(dt){
  onlineSendTime+=dt;if(onlineSendTime<1/30)return;onlineSendTime=0;
  if(state==='menu'){leaveOnline('You left the match.');return;}
- onlineRoom.send({type:'snapshot',state,score:[...score],clock,cd,ot,ball:{...ball,q:ball.q||[0,0,0,1]},cars:cars.map(onlineMotion),pads:pads.map(p=>p.t),
+ onlineRoom.send({type:'snapshot',sequence:onlineMode.snapshotSequence=(onlineMode.snapshotSequence||0)+1,time:performance.now()/1000,round:matchFeatures.round,series:matchSeries.snapshot(),ready:matchFeatures.ready,suspended:!!onlineMode.suspended,state,score:[...score],clock,cd,ot,ball:{...ball,q:ball.q||[0,0,0,1]},cars:cars.map(onlineMotion),pads:pads.map(p=>p.t),
   anthem:replayAnthemToken,track:replayAnthemTrack,style:activeGoalExplosionStyle,speed:goalSpeedMph,scorer:replayCameraCarIndex,scorerName:goalScorerText,elapsed:replayElapsed,stats:playerStats,
   message:$('msg').textContent});
 }
 function onlineFrame(dt){
  if(!onlineMode)return;
  if(state==='menu'){leaveOnline('You left the match.');return;}
- if(onlineMode.role!=='guest')return;
- onlineRoom.send({type:'input',seq:onlineMode.seq=(onlineMode.seq||0)+1,controls:playerCtl()});
- const p=onlineSnapshot;if(!p)return;
+ if(onlineMode.role==='host')return;
+ const p=onlineBuffer.sample(performance.now()/1000);if(!p)return;
+ if(rankedMatch&&!rankedMatch.finished&&rankedClient.networkIssue){$('networkBanner').textContent='Ranked connection interrupted · reconnecting…';$('networkBanner').hidden=false;}else if(p.suspended){$('networkBanner').textContent='Match held while a player reconnects…';$('networkBanner').hidden=false;}else if(p.stale&&!onlineMode.suspended){$('networkBanner').textContent='Waiting for match updates…';$('networkBanner').hidden=false;}else if(!onlineMode.suspended)$('networkBanner').hidden=true;
+ if(p.series)matchSeries.load(p.series);if(Array.isArray(p.ready))matchFeatures.ready=p.ready.map(Boolean);
+ if(onlineMode.round!==p.round){onlineMode.round=p.round;$('rematchButton').disabled=false;if(rankedMatch?.reported||rankedMatch?.finished)rankedMatch=null;matchFeatures.time=0;matchFeatures.frames=[];matchFeatures.lastFrame=-1;matchFeatures.cut=true;$('victory').style.display='none';$('victory').dataset.shown='';document.body.classList.remove('victory-screen');}
+ if(p.state==='play'){matchFeatures.time+=dt;replaySimulationTime+=dt;}
+
  const snap=state!==p.state;
  state=p.state;score=[...p.score];clock=p.clock;cd=p.cd;ot=!!p.ot;replayElapsed=p.elapsed;
  if(Array.isArray(p.stats)&&p.stats.length===2&&p.stats.every(s=>s&&NETWORK_STATS.every(k=>Number.isFinite(s[k])&&s[k]>=0)))
   playerStats=p.stats.map(s=>Object.fromEntries(NETWORK_STATS.map(k=>[k,s[k]])));
  cars.forEach((c,i)=>{
-  const target=p.cars[i],blend=snap||Math.hypot(c.x-target.x,c.y-target.y,c.z-target.z)>12?1:1-Math.exp(-24*dt);
-  for(const k of ['x','y','z'])c[k]+=(target[k]-c[k])*blend;
-  for(const k of NETWORK_MOTION)if(!['x','y','z'].includes(k))c[k]=target[k];
-  const q=new THREE.Quaternion().fromArray(target.q);c.airQuat=getCarOrientation(c).clone().slerp(q,blend);c.ground=!!target.ground;
+  const target=p.cars[i];for(const k of NETWORK_MOTION)c[k]=target[k];
+  c.airQuat=new THREE.Quaternion().fromArray(target.q);c.ground=!!target.ground;
+  if(['play','kick'].includes(state))RocketArenaNet.constrain(c,{quaternion:c.airQuat,bounds:c.mesh?.bodyBounds,heightAt:(x,z)=>arenaRampAt(x,z).height});
  });
- const blend=snap||Math.hypot(ball.x-p.ball.x,ball.y-p.ball.y,ball.z-p.ball.z)>12?1:1-Math.exp(-24*dt);
- for(const k of ['x','y','z'])ball[k]+=(p.ball[k]-ball[k])*blend;
- for(const k of ['vx','vy','vz','wx','wy','wz'])ball[k]=Number.isFinite(p.ball[k])?p.ball[k]:0;
+ for(const k of ['x','y','z','vx','vy','vz','wx','wy','wz'])ball[k]=Number.isFinite(p.ball[k])?p.ball[k]:0;
  ball.q=[...p.ball.q];pads.forEach((pad,i)=>pad.t=p.pads[i]);
+ if(state==='play'){replayCaptureTimer+=dt;if(replayCaptureTimer>=1/15){saveReplayFrame();replayCaptureTimer=0;}}
  goalSpeedMph=p.speed;goalScorerText=String(p.scorerName||'PLAYER').slice(0,12);replayCameraCarIndex=p.scorer;
  replayAnthemToken=p.anthem;replayAnthemTrack=RocketGoalAnthems.TRACKS[p.track]?p.track:'off';
  if(Object.hasOwn(GOAL_EFFECT_DATA,p.style))activeGoalExplosionStyle=p.style;
  $('msg').textContent=String(p.message||'').slice(0,100);$('msg').classList.toggle('replay-title',state==='replay');
  $('goalBy').textContent=['goal','replay'].includes(state)?'Goal by '+goalScorerText+'!!!':'';
  $('goalSpeed').textContent=['goal','replay'].includes(state)?'GOAL SPEED · '+goalSpeedMph.toFixed(1)+' MPH':'';
- if(snap&&state==='goal'){goalExplosion(score[0]>onlineMode.lastBlue?0:1,false,activeGoalExplosionStyle);cheerMiniCrowd(score[0]>onlineMode.lastBlue?0:1);}
+ if(snap&&state==='goal'){replayFrames=replayHistory.slice();goalExplosion(score[0]>onlineMode.lastBlue?0:1,false,activeGoalExplosionStyle);cheerMiniCrowd(score[0]>onlineMode.lastBlue?0:1);}
  onlineMode.lastBlue=score[0];
  if(state==='over')showVictoryScreen();
 }
+
+// ---------- match tools ----------
+const matchFeatures={pause:false,time:0,frames:[],cut:true,lastFrame:-1,round:0,ready:[false,false],chatGroup:null};
+const matchSeries=new RocketMatchTools.Series();
+const replayStore=new RocketMatchTools.ReplayStore(localStorage);
+const chatLimiter=new RocketMatchTools.ChatLimiter();
+let savedViewer=null,noticeTimer=null,chatTimer=null,chatSequence=0;
+function featureNotice(message){$('featureNotice').textContent=message;$('featureNotice').hidden=false;clearTimeout(noticeTimer);noticeTimer=setTimeout(()=>$('featureNotice').hidden=true,4500);}
+function togglePauseMenu(force){
+ if(state==='menu'||state==='over')return;
+ matchFeatures.pause=typeof force==='boolean'?force:!matchFeatures.pause;
+ paused=matchFeatures.pause&&!onlineMode;
+ $('pauseMenu').hidden=!matchFeatures.pause;document.body.classList.toggle('pause-open',matchFeatures.pause);
+ if(!matchFeatures.pause){$('controlsSettings').open=false;$('trainingTools').classList.remove('training-open');}
+ $('pauseNetwork').textContent=onlineMode?(onlineMode.role==='spectator'?'Spectating · the match continues while this menu is open.':'Online match continues while this menu is open.'):'The match is paused.';
+ $('pauseCopyRoom').hidden=$('pauseCopyWatch').hidden=!onlineMode;
+ $('pauseTraining').hidden=!trainingMode;$('pauseSaveReplay').hidden=trainingMode;$('spectatorOptions').hidden=onlineMode?.role!=='spectator';
+ clearHeldInput();if(matchFeatures.pause)$('pauseResume').focus();else document.activeElement?.blur?.();
+}
+function beginMatchFeatures(){
+ matchFeatures.time=0;matchFeatures.frames=[];matchFeatures.lastFrame=-1;matchFeatures.cut=true;matchFeatures.round++;matchFeatures.ready=[false,false];
+ matchFeatures.pause=false;paused=false;savedViewer=null;$('savedPlayback').hidden=true;$('skipReplayButton').hidden=false;$('saveGoalReplay').hidden=false;$('pauseMenu').hidden=true;document.body.classList.remove('pause-open');
+ matchSeries.reset(Number($('seriesLength').value));$('rankedResult').textContent='';$('rematchStatus').textContent='';$('rematchButton').disabled=false;
+}
+function recordMatchFrame(frame){
+ if(typeof matchFeatures==='undefined'||savedViewer||trainingMode)return;
+ const time=matchFeatures.time;if(time<=matchFeatures.lastFrame||(!matchFeatures.cut&&time-matchFeatures.lastFrame<1/15-.001))return;
+ const copy={...frame,time,cut:matchFeatures.cut};matchFeatures.cut=false;matchFeatures.lastFrame=time;matchFeatures.frames.push(copy);
+ // Up to twenty minutes at 15 Hz; retain the most recent portion in overtime.
+ if(matchFeatures.frames.length>18000)matchFeatures.frames.shift();
+}
+function replayData(goal=false){
+ if(savedViewer)return savedViewer.data;
+ const frames=goal?replayFrames:matchFeatures.frames;
+ const first=frames[0]?.time||0;
+ return {version:1,score:[...score],players:cars.map(c=>({name:c.displayName||'PLAYER',car:c.model,colour:c.paintColour||hexCss(c.team?ORANGE:BLUE),team:c.team,...RocketCosmetics.profile(c.cosmetics)})),frames:frames.map(f=>({...f,time:f.time-first}))};
+}
+async function saveRecording(goal=false){try{const entry=await replayStore.save(replayData(goal),(goal?'Goal':'Match')+' · '+score.join(' – '));featureNotice('Replay saved. Find it in Saved Replays in the lobby.');return entry;}catch(error){featureNotice(error.message);}}
+function finishMatchFeatures(){
+ if(!onlineMode||onlineMode.role==='host')matchSeries.record(matchFeatures.round,score);
+ updateSeriesText();$('rematchButton').hidden=onlineMode?.role==='spectator';
+ if(typeof rankedMatchFinished==='function')rankedMatchFinished();
+}
+function updateSeriesText(){
+ $('seriesResult').textContent=matchSeries.bestOf===1?'':`BEST OF ${matchSeries.bestOf} · BLUE ${matchSeries.wins[0]} – ${matchSeries.wins[1]} ORANGE`+(matchSeries.winner>=0?' · '+(matchSeries.winner?'ORANGE':'BLUE')+' WINS THE SERIES':` · GAME ${matchSeries.game}`);
+ $('rematchButton').textContent=rankedMatch?'CASUAL REMATCH':matchSeries.winner>=0&&matchSeries.bestOf>1?'NEW SERIES':'REMATCH';
+ if(onlineMode&&state==='over')$('rematchStatus').textContent=matchFeatures.ready.every(Boolean)?'Starting rematch…':matchFeatures.ready.some(Boolean)?'Waiting for both players to ready up…':'Both players must choose Rematch.';
+}
+function startRematch(){
+ matchSeries.next();const next=matchSeries.snapshot();
+ goalAnthems.stop();goalEffects.clear();score=[0,0];clock=MATCH;ot=false;playerStats=cars.map(()=>({goals:0,assists:0,shots:0,saves:0,clears:0,shotsOnGoal:0,demos:0}));
+ beginMatchFeatures();matchSeries.load(next);if(rankedMatch){rankedMatch=null;$('rankedResult').textContent='Casual rematch · no rating changes.';}
+ $('victory').style.display='none';$('victory').dataset.shown='';document.body.classList.remove('victory-screen');pads.forEach(p=>p.t=0);kickoff();state='kick';cd=3;clearHeldInput();
+}
+function requestRematch(){
+ if(state!=='over'||onlineMode?.role==='spectator')return;
+ if(!onlineMode){startRematch();return;}
+ const index=onlineMode.role==='host'?0:1;matchFeatures.ready[index]=true;$('rematchButton').disabled=true;
+ if(index===1)onlineRoom.send({type:'rematch'});else if(matchFeatures.ready.every(Boolean))startRematch();updateSeriesText();
+}
+function displayChat(index,player){
+ const row=document.createElement('div');const name=document.createElement('b');name.style.color=player?'#ffc083':'#83cfff';name.textContent=(cars[player]?.displayName||'PLAYER')+': ';row.append(name,document.createTextNode(RocketMatchTools.CHATS[index]));$('quickChatFeed').append(row);
+ while($('quickChatFeed').children.length>4)$('quickChatFeed').firstChild.remove();setTimeout(()=>row.remove(),8000);
+}
+function acceptedChat(index,player){if(!chatLimiter.accept(player,index,performance.now()/1000))return;displayChat(index,player);if(onlineMode?.role==='host')onlineRoom.send({type:'chat',index,player,id:++chatSequence});}
+function sendQuickChat(index){
+ $('quickChatChoices').hidden=true;matchFeatures.chatGroup=null;if(onlineMode?.role==='spectator')return;
+ if(onlineMode?.role==='guest')onlineRoom.send({type:'chat',index});else acceptedChat(index,0);
+}
+function openQuickChat(group){
+ if(onlineMode?.role==='spectator')return;
+ matchFeatures.chatGroup=group;const box=$('quickChatChoices').querySelector('div');box.replaceChildren();
+ for(let i=0;i<4;i++){const index=group*4+i,button=document.createElement('button');button.type='button';button.textContent=(i+1)+'. '+RocketMatchTools.CHATS[index];button.onclick=()=>sendQuickChat(index);box.append(button);}
+ $('quickChatChoices').hidden=false;clearTimeout(chatTimer);chatTimer=setTimeout(()=>{$('quickChatChoices').hidden=true;matchFeatures.chatGroup=null;},4000);
+}
+function featureKey(event){
+ const code=event.code;
+ if(!$('replayLibrary').hidden){if(code==='Escape')$('replayLibrary').hidden=true;return true;}
+ if(['Escape','KeyP'].includes(code)&&!event.repeat){event.preventDefault();togglePauseMenu();return true;}
+ if(matchFeatures.pause)return true;
+ if(savedViewer&&code==='Space'){event.preventDefault();savedViewer.playing=!savedViewer.playing;return true;}
+ if(code==='Tab'&&state!=='menu'){event.preventDefault();document.body.classList.add('scoreboard-visible');return true;}
+ if(['play','kick','goal','replay','over'].includes(state)&&!savedViewer&&!event.repeat&&/^Digit[1-4]$/.test(code)){
+  const n=Number(code.slice(-1))-1;if(matchFeatures.chatGroup!==null)sendQuickChat(matchFeatures.chatGroup*4+n);else if(n<3)openQuickChat(n);event.preventDefault();return true;
+ }
+ return false;
+}
+function featureFrame(){
+ document.body.classList.toggle('playing-clean',['play','kick'].includes(state)&&!savedViewer);
+ if(matchFeatures.pause)$('pauseMatchSummary').textContent=`BLUE ${score[0]} – ${score[1]} ORANGE · ${Math.floor(Math.max(0,clock)/60)}:${String(Math.ceil(Math.max(0,clock))%60).padStart(2,'0')}`;
+ if(onlineMode?.role==='spectator'){
+  $('boost').style.display='none';const target=$('spectatorTarget').value;
+  replayCameraMode=target==='ball'?'ball':'car';if(target!=='ball')replayCameraCarIndex=Number(target);
+ }else $('boost').style.display='';
+ if(state==='over')updateSeriesText();
+ if(savedViewer){$('replayTimeline').value=replayElapsed;$('replayTime').textContent=`${replayElapsed.toFixed(1)} / ${RocketReplay.duration(replayFrames).toFixed(1)}s`;$('replayPlayPause').textContent=savedViewer.playing?'PAUSE':'PLAY';}
+}
+async function copyRoomInvite(watch=false){
+ const invite=new URL(location.href);invite.searchParams.set('room',onlineRoom.code);invite.searchParams.delete('car');if(watch)invite.searchParams.set('watch','1');else invite.searchParams.delete('watch');
+ try{await navigator.clipboard.writeText(invite.href);featureNotice((watch?'Spectator':'Room')+' invite copied.');}catch(_){featureNotice('Room code: '+onlineRoom.code+(watch?' · Spectate using this code.':''));}
+}
+async function openReplayLibrary(){
+ $('replayLibrary').hidden=false;$('replayLibraryStatus').textContent='Loading…';
+ try{const entries=await replayStore.list();$('replayLibraryList').replaceChildren();$('replayLibraryStatus').textContent=entries.length?'':'No saved replays yet. Save a goal during its replay or a match from the pause menu.';
+ for(const entry of entries){const row=document.createElement('article'),title=document.createElement('h3'),meta=document.createElement('p');title.textContent=entry.name;meta.textContent=new Date(entry.createdAt).toLocaleString()+' · '+RocketReplay.duration(entry.data.frames).toFixed(1)+' seconds';row.append(title,meta);
+ for(const [label,action] of [['WATCH',()=>watchSavedReplay(entry.data)],['EXPORT',()=>exportRecording(entry)],['DELETE',async()=>{await replayStore.remove(entry.id);openReplayLibrary();}]]){const button=document.createElement('button');button.textContent=label;button.onclick=action;row.append(button);}$('replayLibraryList').append(row);}
+ }catch(error){$('replayLibraryStatus').textContent=error.message;}
+}
+function exportRecording(entry){const url=URL.createObjectURL(new Blob([JSON.stringify(entry.data)],{type:'application/json'})),link=document.createElement('a');link.href=url;link.download='rocket-ball-'+entry.id+'.rocketreplay';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+function watchSavedReplay(data){
+ if(onlineMode){featureNotice('Leave the online match before opening a saved replay.');return;}
+ goalAnthems.stop();$('replayLibrary').hidden=true;$('menu').style.display='none';$('victory').style.display='none';document.body.classList.remove('victory-screen');
+ savedViewer={playing:true,speed:1,mode,diff,localTwoPlayer,data};localTwoPlayer=false;for(const c of cars)scene.remove(c.mesh.root);
+ cars=data.players.map((p,i)=>{const c=mkCar(p.team,i%3,false,p.car,p.colour,p);c.displayName=p.name;return c;});mode=1;replayFrames=data.frames;replayElapsed=0;replayCameraCarIndex=0;replayAnthemToken++;state='replay';paused=false;matchFeatures.pause=false;
+ $('savedPlayback').hidden=false;$('skipReplayButton').hidden=true;$('saveGoalReplay').hidden=true;$('replayTimeline').max=RocketReplay.duration(replayFrames);$('msg').textContent='SAVED REPLAY';$('goalBy').textContent='';$('goalSpeed').textContent='';resetBallTrail();applyReplayFrame(RocketReplay.sample(replayFrames,0));
+}
+function updateSavedReplay(dt){if(!savedViewer)return;if(savedViewer.playing){replayElapsed=Math.min(RocketReplay.duration(replayFrames),replayElapsed+dt*savedViewer.speed);if(replayElapsed>=RocketReplay.duration(replayFrames))savedViewer.playing=false;}applyReplayFrame(RocketReplay.sample(replayFrames,replayElapsed));}
+function exitSavedReplay(){if(!savedViewer)return;({mode,diff,localTwoPlayer}=savedViewer);savedViewer=null;state='menu';paused=false;matchFeatures.pause=false;$('pauseMenu').hidden=true;document.body.classList.remove('pause-open');$('savedPlayback').hidden=true;$('skipReplayButton').hidden=false;$('saveGoalReplay').hidden=false;$('menu').style.display='grid';$('msg').textContent='';buildTeams();kickoff();resize();}
+function toggleMatchCamera(){if(onlineMode?.role==='spectator')$('spectatorTarget').value=$('spectatorTarget').value==='ball'?'0':'ball';else setBallCamera(!ballCam);}
+$('pauseResume').onclick=()=>togglePauseMenu(false);$('cam').onclick=toggleMatchCamera;
+$('pauseSettings').onclick=()=>{$('controlsSettings').open=true;};$('pauseCamera').onclick=toggleMatchCamera;
+$('pauseResetView').onclick=()=>$('cinematicToggle').click();$('pauseFullscreen').onclick=()=>$('fullscreenToggle').click();
+$('pauseSaveReplay').onclick=()=>saveRecording();$('saveMatchReplay').onclick=()=>saveRecording();$('saveGoalReplay').onclick=()=>saveRecording(true);
+$('pauseTraining').onclick=()=>{$('trainingTools').classList.toggle('training-open');$('trainingTools').open=true;};
+for(const button of document.querySelectorAll('#trainingTools button:not(#trainingExit)'))button.addEventListener('click',()=>togglePauseMenu(false));
+$('pauseCopyRoom').onclick=()=>copyRoomInvite();$('pauseCopyWatch').onclick=()=>copyRoomInvite(true);
+$('pauseLeave').onclick=()=>{if(savedViewer){exitSavedReplay();return;}togglePauseMenu(false);if(onlineMode)leaveOnline('You left the match.');else{$('garageToggle').click();$('victory').style.display='none';}goalAnthems.stop();};
+$('rematchButton').onclick=requestRematch;$('openReplayLibrary').onclick=openReplayLibrary;$('replayLibraryClose').onclick=()=>$('replayLibrary').hidden=true;
+$('replayImport').onchange=async event=>{const file=event.target.files[0];if(!file)return;try{if(file.size>25*1024*1024)throw Error('Replay files must be under 25 MB.');await replayStore.save(replayStore.import(await file.text()),file.name.slice(0,60));await openReplayLibrary();}catch(error){$('replayLibraryStatus').textContent=error.message;}event.target.value='';};
+$('replayPlayPause').onclick=()=>{if(savedViewer)savedViewer.playing=!savedViewer.playing;};$('replaySpeed').onchange=()=>{if(savedViewer)savedViewer.speed=Number($('replaySpeed').value);};
+$('replayTimeline').oninput=()=>{if(savedViewer){replayElapsed=Number($('replayTimeline').value);updateSavedReplay(0);}};$('replayExit').onclick=exitSavedReplay;
+for(const [id,key] of [['wheelFinish','wheel'],['decalStyle','decal'],['boostStyle','boost']]){$(id).value=carCosmeticChoice[key];$(id).onchange=()=>{carCosmeticChoice=RocketCosmetics.profile({...carCosmeticChoice,[key]:$(id).value});try{localStorage.setItem('rocketCarCosmeticsV1',JSON.stringify(carCosmeticChoice));}catch(_){}if(state==='menu'){buildTeams();kickoff();updateGaragePreview();}};}
+addEventListener('blur',()=>document.body.classList.remove('scoreboard-visible'));
+
+// Ranked ratings come from the configured persistent service, never local scores.
+let rankedMatch=null,rankedQueue=false,rankedConnecting=null;
+let rankedServerUrl=window.ROCKET_CONFIG?.rankedServerUrl||'';
+try{rankedServerUrl=localStorage.getItem('rocketRankedServerV1')||rankedServerUrl;}catch(_){}
+const rankedClient=new RocketRanked.Client({
+ onStatus(message){
+  $('rankedStatus').textContent=message;rankedClient.networkIssue=/interrupted|unavailable/.test(message);
+  if(rankedMatch&&!rankedMatch.finished&&rankedClient.networkIssue){$('networkBanner').textContent=message;$('networkBanner').hidden=false;}
+  else if(!onlineMode?.suspended)$('networkBanner').hidden=true;
+ },
+ onMessage(packet){
+  if(packet.type==='account'){
+   renderRankedRating(packet.own);
+   if(rankedMatch&&!rankedMatch.finished){if(rankedMatch.ready&&!onlineMode)rankedClient.send({type:'ready',match:rankedMatch.id});if(onlineMode)rankedClient.send({type:'started',match:rankedMatch.id});if(rankedMatch.reported)rankedClient.send({type:'result',match:rankedMatch.id,score:[...score]});}
+  }
+  if(packet.type==='queued'){rankedQueue=true;$('rankedStatus').textContent='Searching for a player near your rating…';$('rankedFind').disabled=true;$('rankedCancel').hidden=false;}
+  if(packet.type==='match'){
+   rankedQueue=false;$('rankedCancel').hidden=true;$('rankedFind').disabled=false;
+   if(packet.resumed&&rankedMatch?.id===packet.match)return;
+   if(onlineMode||rankedMatch){rankedClient.send({type:'forfeit',match:packet.match});return;}
+   rankedMatch={id:packet.match,role:packet.role,code:packet.code,reported:false,ready:false};$('rankedStatus').textContent='Opponent found · connecting…';
+   if(packet.role==='host')onlineRoom.create(localOnlineProfile(),packet.code);
+  }
+  if(packet.type==='join'&&rankedMatch?.id===packet.match&&!onlineMode)onlineRoom.join(packet.code,localOnlineProfile());
+  if(packet.type==='playing'&&rankedMatch?.id===packet.match)rankedMatch.playing=true;
+  if(packet.type==='result'){
+   renderRankedRating(packet.own);const text=`${packet.own.rating} MMR · ${packet.change>=0?'+':''}${packet.change} · ${packet.reason==='confirmed'?'RESULT CONFIRMED':packet.reason.toUpperCase()}`;
+   $('rankedResult').textContent=text;$('rankedStatus').textContent=text;if(rankedMatch?.id===packet.match)rankedMatch.finished=true;
+  }
+  if(packet.type==='cancelled'){
+   rankedQueue=false;$('rankedFind').disabled=false;$('rankedCancel').hidden=true;$('rankedStatus').textContent=packet.message;$('rankedResult').textContent=packet.message;
+   if(packet.match&&rankedMatch?.id===packet.match)rankedMatch.finished=true;
+  }
+  if(packet.type==='leaderboard'){
+   $('rankedBoard').replaceChildren();for(const p of packet.players||[]){const item=document.createElement('li');item.textContent=`${p.name} · ${p.rating} MMR · ${p.wins}W / ${p.losses}L`;$('rankedBoard').append(item);}$('rankedBoard').hidden=false;if(!packet.players?.length)$('rankedStatus').textContent='No completed ranked matches yet.';
+  }
+  if(packet.type==='error')$('rankedStatus').textContent=packet.message;
+ }
+});
+function renderRankedRating(p){if(!p)return;const ranks=['Bronze','Silver','Gold','Platinum','Diamond','Champion','Grand Champion'];const rank=ranks[Math.min(6,Math.max(0,Math.floor((p.rating-400)/250)))];$('rankedRating').textContent=p.games<5?`PLACEMENTS ${p.games}/5 · ${p.rating} MMR`:`${rank.toUpperCase()} · ${p.rating} MMR · ${p.wins}W / ${p.losses}L`;}
+function connectRanked(){
+ if(rankedClient.authenticated)return Promise.resolve();if(rankedConnecting)return rankedConnecting;
+ if(!RocketRanked.serverUrl(rankedServerUrl)){$('controlsSettings').open=true;$('rankedServerUrl').focus();$('rankedStatus').textContent='Host the supplied server, then enter its WSS URL in Settings.';return Promise.reject(Error('Ranked server is not configured.'));}
+ rankedConnecting=rankedClient.connect(rankedServerUrl,localOnlineProfile()).finally(()=>rankedConnecting=null);return rankedConnecting;
+}
+function rankedRoomStatus(info){if(!rankedMatch||rankedMatch.finished)return;if(info.state==='waiting'&&rankedMatch.role==='host'){rankedMatch.ready=true;rankedClient.send({type:'ready',match:rankedMatch.id});}}
+function rankedMatchFinished(){if(rankedMatch&&!rankedMatch.reported&&!rankedMatch.finished&&onlineMode?.role!=='spectator'){rankedMatch.reported=true;rankedClient.send({type:'result',match:rankedMatch.id,score:[...score]});$('rankedResult').textContent='Waiting for both players to confirm the result…';}}
+function rankedLeave(){
+ if(rankedMatch&&!rankedMatch.finished&&!rankedMatch.reported)rankedClient.send({type:'forfeit',match:rankedMatch.id});rankedMatch=null;
+ if(rankedQueue){rankedClient.send({type:'cancel'});rankedQueue=false;$('rankedCancel').hidden=true;$('rankedFind').disabled=false;}
+}
+$('rankedFind').onclick=async()=>{try{await connectRanked();if(onlineRoom.state!=='idle')leaveOnline();rankedClient.send({type:'queue',profile:localOnlineProfile()});}catch(error){$('rankedStatus').textContent=error.message;}};
+$('rankedCancel').onclick=()=>rankedClient.send({type:'cancel'});
+$('rankedLeaderboard').onclick=async()=>{try{await connectRanked();rankedClient.send({type:'leaderboard'});}catch(error){$('rankedStatus').textContent=error.message;}};
+$('rankedServerUrl').value=rankedServerUrl;
+$('rankedServerSave').onclick=()=>{
+ const value=$('rankedServerUrl').value.trim(),normalized=RocketRanked.serverUrl(value);
+ if(value&&!normalized){$('rankedServerStatus').textContent='Use a WSS URL, for example wss://your-host.example/ranked.';return;}
+ if(rankedMatch||rankedQueue){$('rankedServerStatus').textContent='Finish or leave your ranked match before changing servers.';return;}
+ rankedClient.close();rankedServerUrl=normalized||'';try{localStorage.setItem('rocketRankedServerV1',rankedServerUrl);}catch(_){}$('rankedServerStatus').textContent=value?'Server saved.':'Server override cleared.';$('rankedStatus').textContent=value?'Ready to connect to ranked matchmaking.':'Configure your hosted ranked server in Settings.';
+};
 
 // ---------- loop ----------
 buildTeams(); kickoff(); pick('mode', 2); pick('diff', 1);
@@ -4586,7 +4821,7 @@ let last = performance.now();
   // Physics remains deterministic at 120Hz. The clock, countdown, goal intro,
   // and replay still track real elapsed time when the GPU is running slowly.
   if (typeof window.__rocketPhysicsAccumulator !== 'number') window.__rocketPhysicsAccumulator = 0;
-  if (!paused && onlineMode?.role!=='guest') {
+  if (!paused && (!onlineMode||(onlineMode.role==='host'&&!onlineMode.suspended))) {
     window.__rocketPhysicsAccumulator = Math.min(0.25, window.__rocketPhysicsAccumulator + frameDt);
     const fixedDt = 1 / 120;
     let steps = 0;
@@ -4598,7 +4833,7 @@ let last = performance.now();
     const skippedTime = Math.max(0, wallDt - steps * fixedDt);
     if (skippedTime > 0) {
       if (state === 'kick' || state === 'goal') cd -= skippedTime;
-      else if (state === 'replay') replayElapsed += skippedTime;
+      else if (state === 'replay') {if(savedViewer)updateSavedReplay(skippedTime);else replayElapsed += skippedTime;}
       else if (state === 'play' && !trainingMode && !ot) {
         clock = Math.max(0, clock - skippedTime);
         if (clock <= 0) {
@@ -4609,8 +4844,8 @@ let last = performance.now();
     }
   } else window.__rocketPhysicsAccumulator = 0;
   onlineFrame(frameDt);
-  render(frameDt);
-  if(onlineMode?.role==='host')sendOnlineSnapshot(frameDt);
+  render(frameDt,background);
+
   if(!background)requestAnimationFrame(loop);
 })(last);
 })();

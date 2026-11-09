@@ -41,11 +41,22 @@ jobs:
           node tests/bundled-cars.test.js
           node tests/nexto.test.js
           node tests/online-rooms.test.js
+          node tests/match-features.test.js
+      - name: Install and test ranked service
+        run: |
+          npm ci --prefix server --ignore-scripts --no-audit --no-fund
+          npm test --prefix server
       - name: Browser gameplay smoke check
         run: node tests/browser-smoke.js
+      - name: Match tools browser check
+        run: node tests/match-features-browser.js
       - name: Car bodies with unavailable model downloads
         run: node tests/bundled-cars-browser.js
       - name: Install private-room test dependencies
         run: npm ci --prefix tests/online --ignore-scripts --no-audit --no-fund
       - name: Two-player WebRTC match check
         run: node tests/online-browser-smoke.js
+      - name: Ranked matchmaking browser check
+        run: node tests/ranked-browser-smoke.js
+      - name: Build deployable server container
+        run: docker build -f server/Dockerfile -t rocket-ball-ranked:ci .

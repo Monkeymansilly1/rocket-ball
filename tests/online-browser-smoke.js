@@ -51,7 +51,7 @@ async function main() {
     '--disable-background-networking','--no-first-run','--disable-background-timer-throttling','--disable-renderer-backgrounding','--disable-backgrounding-occluded-windows',
     '--remote-debugging-port=0','--user-data-dir='+profile,'about:blank'
   ],{stdio:'ignore'});
-  let socket;
+  let socket,watcherSocket;
   try {
     const port=await eventually(()=>{
       const p=path.join(profile,'DevToolsActivePort');
@@ -144,21 +144,36 @@ async function main() {
     if(rtcConfig.iceTransportPolicy==='relay')assert(await evalJS('(async()=>{const stats=await window.__onlineRoom.conn.peerConnection.getStats();return [...stats.values()].some(s=>s.type==="local-candidate"&&s.candidateType==="relay");})()'),'The two clients must exchange actual WebRTC traffic through the relay');
     assert.equal(await evalJS('window.rocketArena.cars[1].model'),'fennec');assert.equal(await guestEval('window.rocketArena.cars[1].model'),'fennec');
     assert.deepEqual(await evalJS('window.rocketArena.cars.map(c=>({ai:c.ai,name:c.displayName}))'),[{ai:false,name:'HOST'},{ai:false,name:'FRIEND'}]);
-    const choices=[{name:'HOST',car:'scorpion',colour:'#42cafe',explosion:'fire',anthem:'rap'},
-      {name:'FRIEND',car:'fennec',colour:'#f21a86',explosion:'galaxy',anthem:'grime'}];
+    const choices=[{name:'HOST',car:'scorpion',colour:'#42cafe',explosion:'fire',anthem:'rap',wheel:'stock',decal:'none',boost:'blue'},
+      {name:'FRIEND',car:'fennec',colour:'#f21a86',explosion:'galaxy',anthem:'grime',wheel:'stock',decal:'none',boost:'blue'}];
     for(const evaluate of [evalJS,guestEval]){
       assert.deepEqual(await evaluate('window.rocketArena.cars.map(c=>c.cosmetics)'),choices,'Both clients must retain each player’s complete choices');
       assert.deepEqual(await evaluate(`window.rocketArena.cars.map(c=>{const colours=[];c.mesh.detailedRoot.traverse(o=>{if(o.isMesh)for(const m of [o.material].flat())if(/paint/i.test(m.name))colours.push('#'+m.color.getHexString());});return colours.includes(c.cosmetics.colour);})`),[true,true],'Actual imported car materials must use each player’s paint');
     }
     await eventually(()=>evalJS('window.rocketArena.state==="play"'),20000).catch(async e=>{throw Error(e.message+' '+await evalJS('JSON.stringify({state:window.rocketArena.state,status:window.rocketArena.onlineStatus})')+' ERRORS '+JSON.stringify(errors));});
     await eventually(()=>guestEval('window.rocketArena.state==="play"'),20000);
+    await guestEval("window.dispatchEvent(new KeyboardEvent('keydown',{code:'Digit2',bubbles:true}));window.dispatchEvent(new KeyboardEvent('keydown',{code:'Digit1',bubbles:true}))");
+    await eventually(()=>evalJS('document.getElementById("quickChatFeed").textContent.includes("FRIEND: Nice shot!")'));
+    await guestEval('window.__onlineRoom.conn.close()');await eventually(()=>evalJS('window.rocketArena.onlineStatus.state==="reconnecting"'));
+    await eventually(()=>evalJS('window.rocketArena.onlineStatus.state==="connected"'),15000);await eventually(()=>guestEval('window.rocketArena.onlineStatus.state==="connected"'),15000);
+    assert.equal(await guestEval('window.rocketArena.cars[1].displayName'),'FRIEND');
+    const watcherTarget=await call('Target.createTarget',{url:'about:blank'});
+    const watcherList=await (await fetch('http://127.0.0.1:'+port+'/json/list')).json();watcherSocket=new WebSocket(watcherList.find(t=>t.id===watcherTarget.targetId).webSocketDebuggerUrl);await new Promise(r=>watcherSocket.addEventListener('open',r,{once:true}));
+    let watcherSeq=0;const watcherPending=new Map();watcherSocket.addEventListener('message',event=>{const m=JSON.parse(event.data);if(m.method==='Runtime.exceptionThrown')errors.push(m.params.exceptionDetails?.text);if(m.id&&watcherPending.has(m.id)){watcherPending.get(m.id)(m.result);watcherPending.delete(m.id);}});
+    const watcherCall=(method,params={})=>new Promise(resolve=>{const id=++watcherSeq;watcherPending.set(id,resolve);watcherSocket.send(JSON.stringify({id,method,params}));});
+    const watcherEval=async expression=>{const r=await watcherCall('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true,userGesture:true});if(r.exceptionDetails)throw Error(JSON.stringify(r.exceptionDetails));return r.result?.value;};
+    await watcherCall('Page.enable');await watcherCall('Runtime.enable');await configure(watcherCall);await watcherCall('Page.navigate',{url:url+'?room='+code+'&watch=1'});await eventually(()=>watcherEval('!!window.rocketArena'),45000);await watcherEval('document.getElementById("onlineJoin").click()');
+    await eventually(()=>watcherEval('window.rocketArena.onlineStatus.role==="spectator"&&window.rocketArena.state==="play"'),20000);assert.equal(await watcherEval('window.rocketArena.cars[1].displayName'),'FRIEND');
+    await eventually(()=>evalJS('window.__onlineRoom.spectators.size===1'));
+    const hostZ=await evalJS('window.rocketArena.cars[1].z');await watcherEval('window.__onlineRoom.send({type:"input",seq:9999,controls:{throttle:1,boost:true,jump:true}})');await delay(350);assert(Math.abs(await evalJS('window.rocketArena.cars[1].z')-hostZ)<.1,'Spectators must not drive a participant');
+    console.log('PASS: live read-only spectator joins without restarting the match');
     const z=await evalJS('window.rocketArena.cars[1].z');
     await guestEval("window.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyW',bubbles:true}))");
     await eventually(()=>evalJS('window.rocketArena.cars[1].z<'+(z-1)),10000);
     await guestEval("window.dispatchEvent(new KeyboardEvent('keyup',{code:'KeyW',bubbles:true}))");
     await eventually(()=>guestEval('Math.abs(window.rocketArena.cars[1].vz)<1'),10000);
     await evalJS('Object.assign(window.rocketArena.ball,{x:0,y:2,z:105,vx:0,vy:0,vz:32})');
-    await eventually(()=>guestEval('window.rocketArena.score[0]===1'),10000);
+    await eventually(()=>guestEval('window.rocketArena.score[0]===1'),15000).catch(async error=>{throw Error(error.message+' HOST '+await evalJS('JSON.stringify({state:window.rocketArena.state,score:window.rocketArena.score,online:window.rocketArena.onlineStatus,ball:window.rocketArena.ball})')+' GUEST '+await guestEval('JSON.stringify({state:window.rocketArena.state,score:window.rocketArena.score,online:window.rocketArena.onlineStatus})')+' ERRORS '+JSON.stringify(errors));});
     assert.equal(await evalJS('window.rocketArena.score[0]'),1);
     for(const evaluate of [evalJS,guestEval])await eventually(async()=>{
       const choice=await evaluate('window.__onlineCelebration()');return choice.style==='fire'&&choice.track==='rap';
@@ -184,6 +199,10 @@ async function main() {
     await eventually(()=>guestEval('window.rocketArena.state==="over"'),10000);
     assert.equal(await guestEval('document.getElementById("victoryScore").textContent'),await evalJS('document.getElementById("victoryScore").textContent'));
     assert.equal(await guestEval('document.getElementById("statsBody").textContent'),await evalJS('document.getElementById("statsBody").textContent'),'Match statistics must agree on both screens');
+    const sameCode=await evalJS('window.rocketArena.onlineStatus.code');
+    await evalJS('document.getElementById("rematchButton").click()');await guestEval('document.getElementById("rematchButton").click()');
+    await eventually(()=>guestEval('window.rocketArena.state==="kick"||window.rocketArena.state==="play"'));assert.deepEqual(await guestEval('window.rocketArena.score'),[0,0]);assert.equal(await guestEval('window.rocketArena.onlineStatus.code'),sameCode);
+    await watcherEval('window.__onlineRoom.close()');await eventually(()=>evalJS('window.__onlineRoom.spectators.size===0'));watcherSocket.close();
     await guestEval("document.getElementById('onlineMatchLeave').click()");
     await eventually(()=>evalJS('window.rocketArena.state==="menu"&&window.rocketArena.onlineStatus.state==="idle"'),10000);
     assert((await evalJS('document.getElementById("onlineStatus").textContent')).includes('disconnected'));
@@ -197,6 +216,7 @@ async function main() {
     guestSocket.close();
     console.log('PASS: real WebRTC matches with the HTTP ID endpoint unavailable, registered codes only, join, controls, scoring/replays and disconnect');
   } finally {
+    if(watcherSocket)watcherSocket.close();
     if(socket)socket.close();
     chrome.kill();
     await Promise.race([

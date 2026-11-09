@@ -45,6 +45,7 @@ assert(Math.abs(scored.velocity.vy-(-2+((-2-13/120)*damping+2)*fraction))<1e-9,'
 const updateHarness=new Function('THREE','RocketReplay',`
 const cars=[{x:0,y:.55,z:0,boost:34}],ball={x:0,y:2,z:0,vx:0,vy:0,vz:0},pads=[];
 const getCarOrientation=()=>new THREE.Quaternion();
+let savedViewer=null,onlineMode=null;const matchFeatures={time:0};
 let state='play',t=0,clock=300,ot=false,trainingMode=false,trainingWallArmed=false,predictionTimer=1;
 const diff=1,localTwoPlayer=false,pred=[{}],eventCooldown={},playerStats=[],lastTouch=null;
 const predict=()=>{},playerCtl=()=>({}),bump=()=>{},hitBall=()=>{},stepBall=()=>{},showVictoryScreen=()=>{};

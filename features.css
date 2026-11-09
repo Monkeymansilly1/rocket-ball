@@ -1,0 +1,50 @@
+/* Match controls stay in the pause menu; the field stays readable. */
+body.playing-clean #referenceToolbar,body.playing-clean #quickPlayButton,body.playing-clean #onlineMatchBar,body.playing-clean #trainingTools:not(.training-open),body.playing-clean #controlsSettings:not([open]),body.playing-clean #score,body.playing-clean #player,body.playing-clean #flightHint,body.playing-clean #p1Tag,body.playing-clean #p2Tag {display:none!important;}
+body.scoreboard-visible #score {display:flex!important;}
+body.pause-open #score {display:flex!important;z-index:80;}
+body.playing-clean #boost {border-color:#9baa8d7a;box-shadow:none;}
+#cam {pointer-events:auto;cursor:pointer;font-family:inherit;color:#f1c063;}
+.feature-overlay {position:fixed;inset:0;z-index:70;background:#020c18c9;backdrop-filter:blur(7px);display:grid;place-items:center;padding:24px;overflow:auto;}
+.feature-overlay[hidden],#savedPlayback[hidden],#quickChatChoices[hidden],#networkBanner[hidden],#featureNotice[hidden],#skipReplayButton[hidden],#spectatorOptions[hidden] {display:none!important;}
+.feature-panel {width:min(600px,100%);max-height:85dvh;overflow:auto;padding:30px;border:1px solid #5c94b86b;border-radius:14px;background:linear-gradient(145deg,#102a42,#071827);box-shadow:0 20px 90px #0008;color:#fff;font:14px/1.5 'Segoe UI',sans-serif;box-sizing:border-box;}
+.feature-panel h2 {margin:2px 0 12px;font:italic 900 36px 'Segoe UI',sans-serif;letter-spacing:.04em;}
+.feature-eyebrow {font-size:10px;letter-spacing:.2em;color:#67ccff;margin:0;}
+.feature-muted {font-size:12px;color:#bad0df;}
+.feature-panel button,.feature-button,.feature-lobby-row button,.ranked-card button,#matchEndActions button {padding:12px 15px;border:1px solid #679bb966;border-radius:6px;background:#163d5a;color:#fff;font:800 11px 'Segoe UI',sans-serif;letter-spacing:.04em;cursor:pointer;}
+.feature-panel button:hover,.feature-button:hover {background:#225477;}
+.feature-panel .feature-primary {width:100%;margin:10px 0 14px;background:#e6a84d;color:#102239;border-color:#ffd08a;font-size:15px;}
+.feature-panel .feature-danger {width:100%;margin-top:12px;background:#522c35;border-color:#bd777b;color:#ffe0e0;}
+.feature-grid {display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.feature-actions,.feature-lobby-row {display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:12px 0;}
+.feature-panel select,.feature-lobby-row select,.cosmetic-choices select {background:#0b2337;color:#fff;border:1px solid #6494b16b;border-radius:5px;padding:9px;}
+#pauseMatchSummary {color:#ffca76;font-size:17px;font-weight:800;}
+body.pause-open #controlsSettings[open] {z-index:100;}
+body.pause-open #trainingTools.training-open {z-index:100;display:block!important;}
+#networkBanner {position:fixed;top:18px;left:50%;transform:translateX(-50%);z-index:65;max-width:80vw;padding:10px 16px;background:#6c401de8;color:#ffe2b0;border:1px solid #e4b568;border-radius:7px;font:700 12px 'Segoe UI',sans-serif;}
+#featureNotice {position:fixed;z-index:110;left:50%;top:85px;transform:translateX(-50%);max-width:80vw;padding:12px 18px;border-radius:6px;background:#0c334eea;color:#fff;border:1px solid #6db9df;font:700 12px 'Segoe UI',sans-serif;}
+#quickChatFeed {position:fixed;top:80px;left:18px;z-index:25;pointer-events:none;width:min(330px,70vw);font:700 12px/1.7 'Segoe UI',sans-serif;color:#fff;text-shadow:0 2px 3px #000;}
+#quickChatFeed>div {margin:3px 0;padding:4px 9px;background:#031727b5;border-left:2px solid #68ceff;border-radius:3px;}
+#quickChatChoices {position:fixed;top:110px;left:18px;z-index:26;padding:12px;border-radius:7px;background:#082139ed;color:#fff;font:800 10px 'Segoe UI',sans-serif;}
+#quickChatChoices>div {display:grid;gap:5px;margin-top:8px;}
+#quickChatChoices button {text-align:left;padding:8px;border:1px solid #437394;background:#11334e;color:#fff;cursor:pointer;}
+.ranked-card {margin:18px 0;padding:16px;background:#122c42;border:1px solid #779abb4a;border-radius:6px;}
+.ranked-card h3 {margin:0;color:#ffc56b;font-size:13px;letter-spacing:.1em;}
+.ranked-card p {font-size:12px;color:#c0d7e8;line-height:1.5;}
+.ranked-card button {margin:3px;font-size:10px;}
+.cosmetic-choices {display:grid;grid-template-columns:1fr;gap:8px;margin:12px 0;}
+.cosmetic-choices label {display:flex;align-items:center;justify-content:space-between;color:#cce4f3;font-size:12px;gap:10px;}
+.cosmetic-choices select {min-width:150px;}
+#replayControls {flex-wrap:wrap;justify-content:center;max-width:calc(100vw - 32px);}
+#savedPlayback {display:flex;align-items:center;gap:8px;flex-wrap:wrap;width:100%;font:700 10px 'Segoe UI',sans-serif;color:#fff;}
+#savedPlayback button,#savedPlayback select {padding:8px;background:#163d5a;border:1px solid #6491b4;color:#fff;border-radius:5px;cursor:pointer;}
+#replayTimeline {flex:1;min-width:120px;accent-color:#ffbf64;}
+#replayLibraryList article {padding:15px 0;border-bottom:1px solid #6b8fa439;}
+#replayLibraryList h3 {font-size:15px;margin:0 0 5px;}
+#replayLibraryList p {font-size:11px;color:#afc9dc;}
+#replayLibraryList button {padding:8px 10px;margin:3px;}
+#matchEndActions {margin:12px 0;color:#ffcf84;font:800 13px 'Segoe UI',sans-serif;}
+#matchEndActions button {margin:5px;}
+@media(max-width:600px){.feature-overlay{padding:12px;}.feature-panel{padding:20px;}.feature-grid{grid-template-columns:1fr;}#quickChatFeed{top:55px;left:10px;font-size:10px;}#savedPlayback{justify-content:center;}#replayTime{font-size:9px;}}
+
+body.playing-clean #mini{display:none!important;}
+#rankedServerUrl{box-sizing:border-box;width:100%;margin:10px 0;padding:10px;color:white;background:#10283f;border:1px solid #6689a9;border-radius:5px;}

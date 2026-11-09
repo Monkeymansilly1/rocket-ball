@@ -8,7 +8,7 @@ const context = {
   performance: {now: () => 0}, window: {}, paused: false,
   state: 'kick', cd: 3, clock: 300, trainingMode: false, ot: false, replayElapsed: 0,
   pollControllers() {}, render() {}, showVictoryScreen() {}, score: [0, 0],
-  onlineMode:null,onlineBackgroundFrame:null,onlineFrame(){},sendOnlineSnapshot(){},
+  savedViewer:null,onlineMode:null,onlineBackgroundFrame:null,onlineFrame(){},sendOnlineSnapshot(){},
   rafRequests:0,
   requestAnimationFrame(callback) { context.frame = callback;context.rafRequests++; },
   simulated:0,

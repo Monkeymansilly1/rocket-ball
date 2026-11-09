@@ -38,7 +38,7 @@ const code=[
  ...funcs.map(extractFunction),extractFunction('playerActions'),
  `return {keys,read:()=>playerActions('p1'),step:stepCar,mode:value=>keyboardFlightMode=value,forward:getCarForward,orientation:getCarOrientation,rotate:aerialControl};`
 ].join('\n');
-const sim=new Function('THREE','assert',code)(THREE,assert);
+const sim=new Function('THREE','assert','RocketArenaNet','RocketMechanics',code)(THREE,assert,require('../lib/arena-network'),require('../lib/advanced-mechanics'));
 function car(){return {x:0,y:.55,z:0,yaw:0,pitch:0,roll:0,vx:0,vy:0,vz:0,ground:true,
  demoTimer:0,demoCooldown:0,wallRide:false,wallVerticalAxis:null,wallDetachTimer:0,
  airQuat:null,airOmega:null,surfaceQuat:null,surfaceNormal:null,surfaceForward:null,
