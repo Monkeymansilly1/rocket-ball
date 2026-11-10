@@ -117,6 +117,7 @@ node --check game.js
 node tests/physics-smoke.js
 node tests/kickoff-physics.test.js
 node tests/wall-physics.test.js
+node tests/wall-entry-browser.js
 node tests/ai-regression.test.js
 node tests/nexto.test.js
 node tests/match-clock.test.js
