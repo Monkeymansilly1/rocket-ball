@@ -201,6 +201,27 @@ console.log('PASS: syntax, training controls, floor, walls, ball speed cap, car-
     gamepad.buttons[4].pressed=drifting;
     return readPlayer('p1');
   };
+  for (const direction of [-1, 1]) {
+    const action=read(direction,0);
+    assert.equal(action.steer,-direction,'Controller ground steering must correct the reversed horizontal direction');
+    assert.equal(action.airYaw,direction,'Controller aerial yaw must stay unchanged');
+    assert.equal(action.dodge[1],direction,'Controller directional dodge must stay unchanged');
+  }
+  defaults.p1.pad.left=14; defaults.p1.pad.right=15;
+  for (const [button,direction] of [[14,1],[15,-1]]) {
+    gamepad.buttons[button].pressed=true;
+    assert.equal(read(0,0).steer,direction,'Bound controller buttons must match corrected stick steering');
+    gamepad.buttons[button].pressed=false;
+  }
+  assert.equal(read(.1,0).steer,0,'Stick dead zone must remain neutral');
+  assert(Math.abs(read(.56,0).steer+.5)<1e-9,'Partial steering must retain its analogue magnitude');
+  read(0,0);
+  keyStates.KeyD=true;
+  assert.equal(readPlayer('p1').steer,1,'Keyboard right steering must stay unchanged');
+  delete keyStates.KeyD;
+  keyStates.KeyA=true;
+  assert.equal(readPlayer('p1').steer,-1,'Keyboard left steering must stay unchanged');
+  delete keyStates.KeyA;
   const noseUp=read(0,1);
   assert(noseUp.pitch<-.95 && noseUp.dodge[0]<-.95,
     'Pulling left stick down must pitch nose UP / allow a backflip');

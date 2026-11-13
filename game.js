@@ -2774,7 +2774,9 @@ function playerActions(who) {
   const leftRollIsShared = controlBindings[who].pad.rollLeft === controlBindings[who].pad.hand;
   const leftRollPressed = !leftRollIsShared && buttonValue(pad, 'rollLeft', who) > 0.55;
   const rightRollPressed = buttonValue(pad, 'rollRight', who) > 0.55;
-  const steer = clamp(keyRight - keyLeft + axisX + padRight - padLeft, -1, 1);
+  // Ground steering uses the opposite controller direction to the stick axes.
+  // Keep keyboard steering and aerial stick controls independent.
+  const steer = clamp(keyRight - keyLeft - axisX + padLeft - padRight, -1, 1);
   const jumpButton = buttonValue(pad, 'jump', who) > 0.55;
   const keyboardPitchUp = !!keys[binding.aerialUp];
   const keyboardPitchDown = !!keys[binding.aerialDown];
